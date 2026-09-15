@@ -41,6 +41,10 @@ class SimResult:
     end_state: str = "NORMAL"
     halts: List[str] = field(default_factory=list)
     rejections: Dict[str, int] = field(default_factory=dict)
+    entry_qtys: List[float] = field(default_factory=list)
+    realized_R: List[float] = field(default_factory=list)
+    zero_size_rejections: int = 0
+    option_trades: int = 0
 
     @property
     def total_return(self) -> float:
@@ -67,6 +71,17 @@ class SimResult:
         if not self.weekly_returns:
             return 0.0
         return sum(1 for r in self.weekly_returns if r >= 0.05) / len(self.weekly_returns)
+
+    @property
+    def mean_entry_qty(self) -> float:
+        return statistics.mean(self.entry_qtys) if self.entry_qtys else 0.0
+
+    @property
+    def zero_size_rate(self) -> float:
+        """Share of proposals killed purely by whole-unit rounding. High values
+        mean the account is too small to express its own risk budget."""
+        attempts = self.zero_size_rejections + len(self.entry_qtys)
+        return self.zero_size_rejections / attempts if attempts else 0.0
 
     @property
     def ruined(self) -> bool:
@@ -121,10 +136,15 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
                 for r in d.reasons:
                     key = r.split(";")[0][:60]
                     res.rejections[key] = res.rejections.get(key, 0) + 1
+                    if key.startswith("size rounds to zero"):
+                        res.zero_size_rejections += 1
                 continue
             fill = bk.execute(ts, prop, d)
             if fill:
                 res.fees_paid += fill.fees
+                res.entry_qtys.append(fill.qty)
+                if prop.asset_class == "option":
+                    res.option_trades += 1
         pending = []
 
         # ---- 2. manage open positions against today's range ----
@@ -152,13 +172,15 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
 
             if reason == "target" and cfg.scale_out_fraction < 1.0 and pos.qty > 1:
                 qty = max(1.0, round(pos.qty * cfg.scale_out_fraction))
+                risk = (pos.avg_price - (pos.stop or 0)) * qty * pos.multiplier
                 _, pnl = bk.close(ts, sym, exit_px, "scale_out", qty=qty,
                                   settle_days=settle_days)
                 pos.stop = max(pos.stop or 0, pos.avg_price)   # rest goes risk-free
-                _tally(res, ro, pnl)
+                _tally(res, ro, pnl, risk)
             elif reason:
+                risk = (pos.avg_price - (pos.stop or 0)) * pos.qty * pos.multiplier
                 _, pnl = bk.close(ts, sym, exit_px, reason, settle_days=settle_days)
-                _tally(res, ro, pnl)
+                _tally(res, ro, pnl, risk)
 
             prices = {s: price_of(s) for s in list(pf.positions) + list(closes)}
             ro.update(date, pf, prices)
@@ -191,7 +213,7 @@ def _option_price_from_meta(prop: OrderProposal, mkt: SyntheticMarket, i: int) -
     return max(0.01, black_scholes(u, m["strike"], dte, m["iv"], m["kind"]))
 
 
-def _tally(res: SimResult, ro: RiskOfficer, pnl: float) -> None:
+def _tally(res: SimResult, ro: RiskOfficer, pnl: float, risk: float = 0.0) -> None:
     res.trades += 1
     if pnl >= 0:
         res.wins += 1
@@ -200,3 +222,9 @@ def _tally(res: SimResult, ro: RiskOfficer, pnl: float) -> None:
         res.losses += 1
         res.gross_loss += pnl
     ro.record_trade_result(pnl)
+    if risk > 0:
+        res.realized_R.append(pnl / risk)
+    # The officer only knows what the account has actually proven.
+    if res.realized_R:
+        ro.set_track_record(len(res.realized_R),
+                            statistics.mean(res.realized_R))

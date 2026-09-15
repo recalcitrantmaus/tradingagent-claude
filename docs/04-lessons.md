@@ -55,3 +55,50 @@ live paper trades.
 **Status:** provisional. Flagged honestly: kept because the downside
 (unbounded loss on a $300 account) is not survivable, not because simulation
 proved it.
+
+### 2026-09-15 — More capital does not improve returns at this size
+**Evidence:** `sim/results/capital_sweep.json`; 150 paths at each of 8 equity
+levels from $300 to $10,000. `momentum_breakout` median return was +2.75% at
+$300 and +1.67% at $10,000 — flat to declining in capital. Proposals lost to
+whole-share rounding: 3.5% at $300, 0.0% from $500 up.
+**Change:** initial deposit stays at $300. The "$1,500 milestone" framing from
+the Phase 1 report is retired.
+**Status:** active.
+
+### 2026-09-15 — Long-premium option buying is negative expectancy here, at every account size
+**Evidence:** capital sweep — option_swing median -1.97% at $1,500, -14.01% at
+$2,500, -15.00% at $5,000, -14.68% at $10,000. Re-tested at $5,000 across five
+stop/target variants (25%/40%/60%/no-stop, 60%/100% targets): every one lost,
+from -5.28% to -15.00%. The cause is the implied-vol premium paid on entry
+plus two-sided spread, not stop placement.
+**Change:** `option_requires_proven_edge = True` — the option sleeve is locked
+until the account shows >= 30 closed trades at >= +0.10R measured expectancy.
+**Caveat:** only long OTM calls were tested. Debit spreads are a different
+structure and remain untested; do not read this as "all options lose".
+**Status:** active.
+
+### 2026-09-15 — An affordability floor is not a quality gate (correction)
+**Evidence:** the $1,500 `option_min_equity` rule, added the same day, was
+derived from "can the account afford one contract" and silently assumed that
+affording one made trading it sensible. The capital sweep showed it does not.
+An affordability floor alone just delays the losing trade until the account
+can lose more.
+**Change:** the floor is kept (the arithmetic is still right) and paired with
+the proven-edge gate above. With `graduated_swing` at $5,000, the gate cut
+option trades from 25.1 to 3.5 a year, improved median return by 11.2
+percentage points, and reduced mean drawdown from 19.7% to 11.5%.
+**Lesson for future rules:** ask what question a limit actually answers. "Can
+I?" and "should I?" need separate gates.
+**Status:** active.
+
+### 2026-09-15 — Model routing is a rule, not a preference
+**Evidence:** none — this is a design decision, recorded for honesty. The
+asymmetry it encodes is real: a bad execution turn costs one trade, a bad rule
+promoted into a SKILL.md costs every trade until someone notices.
+**Change:** `engine/model_policy.py` states the task -> model mapping as data
+and `tools/model_check.py` enforces it. Routine-loop tasks warn and continue
+on a downgrade; rule-promotion, weekly review, post-halt review and unlock
+authorization BLOCK on anything below Opus tier.
+**Status:** active, unmeasured. Revisit once there is a paper-trading record
+on each configuration — if Sonnet's plans grade as well as Opus's over 30+
+trades, the routine-loop floor could come down further.

@@ -95,12 +95,14 @@ class TestOptionsGate(unittest.TestCase):
     def test_zero_dte_rejected(self):
         cfg = replace(DEFAULT, starting_equity=5000.0)
         pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=0.25)
         d = ro.evaluate(self.opt(dte=0), pf, {}, D)
         self.assertFalse(d.approved)
 
     def test_first_15_minutes_rejected(self):
         cfg = replace(DEFAULT, starting_equity=5000.0)
         pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=0.25)
         d = ro.evaluate(self.opt(minutes_since_open=5), pf, {}, D)
         self.assertFalse(d.approved)
         self.assertIn("observe", d.reasons[0])
@@ -108,6 +110,7 @@ class TestOptionsGate(unittest.TestCase):
     def test_undefined_risk_rejected(self):
         cfg = replace(DEFAULT, starting_equity=5000.0)
         pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=0.25)
         d = ro.evaluate(self.opt(defined_risk=False), pf, {}, D)
         self.assertFalse(d.approved)
 
@@ -181,3 +184,41 @@ class TestAccounting(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestOptionEdgeGate(unittest.TestCase):
+    """Options require a measured edge, not just enough money to lose."""
+
+    def opt(self):
+        return OrderProposal(symbol="TEC_C", asset_class="option", side="buy",
+                             price=2.00, stop=1.20, multiplier=100, dte=30,
+                             defined_risk=True, minutes_since_open=30)
+
+    def test_locked_without_a_track_record(self):
+        cfg = replace(DEFAULT, starting_equity=5000.0)
+        pf, ro = fresh(cfg)
+        d = ro.evaluate(self.opt(), pf, {}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("closed trades", d.reasons[0])
+
+    def test_locked_with_enough_trades_but_negative_expectancy(self):
+        cfg = replace(DEFAULT, starting_equity=5000.0)
+        pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=-0.05)
+        d = ro.evaluate(self.opt(), pf, {}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("expectancy", d.reasons[0])
+
+    def test_unlocks_with_trades_and_positive_expectancy(self):
+        cfg = replace(DEFAULT, starting_equity=5000.0)
+        pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=0.25)
+        d = ro.evaluate(self.opt(), pf, {}, D)
+        self.assertTrue(d.approved, d.reasons)
+
+    def test_equity_floor_still_applies_even_with_a_great_record(self):
+        pf, ro = fresh()                       # $300
+        ro.set_track_record(closed_trades=500, expectancy_R=1.0)
+        d = ro.evaluate(self.opt(), pf, {}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("option floor", d.reasons[0])

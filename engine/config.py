@@ -57,6 +57,16 @@ class RiskConfig:
     # are structurally unaffordable below roughly $1,500 of equity. Below this
     # line the agent compounds with shares/ETFs only.
     option_min_equity: float = 1500.0
+    # Capital was never the real problem. A sweep across $300-$10,000 found
+    # long-premium buying negative at EVERY level (-14% to -15% median at
+    # $2.5k+) and under every stop setting tested, because the strategy pays
+    # an implied-vol premium on entry and spread on both sides. So the equity
+    # floor is necessary but nowhere near sufficient: the option sleeve also
+    # stays locked until the account has demonstrated a positive edge with
+    # instruments that do not bleed. See docs/05-sim-report.md Result 7.
+    option_requires_proven_edge: bool = True
+    option_min_closed_trades: int = 30       # before expectancy means anything
+    option_min_expectancy_R: float = 0.10    # measured, in the real account
 
     # --- day-trade governance ---
     # FINRA replaced the PDT $25k regime with intraday margin standards

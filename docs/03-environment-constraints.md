@@ -32,29 +32,69 @@ Consequences:
   hosts, or the agent runs somewhere else. This must be resolved before
   Phase 3.
 
-## 2. Robinhood has no official retail API for stocks or options
+## 2. CORRECTION — Robinhood does support agentic trading (since 2026-05-27)
 
-- Robinhood publishes an **official Crypto Trading API only**
-  ([docs.robinhood.com/crypto/trading](https://docs.robinhood.com/crypto/trading/),
-  announced [May 30, 2024](https://robinhood.com/us/en/newsroom/robinhood-crypto-trading-api/)).
-  It is US-only, credentials are created in a desktop-browser portal, and
-  requests are signed with `x-api-key`, `x-signature`, `x-timestamp` headers.
-- For **equities and options there is no documented, supported public API.**
-  The available paths are:
-  1. **Manual execution.** The agent produces an order ticket; a human places
-     it. Slow, but zero account-security and terms-of-service risk.
-  2. **Unofficial clients** (e.g. `robin_stocks`), which drive Robinhood's
-     private endpoints. These require full account credentials and MFA, can
-     break without notice, and carry terms-of-service risk up to account
-     restriction. **This is a decision for the account holder, in writing,
-     not something the agent should adopt silently.**
-  3. **A different broker for equities/options.** Alpaca and Tradier both
-     publish documented trading APIs with paper-trading sandboxes. This is
-     the recommended path for automated equity execution; Robinhood then
-     carries the crypto sleeve via its official API.
+**My Phase 1 report said Robinhood had no official path for automated equities
+and options trading. That was wrong, and the correction changes the deployment
+plan for the better.**
 
-The `execution` skill encodes this: dry-run by default, `--live` explicit,
-and no unofficial path without a recorded human authorization.
+Robinhood launched [Agentic Trading](https://robinhood.com/us/en/agentic-trading/)
+on 2026-05-27. It is not a REST API — it is an **MCP server** the agent
+connects to directly at `https://agent.robinhood.com/mcp/trading`, and Claude
+Code is a supported client. From Robinhood's published material and press
+coverage:
+
+| | |
+|---|---|
+| Asset classes | Long equities, options, and crypto |
+| Account model | A **dedicated agentic account** with a pre-loaded balance; order authority does not extend beyond it |
+| Approval | Orders are previewed for confirmation by default, **but the agent can place trades without confirmation if you have told it to act without asking** |
+| Controls | Spending controls, limited account access, instant agent disable, fraud detection, manual approvals |
+
+Three consequences for this build:
+
+1. **The unofficial-client problem is gone.** No `robin_stocks`, no
+   credential sharing, no terms-of-service risk. This is the supported path.
+2. **The pre-loaded agentic account is the best guardrail in the system** —
+   better than anything in `engine/risk.py`, because it is the one limit the
+   agent genuinely cannot reason its way around. Fund it with exactly $300.
+3. **The confirmation setting is the most consequential switch in the whole
+   project.** It is the line between a supervised and an unsupervised agent,
+   and it belongs to the account holder. `adapters/robinhood_mcp.py` holds
+   the preflight that must pass before any order tool is called; Robinhood's
+   controls are a second, independent layer. Configure both.
+
+**Still to verify in the app before Phase 3** (this sandbox cannot reach
+robinhood.com, so all of the above comes from search results, not from the
+live product): the current MCP tool surface, which asset classes are enabled
+on your account, the approval setting, and where the instant-disable control
+is.
+
+## 2b. Alpaca is blocked here too — the adapter does not fix the data problem
+
+`adapters/alpaca.py` is built and tested, and Alpaca remains the right
+paper-trading substrate. But it does not solve this environment's problem:
+
+| Host | Result |
+|---|---|
+| `paper-api.alpaca.markets` | 403 CONNECT (policy denial) |
+| `data.alpaca.markets` | 403 CONNECT |
+| `api.alpaca.markets` | 403 CONNECT |
+| `api.tradier.com` | 403 CONNECT |
+| `agent.robinhood.com` | 403 CONNECT |
+
+**The blocker is the environment's network policy, not the broker.** Every
+candidate — data vendor, paper broker, live broker — is denied at the egress
+proxy. Phase 2 needs one of:
+
+- the environment's network policy widened to allow the chosen data and
+  broker hosts (see https://code.claude.com/docs/en/claude-code-on-the-web
+  for how environments are configured), or
+- the agent running somewhere with ordinary outbound HTTPS.
+
+`WebSearch` does work, and `WebFetch` works for domains the policy permits —
+so the *news and research* half of the agent can function here. Only priced
+market data and order routing cannot.
 
 ## 3. Regulatory state is mid-transition — verify before Phase 3
 
@@ -76,6 +116,12 @@ Cash accounts are not subject to the PDT rules but require settled funds
 
 ## Sources
 
+- [Robinhood Agentic Trading](https://robinhood.com/us/en/agentic-trading/)
+- [Robinhood — Agentic Trading overview](https://robinhood.com/us/en/support/articles/agentic-trading-overview/)
+- [Robinhood — Trading with your agent](https://robinhood.com/us/en/support/articles/trading-with-your-agent/)
+- [Robinhood newsroom — Robinhood is Now Open to Agents](https://robinhood.com/us/en/newsroom/robinhood-is-now-open-to-agents/)
+- [TechCrunch — Robinhood now lets your AI agents trade stocks (2026-05-27)](https://techcrunch.com/2026/05/27/robinhood-now-lets-your-ai-agents-trade-stocks/)
+- [Alpaca API documentation](https://docs.alpaca.markets/)
 - [Robinhood Crypto Trading API docs](https://docs.robinhood.com/crypto/trading/)
 - [Robinhood newsroom — Crypto Trading API, May 30, 2024](https://robinhood.com/us/en/newsroom/robinhood-crypto-trading-api/)
 - [FINRA Regulatory Notice 26-10](https://www.finra.org/rules-guidance/notices/26-10)

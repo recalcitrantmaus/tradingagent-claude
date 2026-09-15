@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Gate a task on the running model.
+
+    python3 -m tools.model_check weekly-review
+    python3 -m tools.model_check execution --model claude-sonnet-5 --effort xhigh
+
+Exit code 0 = proceed, 1 = do not perform this task in this session.
+"""
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from engine.model_policy import POLICY, check, current_model, current_effort
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("task", nargs="?", help="task name; omit to list the policy")
+    ap.add_argument("--model")
+    ap.add_argument("--effort")
+    a = ap.parse_args()
+
+    if not a.task:
+        print(f"running model : {current_model() or 'UNKNOWN'}")
+        print(f"running effort: {current_effort() or 'UNKNOWN'}\n")
+        print(f"{'task':22} {'min tier':10} {'min effort':11} {'blocking':9}")
+        for p in POLICY.values():
+            print(f"{p.task:22} {p.min_tier.value:10} {p.min_effort:11} "
+                  f"{'yes' if p.blocking else 'no':9}")
+        return 0
+
+    ok, msgs = check(a.task, a.model, a.effort)
+    for m in msgs:
+        print(("  ok: " if ok else "  !! ") + m)
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

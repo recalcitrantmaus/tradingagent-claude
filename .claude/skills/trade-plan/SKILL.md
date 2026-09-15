@@ -46,9 +46,15 @@ single most reliable way to lose money slowly.
 under $100 so position sizing has resolution — a $6 risk budget cannot
 express itself in a $600 share.
 
-**Options.** Blocked below the equity floor in `engine/config.py`
-(currently $1,500) because one contract's policy-capped loss exceeds the
-whole risk budget at $300. This is arithmetic, not caution. When unlocked:
+**Options.** Locked by two independent gates. First, the equity floor in
+`engine/config.py` ($1,500): one contract's policy-capped loss exceeds the
+whole risk budget at $300, which is arithmetic, not caution. Second, and more
+important, a **measured edge** — 30+ closed trades at >= +0.10R in this
+account. Simulation found long-premium buying negative at every capital level
+from $1,500 to $10,000 and under every stop setting tested, so affording a
+contract is not a reason to buy one (`docs/05-sim-report.md` Results 7-8).
+Only long OTM calls were tested; debit spreads are untested, and proposing
+one requires saying so explicitly. When unlocked:
 7-45 DTE, defined risk only, never in the first 15 minutes of the session,
 sized in whole contracts, and only when the underlying thesis would justify
 a stock trade anyway. An option is leverage on a view you already hold, not

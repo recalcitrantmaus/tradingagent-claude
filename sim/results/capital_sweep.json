@@ -1,0 +1,262 @@
+{
+  "seeds": 150,
+  "days": 260,
+  "levels": {
+    "300": {
+      "trend_pullback": {
+        "median_total_return": -0.002,
+        "pct_profitable": 0.467,
+        "mean_trades": 15.1,
+        "mean_entry_qty": 2.87,
+        "zero_size_rate": 0.063,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0474
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0275,
+        "pct_profitable": 0.6,
+        "mean_trades": 45.8,
+        "mean_entry_qty": 1.83,
+        "zero_size_rate": 0.035,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0915
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "500": {
+      "trend_pullback": {
+        "median_total_return": 0.0015,
+        "pct_profitable": 0.52,
+        "mean_trades": 18.1,
+        "mean_entry_qty": 4.92,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0501
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0237,
+        "pct_profitable": 0.593,
+        "mean_trades": 50.5,
+        "mean_entry_qty": 3.13,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0939
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "750": {
+      "trend_pullback": {
+        "median_total_return": 0.001,
+        "pct_profitable": 0.52,
+        "mean_trades": 20.4,
+        "mean_entry_qty": 7.59,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.053
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0234,
+        "pct_profitable": 0.607,
+        "mean_trades": 54.4,
+        "mean_entry_qty": 4.88,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0956
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "1000": {
+      "trend_pullback": {
+        "median_total_return": 0.0002,
+        "pct_profitable": 0.507,
+        "mean_trades": 22.0,
+        "mean_entry_qty": 10.25,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0542
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0249,
+        "pct_profitable": 0.587,
+        "mean_trades": 56.9,
+        "mean_entry_qty": 6.55,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0962
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "1500": {
+      "trend_pullback": {
+        "median_total_return": 0.0015,
+        "pct_profitable": 0.52,
+        "mean_trades": 24.2,
+        "mean_entry_qty": 15.58,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0554
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0195,
+        "pct_profitable": 0.593,
+        "mean_trades": 60.5,
+        "mean_entry_qty": 9.89,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0971
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "2500": {
+      "trend_pullback": {
+        "median_total_return": 0.0013,
+        "pct_profitable": 0.52,
+        "mean_trades": 26.9,
+        "mean_entry_qty": 26.21,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0562
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0179,
+        "pct_profitable": 0.58,
+        "mean_trades": 64.7,
+        "mean_entry_qty": 16.64,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0968
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "5000": {
+      "trend_pullback": {
+        "median_total_return": 0.0016,
+        "pct_profitable": 0.52,
+        "mean_trades": 30.4,
+        "mean_entry_qty": 52.79,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0568
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0191,
+        "pct_profitable": 0.593,
+        "mean_trades": 69.9,
+        "mean_entry_qty": 33.6,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0963
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    },
+    "10000": {
+      "trend_pullback": {
+        "median_total_return": 0.0016,
+        "pct_profitable": 0.52,
+        "mean_trades": 33.6,
+        "mean_entry_qty": 105.92,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0571
+      },
+      "momentum_breakout": {
+        "median_total_return": 0.0167,
+        "pct_profitable": 0.58,
+        "mean_trades": 75.3,
+        "mean_entry_qty": 67.03,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0948
+      },
+      "option_swing": {
+        "median_total_return": 0.0,
+        "pct_profitable": 0.0,
+        "mean_trades": 0,
+        "mean_entry_qty": 0.0,
+        "zero_size_rate": 0.0,
+        "mean_option_trades": 0,
+        "pct_ruined": 0.0,
+        "mean_max_drawdown": 0.0
+      }
+    }
+  }
+}

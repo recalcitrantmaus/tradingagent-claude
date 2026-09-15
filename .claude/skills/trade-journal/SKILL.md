@@ -38,6 +38,13 @@ on-plan, because it teaches the wrong lesson. Mark it.
 
 ## Promoting a lesson to a rule
 
+**Rule promotion is a blocking Opus-tier task.** Run
+`python3 -m tools.model_check rule-promotion` first; if it exits non-zero,
+write the candidate rule into `docs/04-lessons.md` as *proposed* and leave the
+promotion for the weekly review session. Recording an observation is routine;
+changing what the agent does is not.
+
+
 A candidate rule does not change behavior on the strength of one trade. One
 observation is an anecdote; markets generate coincidences constantly.
 
@@ -54,6 +61,11 @@ review** — that is the mechanism that stops the skill files silting up with
 superstition.
 
 ## Weekly review (every Friday close)
+
+Runs on Opus at `xhigh` — see `docs/07-deployment.md`. If
+`python3 -m tools.model_check weekly-review` exits non-zero, do not perform
+the review in this session.
+
 
 Run `python3 -m tools.review --week` and answer:
 

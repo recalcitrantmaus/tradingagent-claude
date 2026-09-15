@@ -38,8 +38,11 @@ can only be cleared by a human via `RiskOfficer.unlock(authorization)`.
 - Risk per trade ≤ 2% of equity. Size follows the stop; never the ambition.
 - Every entry supplies a stop before it is placed. No stop, no trade.
 - Never widen a stop. Never average down. Scale out, not in.
-- Options are blocked below $1,500 equity — arithmetic, not caution. See
-  `docs/05-sim-report.md` Result 2.
+- Options are locked twice over: below $1,500 equity (you cannot size one
+  contract inside the risk budget) **and** until the account shows 30+ closed
+  trades at >= +0.10R measured expectancy. Simulation found long-premium
+  buying negative at every capital level tested — see `docs/05-sim-report.md`
+  Results 7 and 8. Affording a trade is not a reason to take it.
 - No options in the first 15 minutes of the session. 7-45 DTE. Defined risk.
 - -4% day → stop for the day. -8% week → stop for the week. -20% from peak →
   flatten and lock, human only.
@@ -54,6 +57,26 @@ most directly pursues it locked the account in 100% of 300 runs, and that
 optimizing for "weeks hitting +5%" selects for strategies that ruin 94% of
 accounts (`docs/04-lessons.md`). **Report the gap to 5% honestly every week.
 Never close it with leverage.** The real first milestone is $1,500.
+
+## Model routing (binding)
+
+You cannot choose your own model — the Routine that launched this session
+did. Check before durable work:
+
+```
+python3 -m tools.model_check <task>     # exit 1 means do not proceed
+```
+
+| Task | Floor | On a downgrade |
+|---|---|---|
+| news-intel, execution, session-close, trade-journal | Sonnet @ xhigh | warn, continue, note it in the journal |
+| premarket-brief, trade-plan | Sonnet @ xhigh | warn, continue |
+| weekly-review, rule-promotion, post-halt-review | **Opus @ xhigh** | **stop** |
+| unlock-authorization | **Opus @ max** | **stop** |
+
+The asymmetry is the point: a bad execution turn costs one trade; a bad rule
+promoted into a SKILL.md costs every trade until someone notices. If a
+blocking task cannot run, say so and leave it for a session that can.
 
 ## Changing a rule
 
@@ -73,8 +96,12 @@ Both must pass before any change to `engine/` is committed.
 
 ## Environment
 
-This sandbox cannot reach any market-data or broker host — every candidate
-returns a 403 policy denial at the egress proxy. All simulation runs on
-synthetic data. Live trading requires a different environment. Robinhood
-publishes an official API for **crypto only**; equities and options have no
-supported public API. Details and sources: `docs/03-environment-constraints.md`.
+This sandbox cannot reach any market-data or broker host — every candidate,
+including Alpaca and `agent.robinhood.com`, returns a 403 policy denial at
+the egress proxy. All simulation runs on synthetic data. `WebSearch` works,
+so research functions; priced data and order routing do not.
+
+Robinhood supports agentic trading over MCP
+(`https://agent.robinhood.com/mcp/trading`, long equities, options and crypto,
+dedicated pre-funded account). Alpaca is the recommended paper substrate.
+Setup, controls and Phase 2 exit criteria: `docs/07-deployment.md`.

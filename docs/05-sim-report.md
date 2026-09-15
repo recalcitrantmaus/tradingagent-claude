@@ -161,3 +161,141 @@ It is pure risk with no increase in the thing being targeted.
 3. Judge Phase 2 on: did the guardrails hold, were the theses traceable to
    sources, and is measured expectancy positive — **not** on whether it made
    5% in the week.
+
+---
+
+# Phase 1 addendum — capital sizing, and a rule I got wrong
+
+Added 2026-09-15 in response to the question *"should the initial deposit
+change, or the milestone, or both?"* Reproduce with:
+
+```
+python3 -m sim.capital_sweep
+```
+
+## Result 6 — More capital does not buy more edge
+
+150 one-year paths at each of eight starting equity levels:
+
+| Start | momentum_breakout median return | % profitable | mean position (shares) | proposals lost to rounding |
+|---|---|---|---|---|
+| $300 | **+2.75%** | 60.0% | 1.83 | 3.5% |
+| $500 | +2.37% | 59.3% | 3.13 | 0.0% |
+| $750 | +2.34% | 60.7% | 4.88 | 0.0% |
+| $1,000 | +2.49% | 58.7% | 6.55 | 0.0% |
+| $1,500 | +1.95% | 59.3% | 9.89 | 0.0% |
+| $2,500 | +1.79% | 58.0% | 16.64 | 0.0% |
+| $5,000 | +1.91% | 59.3% | 33.60 | 0.0% |
+| $10,000 | +1.67% | 58.0% | 67.03 | 0.0% |
+
+Two things, both of which surprised me:
+
+1. **Percentage return is flat to slightly declining in capital.** $300 is
+   not leaving returns on the table. It was the *best* row.
+2. **The rounding problem is real but small, and it is gone by $500.** At
+   $300, 3.5% of otherwise-valid proposals die because a $6 risk budget
+   rounds to zero whole shares; by $500 that is 0.0%. The tax is about
+   three percent of opportunities, not a structural handicap.
+
+So the argument for a larger deposit is much weaker than I implied in the
+Phase 1 report, where I framed $1,500 as "the point at which the instrument
+set actually opens up" without checking whether opening it helped.
+
+## Result 7 — Opening the option sleeve makes things worse at every account size
+
+Same sweep, the option strategy, with the $1,500 equity floor respected:
+
+| Start | option_swing median return | % profitable | option trades/yr |
+|---|---|---|---|
+| $1,500 | **-1.97%** | 4.0% | 8.2 |
+| $2,500 | **-14.01%** | 15.3% | 38.2 |
+| $5,000 | **-15.00%** | 10.7% | 31.6 |
+| $10,000 | **-14.68%** | 11.3% | 28.8 |
+
+More capital did not make options work. It bought more of a losing trade.
+
+To check whether this was an artifact of my stop policy, I re-ran at $5,000
+across five stop and target settings:
+
+| Variant | Median return | % profitable | Win rate |
+|---|---|---|---|
+| policy: 40% stop / 60% target | -15.00% | 12.5% | 49.4% |
+| wider 60% stop | -13.11% | 12.5% | 53.9% |
+| no stop, hold to the DTE floor | -5.28% | 30.0% | 64.0% |
+| tighter 25% stop | -14.35% | 17.5% | 43.8% |
+| target 100% not 60% | -8.85% | 25.0% | 41.6% |
+
+**Every variant loses.** It is not a stop-placement problem. Buying long
+premium in this simulation pays an implied-vol premium on entry (IV is set at
+1.15x realized) plus spread and fees on both sides, and no exit rule recovers
+that. That assumption is deliberate and defensible — the variance risk
+premium is a well-documented feature of real options markets, and it is the
+reason systematic long-premium buying is a hard way to make money.
+
+**Caveat, stated plainly:** this tests *one* structure — buying slightly OTM
+calls. Debit spreads, which pay the premium on one leg and collect it on the
+other, are a different animal and are **not** tested here. The finding is
+"this repo's option strategy loses money", not "all options lose money".
+
+## Result 8 — The fix was the wrong kind of rule, and has been replaced
+
+The $1,500 equity floor answers *"can this account afford one contract?"* It
+does not answer *"should this account be buying contracts?"* — and Result 7
+says the answer to the second question is no, at every level of capital.
+
+An equity floor alone therefore just **delays** a losing trade until the
+account is big enough to lose more.
+
+**Remediation:** the floor stays (the arithmetic behind it is still correct),
+and a second gate is added. The option sleeve now requires a **measured
+positive edge in the real account**:
+
+```python
+option_requires_proven_edge: bool = True
+option_min_closed_trades: int = 30       # before expectancy means anything
+option_min_expectancy_R: float = 0.10    # measured, from the actual fill log
+```
+
+`RiskOfficer.set_track_record()` is fed from `tools/review.py`, which computes
+expectancy from `state/fills.jsonl`. The account must *earn* its way into
+options with instruments that do not bleed.
+
+Tested with `graduated_swing` — a strategy that trades stock and adds options
+only once the engine unlocks them — over 150 paths per cell:
+
+| Start | Gate | Median return | % profitable | Option trades/yr | Mean drawdown |
+|---|---|---|---|---|---|
+| $300 | ON | +2.75% | 60.0% | 0.00 | 9.15% |
+| $300 | OFF | +2.75% | 60.0% | 0.00 | 9.15% |
+| $1,500 | ON | **-0.61%** | 48.0% | 3.27 | 11.03% |
+| $1,500 | OFF | -3.21% | 36.0% | 13.19 | 14.45% |
+| $5,000 | ON | **-0.04%** | 50.0% | 3.47 | 11.46% |
+| $5,000 | OFF | **-11.23%** | 23.3% | 25.05 | 19.69% |
+
+At $5,000 the gate cuts option trades from 25 to 3.5 a year and improves the
+median outcome by **11.2 percentage points**, with mean drawdown falling from
+19.7% to 11.5%. At $300 it changes nothing, because the equity floor already
+binds. It is not a blanket ban: a few trades still get through, taken by
+accounts that had genuinely earned the right, and those cost little.
+
+## Revised recommendation on capital
+
+**Keep the $300 deposit.** The evidence does not support raising it:
+
+- Returns do not improve with size (Result 6).
+- The rounding tax at $300 is ~3.5% of proposals and vanishes by $500 — worth
+  knowing, not worth funding.
+- The main thing more capital unlocks is the option sleeve, and the option
+  sleeve loses money (Result 7).
+- $300 is the harshest honest test of whether this agent has an edge. If it
+  works at $300, more capital scales it. If it does not, more capital just
+  makes the lesson more expensive.
+
+**And retire the "$1,500 milestone" framing from the Phase 1 report.** It
+implied that reaching $1,500 unlocks something good. It unlocks something
+this repo has measured as bad. The milestone that matters is **30 closed
+trades at positive expectancy** — that is what gates the option sleeve now,
+and it is the only number that tells you whether any of this works.
+
+If you later want more capital deployed, the defensible trigger is the same
+one: a measured positive edge over a meaningful sample, not a round number.

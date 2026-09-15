@@ -109,6 +109,22 @@ class OptionSwing(Strategy):
         return out
 
 
+class GraduatedSwing(Strategy):
+    """Trades stock first; adds the option sleeve only once the risk engine
+    unlocks it. This is the shape the live agent should have — the account
+    earns its way into the harder instrument instead of starting there.
+    """
+    name = "graduated_swing"
+
+    def __init__(self):
+        self.equity_leg = MomentumBreakout()
+        self.option_leg = OptionSwing()
+
+    def propose(self, mkt, i, portfolio, cfg):
+        return self.equity_leg.propose(mkt, i, portfolio, cfg) \
+            + self.option_leg.propose(mkt, i, portfolio, cfg)
+
+
 class TargetChaser(Strategy):
     """Deliberately reckless control: what 5%/week actually requires.
 
@@ -145,4 +161,4 @@ class TargetChaser(Strategy):
 
 
 ALL = {s.name: s for s in [TrendPullback(), MomentumBreakout(), OptionSwing(),
-                           TargetChaser()]}
+                           GraduatedSwing(), TargetChaser()]}

@@ -60,6 +60,11 @@ class RiskOfficer:
         self.consecutive_losses = 0
         self.day_trades: List[dt.date] = []
         self.journal: List[str] = []
+        # Measured track record, supplied by tools.review from the real fill
+        # log. Defaults are deliberately disqualifying: an agent with no
+        # record does not get the instrument that punishes not having one.
+        self.closed_trades: int = 0
+        self.expectancy_R: float = 0.0
 
     # ------------------------------------------------------------------
     # session lifecycle
@@ -112,6 +117,11 @@ class RiskOfficer:
     def record_day_trade(self, date: dt.date) -> None:
         self.day_trades.append(date)
 
+    def set_track_record(self, closed_trades: int, expectancy_R: float) -> None:
+        """Feed measured performance in. Call from tools.review before trading."""
+        self.closed_trades = closed_trades
+        self.expectancy_R = expectancy_R
+
     def _escalate(self, new: State, why: str) -> None:
         order = [State.NORMAL, State.DAY_HALT, State.WEEK_HALT, State.LOCKED]
         if order.index(new) > order.index(self.state):
@@ -158,6 +168,16 @@ class RiskOfficer:
                 return d.reject(
                     f"equity {eq:.2f} < {c.option_min_equity:.0f} option floor: "
                     "a single contract's max loss would exceed the risk budget")
+            if c.option_requires_proven_edge:
+                if self.closed_trades < c.option_min_closed_trades:
+                    return d.reject(
+                        f"option sleeve locked: {self.closed_trades} closed trades "
+                        f"< {c.option_min_closed_trades} needed to measure an edge")
+                if self.expectancy_R < c.option_min_expectancy_R:
+                    return d.reject(
+                        f"option sleeve locked: measured expectancy "
+                        f"{self.expectancy_R:+.3f}R < required "
+                        f"{c.option_min_expectancy_R:+.2f}R")
             if p.dte is None or p.dte < c.option_min_dte:
                 return d.reject(f"option DTE {p.dte} < minimum {c.option_min_dte}")
             if p.dte > c.option_max_dte:

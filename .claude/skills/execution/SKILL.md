@@ -57,11 +57,21 @@ what is and is not available). Two hard rules:
 - **Dry-run by default.** `--live` is an explicit flag, never a default, and
   the adapter refuses to send unless the config file records a human
   authorization string with today's date.
-- **Robinhood has no official retail equities/options API.** Only crypto is
-  officially supported. Equities and options require either manual execution
-  from a generated order ticket or an unofficial client, which carries
-  account-security and terms-of-service risk the human must accept in
-  writing. Never silently take the unofficial path.
+- **Robinhood supports agentic trading over MCP** (`agent.robinhood.com`,
+  long equities, options and crypto, into a dedicated pre-funded account).
+  Before calling any Robinhood order tool, `adapters/robinhood_mcp.preflight()`
+  must pass: state `NORMAL`, ledger reconciled today, every position carrying
+  a resting stop, the risk engine's approval, and a valid authorization.
+  Robinhood's own controls are a second, independent layer — never treat
+  either as sufficient alone.
+- **Never use an unofficial Robinhood client.** A supported path exists;
+  there is no reason to hand credentials to a reverse-engineered one.
+
+## Model floor
+
+`execution` runs at Sonnet tier or better, effort `xhigh`. On a downgrade,
+continue and record it in the journal — the risk engine, not the model, is
+what keeps execution safe. Check with `python3 -m tools.model_check execution`.
 
 ## Recording
 
