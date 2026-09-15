@@ -5,18 +5,19 @@ every rule is committed here, and a new cloud session clones it and reads
 `CLAUDE.md` automatically. You do not need the old conversation to continue;
 you need this file and the docs it points at.
 
-Last updated: 2026-09-15, end of the Phase 1 build session.
+Last updated: 2026-09-15, end of the Phase 2 preflight session.
 
 ## Where we are
 
 | | |
 |---|---|
-| Phase | **1 complete. Phase 2 not yet started.** |
-| Account | $300, paper, never traded. Risk state `NORMAL`. |
+| Phase | **2 preflight complete. Day 1 is Wed 2026-09-16, attended.** |
+| Account | $300 paper, **verified against the broker**. Never traded. Risk state `NORMAL`. |
 | Network | **Open.** Custom allowlist applied and verified. |
-| Broker | Alpaca paper keys added to the environment. Untested — the session that added them could not see them. |
+| Broker | **Alpaca paper keys verified.** `/v2/account` returns equity $300.00, cash $300.00. |
 | Tests | 49 passing |
 | Live orders | **None, ever.** Nothing has touched a real or paper broker yet. |
+| Routines | **None created.** Deliberate — see "How day 1 runs" below. |
 
 ## First three commands in a new session
 
@@ -27,6 +28,68 @@ python3 -m tools.model_check           # what this session is cleared to do
 ```
 
 If `preflight_phase2` exits non-zero, fix what it names before anything else.
+
+## What the preflight session settled
+
+All of this was verified on 2026-09-15 after the close. It is evidence, not
+assumption — re-run anything you doubt.
+
+1. **The Alpaca paper keys work.** This was the top open question at the end of
+   Phase 1 and it is now closed. `ALPACA_API_KEY_ID` and
+   `ALPACA_API_SECRET_KEY` are both present and authenticate against
+   `paper-api.alpaca.markets`. The account reads $300.00 equity, matching the
+   deliberate reset — Alpaca's $100k default would have invalidated every
+   sizing decision Phase 2 is meant to measure.
+2. **The risk gates fire correctly at $300.** Synthetic proposals were pushed
+   through `RiskOfficer.evaluate` read-only:
+
+   | Case | Result |
+   |---|---|
+   | Equity, 5% stop | approved, 6 shares, risking $3.60 = 1.20% of equity |
+   | No stop supplied | rejected — "every entry must define its exit" |
+   | Stop above entry | rejected — "stop is not below entry" |
+   | Option, 30 DTE, defined risk | rejected — below the $1,500 option floor |
+   | SPY at $757.44 | rejected — size rounds to zero |
+
+3. **SPY is untradeable at $300, and so is anything like it.** One share costs
+   more than twice the account. The tradeable universe at this capital level is
+   low-priced names, which is a real constraint on what the trade-plan skill
+   can propose — not a bug to route around.
+4. **The pipeline runs end to end.** `tools.paper_session --dry-run` reconciled
+   against the broker and returned no proposals. An empty plan is a valid
+   outcome and should not be treated as a failure to find something.
+5. **The model-routing env var did not match the model the session actually
+   ran.** `model_check` reports whatever `TRADING_AGENT_MODEL` says, and
+   nothing in the environment lets a script verify that claim independently —
+   `current_model()` reads only that variable or `ANTHROPIC_MODEL`. Effort is
+   verifiable (`CLAUDE_EFFORT` exists and agreed); model is not. The variable
+   is left as-is because it is correct for the daily-loop Routine specified in
+   `docs/07-deployment.md`. **Do not trust `model_check`'s model line in an
+   ad-hoc session** — confirm the session's real model out of band and record
+   that in the journal. This failed safe here (it under-claimed, blocking
+   Opus-tier tasks rather than permitting them), but a binding control that
+   cannot verify its own input is the weakest link in the routing policy.
+
+## How day 1 runs
+
+**Attended, not automated.** The runbook requires a human to read every ticket
+the dry run would have sent before anything is submitted, so no Routine was
+created — a scheduled session firing at 08:30 with nobody reading the output
+would skip exactly the gate day 1 exists to provide.
+
+Wednesday 2026-09-16, 09:30 ET:
+
+```bash
+python3 -m tools.preflight_phase2
+python3 -m tools.trading_day open
+# premarket-brief -> news-intel -> trade-plan
+python3 -m tools.paper_session --dry-run     # READ EVERY TICKET
+python3 -m tools.trading_day close
+```
+
+Create the two Routines from `docs/07-deployment.md` only once day 1's sizing
+and stops look right. Automation is the reward for a clean rehearsal, not the
+starting point.
 
 ## What was decided, and why (the short version)
 
@@ -48,7 +111,7 @@ expensive to re-derive or to accidentally reverse:
    spreads are untested. Results 7-8.
 5. **Model routing is binding.** Rule promotion, weekly review, post-halt
    review and unlock authorization require Opus tier and **block** below it.
-   `python3 -m tools.model_check <task>`.
+   `python3 -m tools.model_check <task>`. See finding 5 above for its limit.
 6. **Reachable is not usable.** `stooq.com` answers 200 with a bot challenge.
    netcheck reports DEGRADED for that case.
 7. **Environment variables are snapshotted at session start.** The network
@@ -57,20 +120,27 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-Phase 2: one week of autonomous paper trading on Alpaca. Runbook:
-`docs/09-phase2-runbook.md`. Exit criteria are in there and in
+Phase 2 day 1, attended, Wednesday at the open — then the rest of the week.
+Runbook: `docs/09-phase2-runbook.md`. Exit criteria are in there and in
 `docs/07-deployment.md` — 30+ closed trades, positive expectancy, zero
 guardrail breaches, costs below gains. **Hitting +5% in a week is not one of
 them.**
 
 ## Open questions carried forward
 
-- Alpaca paper keys are untested against the API. First `preflight_phase2` in
-  a session that can see them settles it.
 - The Alpaca paper secret key was shown in a screenshot during the build
-  session, so it exists in that conversation's history. It is a paper key, so
-  the exposure is low-consequence, but **rotate it before Phase 3** and never
-  let a live key near a screenshot.
+  session, so it exists in that conversation's history. The keys were reset on
+  2026-09-15, which retires that specific exposure — but the habit is the
+  point: **never let a live key near a screenshot.**
+- `model_check` cannot independently verify the model it reports (finding 5).
+  Options considered and not yet taken: cross-check effort against
+  `CLAUDE_EFFORT`, and record the session's true model in the journal rather
+  than the tool's claim. Either would touch `engine/`, so it needs a test and a
+  `docs/04-lessons.md` entry first.
+- The two Routines in `docs/07-deployment.md` assume a per-Routine environment.
+  There is one environment, so a sonnet daily loop and an Opus-tier weekly
+  review cannot both hold a truthful `TRADING_AGENT_MODEL` in it. Resolve
+  before the weekly review runs unattended.
 - Robinhood's MCP tool surface has not been inspected — only read about.
   Verify in the app before Phase 3 (`docs/03-environment-constraints.md`).
 - Whether Alpaca's two-header auth fits the Pro/Max API-credential form is
