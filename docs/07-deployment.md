@@ -105,6 +105,26 @@ resting stop, the risk engine's approval, and a valid authorization.
 Know all five. The first two are outside this repo, which is exactly why they
 are the ones to rely on.
 
+## 4b. Starting a Phase 2 session
+
+Run this first, every time:
+
+```
+python3 -m tools.preflight_phase2
+```
+
+It checks the network policy, the broker keys, model routing, the risk-engine
+tests, the account's halt state and live data, and names the fix for anything
+that fails. Exit code 1 means do not trade.
+
+**Environment variables are snapshotted at session start.** The network policy
+is enforced at the proxy and applies to a running session immediately;
+environment variables are not. A session never sees a variable added after it
+started, so adding broker keys or changing `TRADING_AGENT_MODEL` always
+requires a **new session**, not `/model`. `/model sonnet` changes this
+session's model without picking up any environment change — which is exactly
+the state where `model_check` reports UNKNOWN and blocking tasks refuse.
+
 ## 5. Phase 2 exit criteria
 
 Do not proceed to live trading on the strength of a good week. Require:

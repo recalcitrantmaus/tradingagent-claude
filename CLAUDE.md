@@ -17,8 +17,14 @@ exists to prevent.
 ## Before doing anything in a session
 
 ```
-python3 -m tools.status
+python3 -m tools.preflight_phase2    # network, keys, model, tests, state, data
+python3 -m tools.status              # account detail
 ```
+
+`preflight_phase2` exiting non-zero means do not trade. Note that environment
+variables are snapshotted at session start: a variable added to the
+environment after this session began is invisible to it, and only a new
+session picks it up. The network policy is different — that applies live.
 
 If the risk state is not `NORMAL`, you do not get a market opinion. You
 manage open positions, write the brief noting the halt, and stop. `LOCKED`
