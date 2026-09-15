@@ -1,0 +1,105 @@
+{
+  "config": "default",
+  "days": 260,
+  "seeds": 300,
+  "strategies": {
+    "trend_pullback": {
+      "runs": 300,
+      "median_final_equity": 302.17,
+      "mean_final_equity": 305.28,
+      "p10_final_equity": 286.51,
+      "p90_final_equity": 328.02,
+      "median_total_return": 0.0072,
+      "pct_runs_profitable": 0.563,
+      "pct_runs_ruined_50pct": 0.0,
+      "pct_runs_locked": 0.0,
+      "mean_weekly_return": 0.00033,
+      "median_weekly_return": 0.0,
+      "stdev_weekly_return": 0.00708,
+      "pct_weeks_over_+5pct": 0.001,
+      "mean_max_drawdown": 0.0467,
+      "worst_max_drawdown": 0.1294,
+      "mean_trades": 15.6,
+      "mean_win_rate": 0.488,
+      "mean_fees_paid": 0.0,
+      "fees_as_pct_of_start": 0.0,
+      "top_rejections": {
+        "size rounds to zero": 534,
+        "already at max 4 positions": 231
+      }
+    },
+    "momentum_breakout": {
+      "runs": 300,
+      "median_final_equity": 308.89,
+      "mean_final_equity": 310.63,
+      "p10_final_equity": 274.07,
+      "p90_final_equity": 352.68,
+      "median_total_return": 0.0296,
+      "pct_runs_profitable": 0.603,
+      "pct_runs_ruined_50pct": 0.0,
+      "pct_runs_locked": 0.01,
+      "mean_weekly_return": 0.00067,
+      "median_weekly_return": 0.0,
+      "stdev_weekly_return": 0.01374,
+      "pct_weeks_over_+5pct": 0.006,
+      "mean_max_drawdown": 0.0914,
+      "worst_max_drawdown": 0.2109,
+      "mean_trades": 46.3,
+      "mean_win_rate": 0.472,
+      "mean_fees_paid": 0.0,
+      "fees_as_pct_of_start": 0.0,
+      "top_rejections": {
+        "already at max 4 positions": 8254,
+        "size rounds to zero": 846
+      }
+    },
+    "option_swing": {
+      "runs": 300,
+      "median_final_equity": 300.0,
+      "mean_final_equity": 300.0,
+      "p10_final_equity": 300.0,
+      "p90_final_equity": 300.0,
+      "median_total_return": 0.0,
+      "pct_runs_profitable": 0.0,
+      "pct_runs_ruined_50pct": 0.0,
+      "pct_runs_locked": 0.0,
+      "mean_weekly_return": 0.0,
+      "median_weekly_return": 0.0,
+      "stdev_weekly_return": 0.0,
+      "pct_weeks_over_+5pct": 0.0,
+      "mean_max_drawdown": 0.0,
+      "worst_max_drawdown": 0.0,
+      "mean_trades": 0,
+      "mean_win_rate": 0.0,
+      "mean_fees_paid": 0.0,
+      "fees_as_pct_of_start": 0.0,
+      "top_rejections": {
+        "equity 300.00 < 1500 option floor: a single contract's max l": 116104
+      }
+    },
+    "target_chaser_CONTROL": {
+      "runs": 300,
+      "median_final_equity": 300.0,
+      "mean_final_equity": 300.0,
+      "p10_final_equity": 300.0,
+      "p90_final_equity": 300.0,
+      "median_total_return": 0.0,
+      "pct_runs_profitable": 0.0,
+      "pct_runs_ruined_50pct": 0.0,
+      "pct_runs_locked": 0.0,
+      "mean_weekly_return": 0.0,
+      "median_weekly_return": 0.0,
+      "stdev_weekly_return": 0.0,
+      "pct_weeks_over_+5pct": 0.0,
+      "mean_max_drawdown": 0.0,
+      "worst_max_drawdown": 0.0,
+      "mean_trades": 0,
+      "mean_win_rate": 0.0,
+      "mean_fees_paid": 0.0,
+      "fees_as_pct_of_start": 0.0,
+      "top_rejections": {
+        "equity 300.00 < 1500 option floor: a single contract's max l": 228153
+      }
+    }
+  }
+}

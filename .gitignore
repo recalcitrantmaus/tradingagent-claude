@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+state/ledger.json
+state/fills.jsonl
+state/briefs/*.md
+state/plans/*
+state/news/*
+state/reports/*
+.env
+*.key
+credentials*

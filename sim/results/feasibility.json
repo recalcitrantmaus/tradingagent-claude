@@ -1,0 +1,372 @@
+[
+  {
+    "win_rate": 0.35,
+    "reward_to_risk": 1.0,
+    "edge_R_per_trade": -0.3,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": null,
+    "target_reachable_within_kelly": false,
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.1994,
+      "mean_final_multiple": 0.2089,
+      "p05_final_multiple": 0.1186,
+      "p95_final_multiple": 0.3355,
+      "prob_lose_half_or_more": 0.9982,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.0533
+    }
+  },
+  {
+    "win_rate": 0.35,
+    "reward_to_risk": 1.5,
+    "edge_R_per_trade": -0.125,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": null,
+    "target_reachable_within_kelly": false,
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.4846,
+      "mean_final_multiple": 0.5208,
+      "p05_final_multiple": 0.2538,
+      "p95_final_multiple": 0.9254,
+      "prob_lose_half_or_more": 0.5218,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.0533
+    }
+  },
+  {
+    "win_rate": 0.35,
+    "reward_to_risk": 2.0,
+    "edge_R_per_trade": 0.05,
+    "kelly_fraction": 0.025,
+    "risk_per_trade_needed_for_target": 0.2,
+    "target_reachable_within_kelly": false,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.2,
+      "median_final_multiple": 0.0,
+      "mean_final_multiple": 5.9806,
+      "p05_final_multiple": 0.0,
+      "p95_final_multiple": 0.392,
+      "prob_lose_half_or_more": 0.9504,
+      "prob_total_loss": 0.9174,
+      "pct_weeks_hitting_+5pct": 0.235
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 1.1675,
+      "mean_final_multiple": 1.2936,
+      "p05_final_multiple": 0.5392,
+      "p95_final_multiple": 2.5278,
+      "prob_lose_half_or_more": 0.029,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.2354
+    }
+  },
+  {
+    "win_rate": 0.4,
+    "reward_to_risk": 1.0,
+    "edge_R_per_trade": -0.2,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": null,
+    "target_reachable_within_kelly": false,
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.3355,
+      "mean_final_multiple": 0.3511,
+      "p05_final_multiple": 0.1994,
+      "p95_final_multiple": 0.5644,
+      "prob_lose_half_or_more": 0.8908,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.0863
+    }
+  },
+  {
+    "win_rate": 0.4,
+    "reward_to_risk": 1.5,
+    "edge_R_per_trade": 0.0,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": 90071992547409.92,
+    "target_reachable_within_kelly": false,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.95,
+      "median_final_multiple": 0.0,
+      "mean_final_multiple": 0.0,
+      "p05_final_multiple": 0.0,
+      "p95_final_multiple": 0.0,
+      "prob_lose_half_or_more": 1.0,
+      "prob_total_loss": 1.0,
+      "pct_weeks_hitting_+5pct": 0.0858
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.9254,
+      "mean_final_multiple": 0.994,
+      "p05_final_multiple": 0.4846,
+      "p95_final_multiple": 1.7672,
+      "prob_lose_half_or_more": 0.0578,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.0863
+    }
+  },
+  {
+    "win_rate": 0.4,
+    "reward_to_risk": 2.0,
+    "edge_R_per_trade": 0.2,
+    "kelly_fraction": 0.1,
+    "risk_per_trade_needed_for_target": 0.05,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.05,
+      "median_final_multiple": 6.7565,
+      "mean_final_multiple": 13.0344,
+      "p05_final_multiple": 1.0047,
+      "p95_final_multiple": 45.4381,
+      "prob_lose_half_or_more": 0.0118,
+      "prob_total_loss": 0.0002,
+      "pct_weeks_hitting_+5pct": 0.3166
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 2.5278,
+      "mean_final_multiple": 2.8022,
+      "p05_final_multiple": 1.1675,
+      "p95_final_multiple": 5.4731,
+      "prob_lose_half_or_more": 0.0002,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.3166
+    }
+  },
+  {
+    "win_rate": 0.45,
+    "reward_to_risk": 1.0,
+    "edge_R_per_trade": -0.1,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": null,
+    "target_reachable_within_kelly": false,
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.5644,
+      "mean_final_multiple": 0.5931,
+      "p05_final_multiple": 0.3355,
+      "p95_final_multiple": 0.9493,
+      "prob_lose_half_or_more": 0.3276,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.1308
+    }
+  },
+  {
+    "win_rate": 0.45,
+    "reward_to_risk": 1.5,
+    "edge_R_per_trade": 0.125,
+    "kelly_fraction": 0.0833,
+    "risk_per_trade_needed_for_target": 0.08,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.08,
+      "median_final_multiple": 3.8034,
+      "mean_final_multiple": 13.6165,
+      "p05_final_multiple": 0.2948,
+      "p95_final_multiple": 49.0637,
+      "prob_lose_half_or_more": 0.0956,
+      "prob_total_loss": 0.0058,
+      "pct_weeks_hitting_+5pct": 0.407
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 1.7672,
+      "mean_final_multiple": 1.9088,
+      "p05_final_multiple": 0.9254,
+      "p95_final_multiple": 3.3747,
+      "prob_lose_half_or_more": 0.0004,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.1308
+    }
+  },
+  {
+    "win_rate": 0.45,
+    "reward_to_risk": 2.0,
+    "edge_R_per_trade": 0.35,
+    "kelly_fraction": 0.175,
+    "risk_per_trade_needed_for_target": 0.0286,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.0286,
+      "median_final_multiple": 10.5535,
+      "mean_final_multiple": 13.1987,
+      "p05_final_multiple": 3.5156,
+      "p95_final_multiple": 31.6805,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.4071
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 5.4731,
+      "mean_final_multiple": 6.1103,
+      "p05_final_multiple": 2.5278,
+      "p95_final_multiple": 11.8502,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.4071
+    }
+  },
+  {
+    "win_rate": 0.5,
+    "reward_to_risk": 1.0,
+    "edge_R_per_trade": 0.0,
+    "kelly_fraction": 0.0,
+    "risk_per_trade_needed_for_target": null,
+    "target_reachable_within_kelly": false,
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 0.9493,
+      "mean_final_multiple": 0.9996,
+      "p05_final_multiple": 0.5644,
+      "p95_final_multiple": 1.5969,
+      "prob_lose_half_or_more": 0.023,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.1874
+    }
+  },
+  {
+    "win_rate": 0.5,
+    "reward_to_risk": 1.5,
+    "edge_R_per_trade": 0.25,
+    "kelly_fraction": 0.1667,
+    "risk_per_trade_needed_for_target": 0.04,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.04,
+      "median_final_multiple": 9.661,
+      "mean_final_multiple": 13.2006,
+      "p05_final_multiple": 2.6642,
+      "p95_final_multiple": 35.0327,
+      "prob_lose_half_or_more": 0.0002,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 3.3747,
+      "mean_final_multiple": 3.6541,
+      "p05_final_multiple": 1.7672,
+      "p95_final_multiple": 6.4443,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.1874
+    }
+  },
+  {
+    "win_rate": 0.5,
+    "reward_to_risk": 2.0,
+    "edge_R_per_trade": 0.5,
+    "kelly_fraction": 0.25,
+    "risk_per_trade_needed_for_target": 0.02,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 11.8502,
+      "mean_final_multiple": 13.2698,
+      "p05_final_multiple": 5.4731,
+      "p95_final_multiple": 25.6577,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 11.8502,
+      "mean_final_multiple": 13.2698,
+      "p05_final_multiple": 5.4731,
+      "p95_final_multiple": 25.6577,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5
+    }
+  },
+  {
+    "win_rate": 0.55,
+    "reward_to_risk": 1.0,
+    "edge_R_per_trade": 0.1,
+    "kelly_fraction": 0.1,
+    "risk_per_trade_needed_for_target": 0.1,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.1,
+      "median_final_multiple": 3.6773,
+      "mean_final_multiple": 13.7183,
+      "p05_final_multiple": 0.2708,
+      "p95_final_multiple": 49.9436,
+      "prob_lose_half_or_more": 0.1176,
+      "prob_total_loss": 0.0126,
+      "pct_weeks_hitting_+5pct": 0.5929
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 1.5969,
+      "mean_final_multiple": 1.6803,
+      "p05_final_multiple": 0.9493,
+      "p95_final_multiple": 2.6862,
+      "prob_lose_half_or_more": 0.0004,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.2562
+    }
+  },
+  {
+    "win_rate": 0.55,
+    "reward_to_risk": 1.5,
+    "edge_R_per_trade": 0.375,
+    "kelly_fraction": 0.25,
+    "risk_per_trade_needed_for_target": 0.0267,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.0267,
+      "median_final_multiple": 11.5445,
+      "mean_final_multiple": 13.2692,
+      "p05_final_multiple": 4.8791,
+      "p95_final_multiple": 27.3154,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5934
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 6.4443,
+      "mean_final_multiple": 6.9721,
+      "p05_final_multiple": 3.3747,
+      "p95_final_multiple": 12.3061,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.2562
+    }
+  },
+  {
+    "win_rate": 0.55,
+    "reward_to_risk": 2.0,
+    "edge_R_per_trade": 0.65,
+    "kelly_fraction": 0.325,
+    "risk_per_trade_needed_for_target": 0.0154,
+    "target_reachable_within_kelly": true,
+    "mc_at_needed_risk": {
+      "risk_per_trade": 0.0154,
+      "median_final_multiple": 12.4246,
+      "mean_final_multiple": 13.2822,
+      "p05_final_multiple": 6.8493,
+      "p95_final_multiple": 22.5379,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5934
+    },
+    "mc_at_policy_risk_2pct": {
+      "risk_per_trade": 0.02,
+      "median_final_multiple": 25.6577,
+      "mean_final_multiple": 28.7022,
+      "p05_final_multiple": 11.8502,
+      "p95_final_multiple": 55.5537,
+      "prob_lose_half_or_more": 0.0,
+      "prob_total_loss": 0.0,
+      "pct_weeks_hitting_+5pct": 0.5934
+    }
+  }
+]

@@ -1,2 +1,68 @@
 # tradingagent-claude
-repo for claude code as it develops a rh trading agent
+
+An autonomous trading agent for a small ($300) Robinhood account, built so
+that the parts which can lose money are deterministic, tested code and the
+parts which need judgment are LLM skills.
+
+**Status: Phase 1 complete.** Skills written, risk engine built and tested,
+3,600 simulated account-years run. Not connected to a broker. Not trading.
+
+## Read these first
+
+| Document | Why |
+|---|---|
+| [`docs/01-feasibility.md`](docs/01-feasibility.md) | What a $300 account can and cannot do, with the arithmetic |
+| [`docs/05-sim-report.md`](docs/05-sim-report.md) | Phase 1 simulation report: what was tested, what broke, what changed |
+| [`docs/06-model-strategy.md`](docs/06-model-strategy.md) | Which Claude model to run at which stage, and why |
+| [`docs/02-architecture.md`](docs/02-architecture.md) | How the pieces fit |
+| [`docs/03-environment-constraints.md`](docs/03-environment-constraints.md) | Network, broker API and regulatory constraints |
+| [`docs/04-lessons.md`](docs/04-lessons.md) | Every rule, and the evidence behind it |
+| [`CLAUDE.md`](CLAUDE.md) | The agent's own operating instructions |
+
+## Headline findings
+
+- The 5%/week target compounds to **+1,164% annualized**. Treated as a hurdle
+  rate it is harmless; treated as a quota it is fatal.
+- **Options are unaffordable at $300.** A 2% risk budget is $6; one contract
+  with a policy stop risks ~$80. Options unlock around $1,500 of equity.
+- The chase-the-target control strategy hit the **-20% drawdown lock in 100%
+  of 300 simulated years**, winning 3.2% of its trades.
+- With guardrails removed, option trading on $300 **ruined 94% of accounts**
+  (median final equity $18.02) — while hitting the +5% weekly target *more
+  often* than the disciplined strategy. Optimizing the stated KPI selects for
+  ruin.
+- Position sizing does **not** change how often a week hits +5%. It only
+  changes how much the losing weeks cost.
+
+## Run it
+
+```bash
+python3 -m unittest discover -s tests            # 20 tests, the risk constitution
+python3 -m sim.run_suite --seeds 300 --days 260  # Monte Carlo, default config
+python3 -m sim.run_suite --seeds 300 --no-guardrails       # ablation
+python3 -m sim.run_suite --seeds 300 --options-at-300      # isolate the option floor
+python3 -m tools.status                          # account state
+python3 -m tools.review --week                   # expectancy, win rate, costs
+```
+
+No third-party dependencies — standard library only.
+
+## Layout
+
+```
+.claude/skills/   premarket-brief, news-intel, trade-plan,
+                  execution, trade-journal, session-close
+engine/           config (the constitution), risk, portfolio,
+                  broker, market, sim, strategies, feasibility
+tools/            status, review, ledger state
+sim/              Monte Carlo suite, universe, results
+tests/            the constitution's teeth
+docs/             feasibility, architecture, constraints, lessons, reports
+```
+
+## Not yet done
+
+- No real market data anywhere in this repo — every number is synthetic.
+- No broker adapter. No live orders.
+- No measurement of whether *model-generated* theses have positive
+  expectancy. That is Phase 2, and it is the question that decides everything.
