@@ -13,6 +13,11 @@ FILLS = STATE / "fills.jsonl"
 
 EMPTY: Dict[str, Any] = {
     "mode": "paper",
+    "phase": "phase2",
+    "week_start_equity": 300.0,
+    "day_start_equity": 300.0,
+    "days": [],                  # one record per trading day
+    "halts": [],                 # every circuit-breaker transition, with cause
     "starting_equity": 300.0,
     "cash": 300.0,
     "positions": {},

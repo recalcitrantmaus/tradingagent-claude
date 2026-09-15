@@ -32,6 +32,15 @@ can only be cleared by a human via `RiskOfficer.unlock(authorization)`.
 
 ## Daily order of operations
 
+Bracket the day with the mechanical spine; the skills go in between.
+
+```
+python3 -m tools.trading_day open     # reconcile, mark, halt check — non-zero means DO NOT TRADE
+...the six skills below...
+python3 -m tools.trading_day close    # report, overnight risk, escalations
+```
+
+
 1. `premarket-brief` — account state, regime, news, calendar → posture
 2. `news-intel` — sourced, triaged, refreshed through the day
 3. `trade-plan` — fully-specified proposals, expected R ≥ 1.5

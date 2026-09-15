@@ -4,8 +4,12 @@ An autonomous trading agent for a small ($300) Robinhood account, built so
 that the parts which can lose money are deterministic, tested code and the
 parts which need judgment are LLM skills.
 
-**Status: Phase 1 complete.** Skills written, risk engine built and tested,
-3,600 simulated account-years run. Not connected to a broker. Not trading.
+**Status: Phase 1 complete, Phase 2 ready to start.** Skills written, risk
+engine built and tested (49 tests), 3,600+ simulated account-years run,
+network open, broker adapters built. **No order has ever been placed, paper
+or live.**
+
+**New session? Start with [`HANDOFF.md`](HANDOFF.md).**
 
 ## Read these first
 
@@ -16,6 +20,7 @@ parts which need judgment are LLM skills.
 | [`docs/06-model-strategy.md`](docs/06-model-strategy.md) | Which Claude model to run at which stage, and why |
 | [`docs/02-architecture.md`](docs/02-architecture.md) | How the pieces fit |
 | [`docs/03-environment-constraints.md`](docs/03-environment-constraints.md) | Network, broker API and regulatory constraints |
+| [`docs/09-phase2-runbook.md`](docs/09-phase2-runbook.md) | The daily and weekly Phase 2 loop, and what to watch for |
 | [`docs/08-network-policy.md`](docs/08-network-policy.md) | **Start here to unblock Phase 2** — the one settings change that makes trading possible |
 | [`docs/07-deployment.md`](docs/07-deployment.md) | Running it autonomously: network, model routing, broker, kill switches |
 | [`docs/04-lessons.md`](docs/04-lessons.md) | Every rule, and the evidence behind it |
@@ -55,6 +60,8 @@ python3 -m tools.model_check                     # model routing policy
 python3 -m tools.paper_session --dry-run         # real data, real gate, no orders
 python3 -m tools.netcheck                        # is the network policy fixed yet?
 python3 -m tools.netcheck --domains              # the allowlist to paste in
+python3 -m tools.preflight_phase2                # is this session ready?
+python3 -m tools.trading_day open|close|week     # the Phase 2 daily spine
 ```
 
 No third-party dependencies — standard library only.
