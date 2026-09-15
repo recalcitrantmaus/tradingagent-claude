@@ -70,26 +70,34 @@ assumption — re-run anything you doubt.
    Opus-tier tasks rather than permitting them), but a binding control that
    cannot verify its own input is the weakest link in the routing policy.
 
-## How day 1 runs
+## How the first week runs
 
-**Attended, not automated.** The runbook requires a human to read every ticket
-the dry run would have sent before anything is submitted, so no Routine was
-created — a scheduled session firing at 08:30 with nobody reading the output
-would skip exactly the gate day 1 exists to provide.
+**Autonomous, with a human review between the two trading days.** recalcitrantmaus is in
+Seattle — the open is 06:30 local — so the days run unattended and the
+judgement happens after.
 
-Wednesday 2026-09-16, 09:30 ET:
+| When (ET) | Routine | What it does |
+|---|---|---|
+| Wed 09:45 | trading session | preflight, open, brief, news, plan, dry run, submit |
+| Wed 16:05 | session close | reconcile, verify stops, journal, report, push |
+| Thu | **attended review** | read Wednesday, fold in changes. Not a trading day. |
+| Fri 09:45 | trading session | as Wednesday, carrying Thursday's changes |
+| Fri 16:05 | session + week close | `trading_day week`, exit-criteria checklist, push |
 
-```bash
-python3 -m tools.preflight_phase2
-python3 -m tools.trading_day open
-# premarket-brief -> news-intel -> trade-plan
-python3 -m tools.paper_session --dry-run     # READ EVERY TICKET
-python3 -m tools.trading_day close
-```
+Four one-shot Routines, each spawning a fresh session, all with push and email
+notification. Two firings per trading day, not one: **a session that starts at
+09:45 is not alive at 16:00**, so `docs/07-deployment.md`'s single 08:30
+Routine that trades and closes in one session cannot work as written.
 
-Create the two Routines from `docs/07-deployment.md` only once day 1's sizing
-and stops look right. Automation is the reward for a clean rehearsal, not the
-starting point.
+09:45 rather than 08:30 is deliberate — it puts order submission inside
+regular hours on the well-trodden path, rather than testing Alpaca's
+premarket queue unattended on the first day that ever placed an order. It is
+also 15 minutes after the open, which matches this system's own stated view
+that the first 15 minutes are not to be trusted.
+
+Each session commits and pushes `state/` before it ends. That is not
+housekeeping — see the second lesson below. If a session does not push, the
+next one starts blind.
 
 ## What was decided, and why (the short version)
 
