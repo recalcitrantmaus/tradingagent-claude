@@ -104,6 +104,53 @@ class TestAlpacaGuards(unittest.TestCase):
         with self.assertRaises(AdapterError):
             a.submit(ticket(), confirm_live=False)
 
+    def test_bars_requests_a_window_and_returns_the_tail(self):
+        """A silently short or silently stale series misprices every stop.
+
+        Alpaca returns one bar when `start` is omitted, and truncates from the
+        start of the window rather than the end when `limit` is supplied. Both
+        read as a normal empty result upstream, so both are pinned here.
+        """
+        from adapters.alpaca import AlpacaAdapter
+        a = AlpacaAdapter(key_id="k", secret="s")
+        seen = {}
+
+        def fake_request(method, url, body=None):
+            seen["url"] = url
+            bars = [{"t": f"2026-0{1 + i // 28}-{1 + i % 28:02d}T04:00:00Z",
+                     "o": 1.0, "h": 2.0, "l": 0.5, "c": float(i), "v": 100}
+                    for i in range(90)]
+            return {"bars": bars, "next_page_token": None}
+
+        a._request = fake_request
+        out = a.bars("F", limit=60)
+
+        self.assertIn("start=", seen["url"], "no start: Alpaca returns one bar")
+        self.assertEqual(len(out), 60, "should return exactly the tail requested")
+        self.assertEqual(out[-1]["close"], 89.0, "tail must be the newest bars")
+        self.assertEqual(out[0]["close"], 30.0)
+
+    def test_bars_follows_pagination(self):
+        from adapters.alpaca import AlpacaAdapter
+        a = AlpacaAdapter(key_id="k", secret="s")
+        pages = [
+            {"bars": [{"t": "2026-09-01T04:00:00Z", "o": 1, "h": 2, "l": 1,
+                       "c": 10, "v": 1}], "next_page_token": "tok"},
+            {"bars": [{"t": "2026-09-02T04:00:00Z", "o": 1, "h": 2, "l": 1,
+                       "c": 20, "v": 1}], "next_page_token": None},
+        ]
+        calls = []
+
+        def fake_request(method, url, body=None):
+            calls.append(url)
+            return pages[len(calls) - 1]
+
+        a._request = fake_request
+        out = a.bars("F", limit=10)
+        self.assertEqual(len(out), 2)
+        self.assertEqual([r["close"] for r in out], [10, 20])
+        self.assertIn("page_token=tok", calls[1])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

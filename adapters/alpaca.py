@@ -97,12 +97,46 @@ class AlpacaAdapter:
         return self._request("GET", f"{self.base}/v2/orders?{q}")
 
     def bars(self, symbol: str, limit: int = 250, timeframe: str = "1Day") -> List[Dict]:
-        q = urllib.parse.urlencode({"timeframe": timeframe, "limit": limit,
-                                    "adjustment": "split", "feed": "iex"})
-        d = self._request("GET", f"{DATA}/v2/stocks/{symbol}/bars?{q}")
+        """The most recent `limit` bars, oldest first.
+
+        Two Alpaca behaviours make the naive request silently wrong, and both
+        are dangerous here because every stop and every size is computed from
+        this series:
+
+        1. `start` defaults to the beginning of the current day when omitted,
+           so a request carrying only `limit` returns a single bar. Any
+           lookback built on it (ATR, a 20-day breakout) then fails a length
+           check and the symbol is skipped — which reads as "no setup today"
+           rather than as broken data.
+        2. `limit` truncates from the *start* of the window, not the end, so
+           widening the window without taking the tail returns the oldest
+           bars and leaves the caller pricing a stop off month-old data.
+
+        So: ask for a window comfortably wider than the request, page to the
+        end of it, and return the tail.
+        """
+        per_bar_days = 1.6 if timeframe.endswith(("Day", "Week", "Month")) else 0.01
+        span = max(int(limit * per_bar_days) + 15, 5)
+        start = (dt.date.today() - dt.timedelta(days=span)).isoformat()
+
+        rows: List[Dict] = []
+        token = None
+        for _ in range(20):                      # bounded; never spin on a token
+            params = {"timeframe": timeframe, "limit": 10000,
+                      "adjustment": "split", "feed": "iex", "start": start}
+            if token:
+                params["page_token"] = token
+            d = self._request(
+                "GET",
+                f"{DATA}/v2/stocks/{symbol}/bars?{urllib.parse.urlencode(params)}")
+            rows.extend(d.get("bars", []))
+            token = d.get("next_page_token")
+            if not token:
+                break
+
         return [{"date": b["t"][:10], "open": b["o"], "high": b["h"],
                  "low": b["l"], "close": b["c"], "volume": b["v"]}
-                for b in d.get("bars", [])]
+                for b in rows[-limit:]]
 
     def positions_without_stops(self) -> List[str]:
         """Positions with no resting protective order. These are unmanaged

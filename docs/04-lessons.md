@@ -102,3 +102,35 @@ authorization BLOCK on anything below Opus tier.
 **Status:** active, unmeasured. Revisit once there is a paper-trading record
 on each configuration — if Sonnet's plans grade as well as Opus's over 30+
 trades, the routine-loop floor could come down further.
+
+### 2026-09-15 — A broken data path reports itself as a quiet market
+**Evidence:** `AlpacaAdapter.bars()` sent `limit` and `timeframe` but no
+`start`. Alpaca defaults `start` to the beginning of the current day, so every
+call returned exactly **one** bar regardless of the limit asked for.
+`propose_mechanical` requires 21 bars to compute an ATR and a 20-day high, so
+it skipped every symbol and printed "no proposals today. An empty plan is a
+valid outcome." That sentence is true in general and was false here — the
+pipeline had not looked at a single day of history. A first autonomous session
+would have run a full day, traded nothing, and reported a clean result.
+
+Widening the window exposed a second trap: `limit` truncates from the *start*
+of the range, not the end. A 60-bar request over a 120-day window returned
+2026-05-18 to 2026-08-12 — real data, correct length, and a month stale. Every
+stop and every size is computed from that series, so this would have priced
+stops off prices that no longer existed, and nothing downstream would have
+flagged it.
+
+**Change:** `bars()` now derives a window from the requested length, pages to
+the end of it, and returns the tail. Two tests pin both failure modes:
+`test_bars_requests_a_window_and_returns_the_tail` and
+`test_bars_follows_pagination`. Verified against the live paper endpoint — 60
+bars per symbol through 2026-09-15, with SPY's last close at 757.42 against
+Yahoo's 757.44, inside the 50bps cross-check tolerance.
+
+**Lesson for future rules:** "no setup today" and "no data today" must not
+produce the same output. An empty result is only trustworthy if something
+upstream has asserted the input was non-empty — a length check that skips
+silently converts a data outage into a market opinion. The existing rule
+"reachable is not usable" now has a sibling: **a response is not a series.**
+Prefer a loud failure over a plausible one.
+**Status:** active.
