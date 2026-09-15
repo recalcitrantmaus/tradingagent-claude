@@ -96,10 +96,28 @@ Both must pass before any change to `engine/` is committed.
 
 ## Environment
 
-This sandbox cannot reach any market-data or broker host — every candidate,
-including Alpaca and `agent.robinhood.com`, returns a 403 policy denial at
-the egress proxy. All simulation runs on synthetic data. `WebSearch` works,
-so research functions; priced data and order routing do not.
+**Network access was opened on 2026-09-15.** Alpaca, `agent.robinhood.com`,
+the primary sources (SEC, Fed, BLS, BEA, Treasury, FINRA), CoinGecko, Yahoo
+and the news outlets are all reachable. Confirm at the start of any session
+that touches live data:
+
+```
+python3 -m tools.netcheck
+```
+
+Two standing cautions about data:
+
+- **Reachable is not usable.** `stooq.com` answers HTTP 200 with a JavaScript
+  bot challenge instead of data. netcheck reports that as DEGRADED. Treat any
+  DEGRADED source as unavailable and say so in the brief.
+- **Never trade on a single unverified price.** Every stop and every size is
+  computed from it. `adapters.marketdata.cross_check()` compares the broker's
+  price against an independent one; if they disagree by more than 50bps,
+  **stand down on that symbol** — do not average the two or pick a winner.
+
+Data sources, in order of precedence: Alpaca (needs keys), then
+`adapters/marketdata.py` (Yahoo for equities, CoinGecko for crypto — keyless,
+undocumented, fine as a cross-check, never the sole basis for a trade).
 
 Robinhood supports agentic trading over MCP
 (`https://agent.robinhood.com/mcp/trading`, long equities, options and crypto,

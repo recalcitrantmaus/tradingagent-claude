@@ -13,6 +13,11 @@ A host is "reachable" if the proxy permits the CONNECT. A 401/403 FROM THE API
 (as opposed to the proxy) still counts as reachable — it means the network is
 open and only the credentials are missing, which is the next problem, not this
 one.
+
+Reachable is not the same as usable. Some hosts answer HTTP 200 with a
+JavaScript proof-of-work challenge instead of data; stooq.com does this now.
+Those are reported DEGRADED, because an allowlist entry that returns a
+challenge page is worse than a blocked one — it looks like it works.
 """
 import argparse
 import json
@@ -74,13 +79,27 @@ HOSTS: List[Tuple[str, str, str, str]] = [
 TIERS = {"required", "primary", "optional", "news"}
 
 
+# Signatures of a bot-challenge page served with a 200.
+CHALLENGE_MARKERS = (
+    "requires JavaScript to verify your browser",
+    "crypto.subtle.digest",
+    "Checking your browser",
+    "cf-browser-verification",
+)
+
+
 def probe(host: str, path: str, timeout: int = 12) -> Tuple[bool, str]:
-    """Distinguish 'the proxy refused' from 'the API answered'."""
+    """Distinguish 'the proxy refused' from 'the API answered' from
+    'the host answered with a bot challenge instead of data'."""
     url = f"https://{host}{path}"
     req = urllib.request.Request(url, method="GET",
                                  headers={"User-Agent": "tradingagent-netcheck/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = r.read(4096).decode("utf-8", "replace")
+            if any(m in body for m in CHALLENGE_MARKERS):
+                return False, ("DEGRADED — HTTP 200 but served a JavaScript bot "
+                               "challenge, not data. Reachable, not usable.")
             return True, f"HTTP {r.status}"
     except urllib.error.HTTPError as e:
         # The host answered. Auth and rate-limit errors mean the network is open.

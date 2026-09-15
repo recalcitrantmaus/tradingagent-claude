@@ -107,3 +107,30 @@ class TestAlpacaGuards(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestMarketDataGuards(unittest.TestCase):
+    """The cross-check must refuse to paper over a price disagreement."""
+
+    def test_agreeing_prices_pass(self):
+        from adapters import marketdata
+        original = marketdata.daily_bars
+        marketdata.daily_bars = lambda s, rng="5d": [
+            type("B", (), {"close": 100.0})()]
+        try:
+            r = marketdata.cross_check("X", 100.2)
+            self.assertTrue(r["agree"])
+        finally:
+            marketdata.daily_bars = original
+
+    def test_disagreeing_prices_say_stand_down(self):
+        from adapters import marketdata
+        original = marketdata.daily_bars
+        marketdata.daily_bars = lambda s, rng="5d": [
+            type("B", (), {"close": 100.0})()]
+        try:
+            r = marketdata.cross_check("X", 110.0)
+            self.assertFalse(r["agree"])
+            self.assertIn("do not trade", r["note"])
+        finally:
+            marketdata.daily_bars = original

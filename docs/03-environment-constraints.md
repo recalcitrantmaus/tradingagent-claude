@@ -3,9 +3,27 @@
 Findings from the build session, recorded because they change the deployment
 plan rather than merely inconveniencing it.
 
-## 1. This sandbox cannot reach any market data or broker host
+## 1. RESOLVED 2026-09-15 — network access is open
 
-Every candidate endpoint returns a **403 policy denial at the egress proxy**:
+The environment's network access was changed from **Trusted** to **Custom**
+with the allowlist in `docs/08-network-policy.md`. All required and primary
+hosts now answer; verified with `python3 -m tools.netcheck --all`. The change
+applied to the already-running session, so no restart was needed.
+
+Real data confirmed flowing: 501 daily bars each for SPY, F and SOFI through
+2026-09-15, with ATR/SMA/RSI/realized-vol computing off them, plus live BTC
+and ETH prices from CoinGecko.
+
+One genuine false positive found in the process: **`stooq.com` returns HTTP
+200 with a JavaScript proof-of-work bot challenge rather than data.** It is
+reachable and unusable. `tools/netcheck.py` now inspects response bodies and
+reports that case as DEGRADED, because an allowlist entry that looks like it
+works is worse than one that is plainly blocked.
+
+### The original finding, for the record
+
+Before the change, every candidate endpoint returned a **403 policy denial at
+the egress proxy**:
 
 | Host | Result |
 |---|---|

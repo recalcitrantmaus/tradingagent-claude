@@ -1,12 +1,14 @@
 # Fixing the network policy
 
-Everything the agent needs to trade is blocked in the current environment.
-This is one settings change at claude.ai, plus one command to verify it.
+**Status: done, 2026-09-15.** Environment **Default**
+(`env_016PcaV3rSbpLGpMNDS5GYLM`) moved from **Trusted** to **Custom** with the
+allowlist below. All required and primary hosts verified reachable, and real
+market data is flowing. The change took effect in the already-running session
+— no restart was needed, contrary to what this document originally said.
 
-Current state: environment **Default** (`env_016PcaV3rSbpLGpMNDS5GYLM`),
-network access **Trusted**. Trusted allows package registries, GitHub and
-cloud SDKs — not brokers, not market data, not news sites. Confirm any time
-with `python3 -m tools.netcheck`.
+Re-verify any time with `python3 -m tools.netcheck`. The rest of this page is
+the procedure, kept for when the list needs extending or a new environment
+needs the same treatment.
 
 ## Choose a level first
 
@@ -96,9 +98,15 @@ python3 -m tools.netcheck          # required + primary
 python3 -m tools.netcheck --all    # plus optional data and news
 ```
 
-It distinguishes *the proxy refused* from *the API answered*. An HTTP 401 or
-403 **from Alpaca** counts as a pass: it means the network is open and only
-the key is missing, which is the next problem, not this one.
+It distinguishes three states, not two:
+
+- **ok** — the host answered with data. An HTTP 401/403 **from Alpaca** counts:
+  the network is open and only the key is missing, which is the next problem.
+- **DEGRADED** — HTTP 200, but the body is a JavaScript bot challenge rather
+  than data. `stooq.com` does this. Reachable and useless; treat as
+  unavailable.
+- **FAIL** — the egress proxy refused the CONNECT. This is what an allowlist
+  gap looks like.
 
 ## Broker credentials — do not put live keys in environment variables
 
