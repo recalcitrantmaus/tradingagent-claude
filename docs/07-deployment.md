@@ -18,8 +18,8 @@ environment's network policy to the hosts below or by running elsewhere.
 | Robinhood agentic MCP | `agent.robinhood.com` |
 | News and research | already available via `WebSearch` |
 
-Verify with `curl -sS "$HTTPS_PROXY/__agentproxy/status"` — it names the
-hosts that were refused and why.
+**Step-by-step fix, with the exact allowlist: `docs/08-network-policy.md`.**
+Verify with `python3 -m tools.netcheck`.
 
 ## 2. Model routing
 

@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Verify the environment's network policy allows what the agent needs.
+
+Run this after changing the cloud environment's network access. It tests every
+host the agent depends on and tells you exactly which allowlist entries are
+still missing.
+
+    python3 -m tools.netcheck              # required hosts only
+    python3 -m tools.netcheck --all        # include optional data/news hosts
+    python3 -m tools.netcheck --domains    # print the allowlist to paste in
+
+A host is "reachable" if the proxy permits the CONNECT. A 401/403 FROM THE API
+(as opposed to the proxy) still counts as reachable — it means the network is
+open and only the credentials are missing, which is the next problem, not this
+one.
+"""
+import argparse
+import json
+import socket
+import ssl
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# (host, probe path, why it is needed, tier)
+HOSTS: List[Tuple[str, str, str, str]] = [
+    # ---- required: without these the agent cannot trade at all ----
+    ("paper-api.alpaca.markets", "/v2/clock",
+     "Alpaca paper trading — Phase 2 order routing", "required"),
+    ("data.alpaca.markets", "/v2/stocks/SPY/bars?timeframe=1Day&limit=1",
+     "Alpaca market data — prices, bars, the whole technical layer", "required"),
+    ("api.alpaca.markets", "/v2/clock",
+     "Alpaca live trading — Phase 3 only", "required"),
+    ("agent.robinhood.com", "/mcp/trading",
+     "Robinhood agentic MCP — Phase 3 order routing", "required"),
+
+    # ---- primary sources: what news-intel ranks above every outlet ----
+    ("www.sec.gov", "/cgi-bin/browse-edgar?action=getcompany",
+     "SEC EDGAR filings — primary source for company facts", "primary"),
+    ("www.federalreserve.gov", "/newsevents.htm",
+     "Fed statements and calendar", "primary"),
+    ("www.bls.gov", "/bls/newsrels.htm",
+     "CPI, jobs — primary release, not a summary of one", "primary"),
+    ("www.bea.gov", "/news/current-releases",
+     "GDP, PCE", "primary"),
+    ("home.treasury.gov", "/resource-center",
+     "Yield curve, auctions", "primary"),
+    ("www.finra.org", "/rules-guidance",
+     "Day-trading and margin rules — verify before Phase 3", "primary"),
+
+    # ---- optional: fallback data and crypto ----
+    ("api.coingecko.com", "/api/v3/ping",
+     "Crypto prices — free tier, no key", "optional"),
+    ("stooq.com", "/q/d/l/?s=spy.us&i=d",
+     "Free end-of-day history — a second opinion on Alpaca's bars", "optional"),
+    ("query1.finance.yahoo.com", "/v8/finance/chart/SPY?range=5d&interval=1d",
+     "Unofficial quote fallback", "optional"),
+    ("docs.robinhood.com", "/crypto/trading/",
+     "Robinhood crypto API reference", "optional"),
+
+    # ---- optional: news outlets for WebFetch (WebSearch already works) ----
+    ("www.reuters.com", "/markets/", "Wire coverage", "news"),
+    ("apnews.com", "/hub/financial-markets", "Wire coverage", "news"),
+    ("www.cnbc.com", "/markets/", "Market coverage", "news"),
+    ("www.marketwatch.com", "/markets", "Market coverage", "news"),
+    ("www.coindesk.com", "/markets", "Crypto-native coverage", "news"),
+    ("www.theblock.co", "/", "Crypto-native coverage", "news"),
+]
+
+TIERS = {"required", "primary", "optional", "news"}
+
+
+def probe(host: str, path: str, timeout: int = 12) -> Tuple[bool, str]:
+    """Distinguish 'the proxy refused' from 'the API answered'."""
+    url = f"https://{host}{path}"
+    req = urllib.request.Request(url, method="GET",
+                                 headers={"User-Agent": "tradingagent-netcheck/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return True, f"HTTP {r.status}"
+    except urllib.error.HTTPError as e:
+        # The host answered. Auth and rate-limit errors mean the network is open.
+        return True, f"HTTP {e.code} (host answered — network is open)"
+    except urllib.error.URLError as e:
+        reason = str(e.reason)
+        if "Tunnel connection failed" in reason or "403" in reason:
+            return False, "BLOCKED by egress proxy (403 on CONNECT)"
+        return False, f"unreachable: {reason[:70]}"
+    except (socket.timeout, ssl.SSLError, TimeoutError) as e:
+        return False, f"timeout/TLS: {str(e)[:70]}"
+
+
+def allowlist(tiers: List[str]) -> List[str]:
+    out = []
+    for host, _, _, tier in HOSTS:
+        if tier in tiers and host not in out:
+            out.append(host)
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true", help="test every tier")
+    ap.add_argument("--domains", action="store_true",
+                    help="print the allowlist to paste into Allowed domains")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+
+    tiers = list(TIERS) if a.all else ["required", "primary"]
+
+    if a.domains:
+        print("# Paste into the environment's Allowed domains "
+              "(Network access -> Custom).")
+        print("# Keep 'Also include default list of common package "
+              "managers' CHECKED, or pip and npm stop working.\n")
+        for h in allowlist(list(TIERS)):
+            print(h)
+        return 0
+
+    results: Dict[str, Dict] = {}
+    failed_required = 0
+    print(f"{'host':32} {'tier':9} {'status'}")
+    print("-" * 92)
+    for host, path, why, tier in HOSTS:
+        if tier not in tiers:
+            continue
+        ok, detail = probe(host, path)
+        results[host] = {"tier": tier, "ok": ok, "detail": detail, "why": why}
+        mark = "ok  " if ok else "FAIL"
+        print(f"{host:32} {tier:9} {mark} {detail}")
+        if not ok:
+            print(f"{'':32} {'':9}      needed for: {why}")
+            if tier in ("required", "primary"):
+                failed_required += 1
+
+    if a.json:
+        Path("sim/results/netcheck.json").write_text(json.dumps(results, indent=2))
+
+    print()
+    if failed_required:
+        print(f"{failed_required} required/primary host(s) blocked. "
+              "The agent cannot run Phase 2 until these open.")
+        print("Fix: claude.ai/code -> cloud icon above the message box -> hover "
+              "the environment -> settings gear\n     -> Network access: Custom "
+              "-> paste `python3 -m tools.netcheck --domains` output into "
+              "Allowed domains\n     -> keep 'Also include default list of "
+              "common package managers' CHECKED -> Save changes.")
+        print("Then start a NEW session — running sessions keep the old policy.")
+        return 1
+    print("All required hosts reachable. Network policy is good to go.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

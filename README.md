@@ -16,6 +16,7 @@ parts which need judgment are LLM skills.
 | [`docs/06-model-strategy.md`](docs/06-model-strategy.md) | Which Claude model to run at which stage, and why |
 | [`docs/02-architecture.md`](docs/02-architecture.md) | How the pieces fit |
 | [`docs/03-environment-constraints.md`](docs/03-environment-constraints.md) | Network, broker API and regulatory constraints |
+| [`docs/08-network-policy.md`](docs/08-network-policy.md) | **Start here to unblock Phase 2** — the one settings change that makes trading possible |
 | [`docs/07-deployment.md`](docs/07-deployment.md) | Running it autonomously: network, model routing, broker, kill switches |
 | [`docs/04-lessons.md`](docs/04-lessons.md) | Every rule, and the evidence behind it |
 | [`CLAUDE.md`](CLAUDE.md) | The agent's own operating instructions |
@@ -52,6 +53,8 @@ python3 -m sim.capital_sweep                     # does more capital help?
 python3 -m tools.review --week                   # expectancy, win rate, costs
 python3 -m tools.model_check                     # model routing policy
 python3 -m tools.paper_session --dry-run         # real data, real gate, no orders
+python3 -m tools.netcheck                        # is the network policy fixed yet?
+python3 -m tools.netcheck --domains              # the allowlist to paste in
 ```
 
 No third-party dependencies — standard library only.
