@@ -1,11 +1,20 @@
 __pycache__/
 *.pyc
-state/ledger.json
-state/fills.jsonl
-state/briefs/*.md
-state/plans/*
-state/news/*
-state/reports/*
+
+# Secrets. Never relax these.
 .env
 *.key
 credentials*
+
+# NOT ignored, deliberately: state/ledger.json, state/fills.jsonl and the
+# briefs, plans, news and reports under state/.
+#
+# Every Routine firing gets a fresh container and a fresh clone, and
+# tools/state.load() silently recreates an EMPTY ledger when the file is
+# absent. Ignoring these meant risk_state reset to NORMAL overnight (a halt
+# un-tripping itself), peak_equity and week_start_equity resetting to 300 (so
+# the -20% lock and -8% week stop could not fire), and fills.jsonl starting
+# empty every day (so measured expectancy — the Phase 2 exit criterion — was
+# permanently 0 closed trades).
+#
+# The repository is the thread. That only holds if the thread is committed.

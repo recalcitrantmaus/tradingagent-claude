@@ -181,3 +181,49 @@ class TestMarketDataGuards(unittest.TestCase):
             self.assertIn("do not trade", r["note"])
         finally:
             marketdata.daily_bars = original
+
+
+class TestLedgerContinuity(unittest.TestCase):
+    """A reborn ledger un-trips the circuit breakers, so it must be visible.
+
+    Every Routine firing gets a fresh clone. If the ledger is not committed it
+    comes back as EMPTY — risk_state NORMAL, peak_equity at the deposit, no
+    halts — which silently clears a halt and resets the peak the drawdown lock
+    measures against.
+    """
+
+    def _isolate(self):
+        import tempfile
+        from tools import state
+        d = Path(tempfile.mkdtemp())
+        saved = (state.STATE, state.LEDGER, state.FILLS)
+        state.STATE, state.LEDGER, state.FILLS = d, d / "ledger.json", d / "fills.jsonl"
+        return state, saved
+
+    def test_missing_ledger_is_flagged_reborn(self):
+        state, saved = self._isolate()
+        try:
+            self.assertTrue(state.load().get("reborn"),
+                            "a ledger built from EMPTY must announce itself")
+        finally:
+            state.STATE, state.LEDGER, state.FILLS = saved
+
+    def test_existing_ledger_is_not_flagged(self):
+        state, saved = self._isolate()
+        try:
+            state.save({"risk_state": "HALTED_DAY", "peak_equity": 412.0})
+            d = state.load()
+            self.assertNotIn("reborn", d)
+            self.assertEqual(d["risk_state"], "HALTED_DAY")
+            self.assertEqual(d["peak_equity"], 412.0)
+        finally:
+            state.STATE, state.LEDGER, state.FILLS = saved
+
+    def test_state_files_are_tracked_by_git(self):
+        """The fix for the reborn ledger is that state/ is committed."""
+        ignore = (Path(__file__).resolve().parents[1] / ".gitignore").read_text()
+        for pattern in ("state/ledger.json", "state/fills.jsonl",
+                        "state/reports/*", "state/plans/*"):
+            self.assertNotIn(f"\n{pattern}", f"\n{ignore}",
+                             f"{pattern} must stay tracked or state cannot "
+                             f"survive a fresh container")

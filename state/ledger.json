@@ -1,0 +1,31 @@
+{
+  "cash": 300.0,
+  "day_start_equity": 300.0,
+  "day_trades": [],
+  "days": [
+    {
+      "date": "2026-09-15",
+      "day_pnl": 0.0,
+      "equity": 300.0,
+      "escalations": [],
+      "risk_state": "NORMAL"
+    }
+  ],
+  "equity_curve": [
+    [
+      "2026-09-15",
+      300.0
+    ]
+  ],
+  "halts": [],
+  "human_authorization": null,
+  "last_reconciled": "2026-09-15",
+  "mode": "paper",
+  "peak_equity": 300.0,
+  "phase": "phase2",
+  "positions": {},
+  "realized_pnl": 0.0,
+  "risk_state": "NORMAL",
+  "starting_equity": 300.0,
+  "week_start_equity": 300.0
+}

@@ -134,3 +134,34 @@ silently converts a data outage into a market opinion. The existing rule
 "reachable is not usable" now has a sibling: **a response is not a series.**
 Prefer a loud failure over a plausible one.
 **Status:** active.
+
+### 2026-09-15 — The circuit breakers reset overnight in the configuration we were about to run
+**Evidence:** `.gitignore` excluded `state/ledger.json`, `state/fills.jsonl`
+and the briefs, plans, news and reports under `state/`. Every Routine firing
+gets a fresh container and a fresh clone, and `tools.state.load()` recreates
+`EMPTY` when the ledger is absent — `risk_state: NORMAL`, `peak_equity: 300`,
+`halts: []`, `week_start_equity: 300`, no fills. Consequences, all silent:
+
+- a `HALTED_DAY` or `HALTED_WEEK` set on one day **cleared itself** by the next
+- the -20% drawdown lock measures against `peak_equity`, so a run to $400 and
+  a fall to $320 would have read as 0% drawdown and never locked
+- the -8% week stop measured from $300 rather than the week's real start
+- `fills.jsonl` began empty daily, so measured expectancy was permanently
+  "0 closed trades" — the Phase 2 exit criterion, unmeasurable by construction
+
+None of this was reachable while a human drove one long session, which is why
+it survived the build phase. It became live the moment the plan changed to
+unattended daily firings.
+
+**Change:** `state/` is tracked. `.gitignore` now carries only secrets, with a
+comment saying why the state lines must not come back. `state.load()`
+announces a rebirth on stderr and tags the ledger `reborn: True` rather than
+returning benign defaults in silence. Three tests pin it, including one that
+reads `.gitignore` and fails if the state patterns reappear.
+
+**Lesson for future rules:** durable state is part of the safety system, not
+housekeeping around it. A circuit breaker that lives in an ignored file is not
+a circuit breaker. And test the configuration you are about to *run*, not the
+one you have been running — this whole class of failure appeared only in the
+unattended shape.
+**Status:** active.

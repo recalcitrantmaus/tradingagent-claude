@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any
 import datetime as dt
 import json
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / "state"
@@ -32,9 +33,26 @@ EMPTY: Dict[str, Any] = {
 
 
 def load() -> Dict[str, Any]:
+    """The ledger, or a fresh one — loudly.
+
+    A missing ledger is indistinguishable from a brand-new account, and the
+    EMPTY defaults are deliberately benign: risk_state NORMAL, peak_equity at
+    the starting deposit, no halts, no fills. That is correct on day one and
+    dangerous on any day after it, because a session that starts from a
+    reborn ledger has silently discarded a halt, reset the peak the drawdown
+    lock measures against, and forgotten every closed trade. Fresh containers
+    make this the default failure, not an exotic one, so it is announced.
+    """
     if not LEDGER.exists():
+        print("!! no state/ledger.json — starting from EMPTY defaults. "
+              "risk_state=NORMAL, peak_equity=300, no fills. If this account "
+              "has traded before, STOP: the ledger did not survive the "
+              "session and any halt or drawdown history is gone.",
+              file=sys.stderr)
         save(EMPTY)
-        return json.loads(json.dumps(EMPTY))
+        d = json.loads(json.dumps(EMPTY))
+        d["reborn"] = True
+        return d
     return json.loads(LEDGER.read_text())
 
 
