@@ -72,44 +72,38 @@ assumption — re-run anything you doubt.
 
 ## How the first week runs
 
-**Autonomous, with a human review between the two trading days.** recalcitrantmaus is in
-Seattle — the open is 06:30 local — so the days run unattended and the
-judgement happens after.
+**Wednesday 2026-09-16 was lost to a scheduling defect and then salvaged as a
+dry-run rehearsal.** The 09:45 firing came up in an empty container: a Routine
+created through `create_trigger` carries no git source. Nothing was traded and
+the broker stayed flat. Read `docs/10-runtime-requirements.md` before touching
+the schedule, and `state/rehearsals/2026-09-16.md` for what the rehearsal
+found — three controls that were not controls, now fixed.
 
-| When (ET) | Routine | What it does |
-|---|---|---|
-| Wed 09:45 | trading session | preflight, open, brief, news, plan, dry run, submit |
-| Wed 12:30 | midday management | trail, scale out, exit broken theses. **No new entries.** |
-| Wed 15:30 | pre-close management | final pass + explicit carry-or-flatten per position |
-| Wed 16:05 | session close | reconcile, verify stops, journal, report, push |
-| Thu | **attended review** | Opus tier. Read Wednesday, promote rules. Not a trading day. |
-| Fri 09:45 | trading session | as Wednesday, carrying Thursday's changes |
-| Fri 12:30 | midday management | as Wednesday |
-| Fri 15:30 | pre-close management | **weekend** carry decision — two dark days plus a Monday open |
-| Fri 16:05 | session + week close | `trading_day week`, exit-criteria checklist, push |
+Friday's four firings are bound to a **persistent runner session that has the
+repository attached** (`create_session(source_url=…, outcome_branch=…)`, then
+triggers with `persistent_session_id`). Verified end to end: trigger delivery
+succeeds, and the source and state survive a container re-provision.
 
-Four firings per trading day, not one. Two reasons, both discovered rather
-than designed:
+| When (ET) | What it does |
+|---|---|
+| Fri 09:45 | preflight, open, brief, news, plan, dry run, **submit** |
+| Fri 12:30 | manage — trail, scale out, exit broken theses. No new entries. |
+| Fri 15:30 | manage + explicit **weekend** carry decision per position |
+| Fri 16:05 | close, journal, `trading_day week`, exit-criteria checklist |
 
-1. **A session that starts at 09:45 is not alive at 16:00**, so
-   `docs/07-deployment.md`'s single 08:30 Routine that trades and closes in one
-   session cannot work as written.
-2. **Trailing and scale-outs exist only in `engine/sim.py`.** There is no live
-   code path for them — `.claude/skills/execution/SKILL.md` describes them as
-   agent actions, so they happen only while a session is running. Between
-   firings the broker holds the bracket (entry, stop, target) and nothing else
-   moves. Without the midday and pre-close firings, the live strategy would be
-   enter-and-leave-it while the simulated returns assume a 50% scale-out at the
-   first target and a 1.5 ATR trail after +1R. **The sim measures a strategy
-   the live path did not implement.**
+Two known limits of this shape, both deliberate trade-offs:
 
-09:45 rather than 08:30 is deliberate: it puts order submission inside regular
-hours rather than testing Alpaca's premarket queue unattended on the first day
-that ever placed an order, and it is 15 minutes after the open, matching this
-system's own view that the first 15 minutes are not to be trusted.
+- **No push or email notifications.** The server rejects `notifications` on a
+  `persistent_session_id` Routine; only fresh-session-per-fire Routines take
+  them. Check the runner session, or rebuild the Routines in the claude.ai
+  Routines UI, which gives fresh sessions *and* notifications *and* the
+  connectors Phase 3 needs.
+- **Context accumulates** across the four firings, since they share one
+  session. Acceptable for a day; create a new runner per trading day rather
+  than letting one span a week.
 
-Each session commits and pushes `state/` before it ends. If a session does not
-push, the next one starts blind.
+The UI remains the better long-term home. This shape is what can be built
+from inside a session, and it works.
 
 ## Model routing in practice
 
