@@ -79,25 +79,68 @@ judgement happens after.
 | When (ET) | Routine | What it does |
 |---|---|---|
 | Wed 09:45 | trading session | preflight, open, brief, news, plan, dry run, submit |
+| Wed 12:30 | midday management | trail, scale out, exit broken theses. **No new entries.** |
+| Wed 15:30 | pre-close management | final pass + explicit carry-or-flatten per position |
 | Wed 16:05 | session close | reconcile, verify stops, journal, report, push |
-| Thu | **attended review** | read Wednesday, fold in changes. Not a trading day. |
+| Thu | **attended review** | Opus tier. Read Wednesday, promote rules. Not a trading day. |
 | Fri 09:45 | trading session | as Wednesday, carrying Thursday's changes |
+| Fri 12:30 | midday management | as Wednesday |
+| Fri 15:30 | pre-close management | **weekend** carry decision — two dark days plus a Monday open |
 | Fri 16:05 | session + week close | `trading_day week`, exit-criteria checklist, push |
 
-Four one-shot Routines, each spawning a fresh session, all with push and email
-notification. Two firings per trading day, not one: **a session that starts at
-09:45 is not alive at 16:00**, so `docs/07-deployment.md`'s single 08:30
-Routine that trades and closes in one session cannot work as written.
+Four firings per trading day, not one. Two reasons, both discovered rather
+than designed:
 
-09:45 rather than 08:30 is deliberate — it puts order submission inside
-regular hours on the well-trodden path, rather than testing Alpaca's
-premarket queue unattended on the first day that ever placed an order. It is
-also 15 minutes after the open, which matches this system's own stated view
-that the first 15 minutes are not to be trusted.
+1. **A session that starts at 09:45 is not alive at 16:00**, so
+   `docs/07-deployment.md`'s single 08:30 Routine that trades and closes in one
+   session cannot work as written.
+2. **Trailing and scale-outs exist only in `engine/sim.py`.** There is no live
+   code path for them — `.claude/skills/execution/SKILL.md` describes them as
+   agent actions, so they happen only while a session is running. Between
+   firings the broker holds the bracket (entry, stop, target) and nothing else
+   moves. Without the midday and pre-close firings, the live strategy would be
+   enter-and-leave-it while the simulated returns assume a 50% scale-out at the
+   first target and a 1.5 ATR trail after +1R. **The sim measures a strategy
+   the live path did not implement.**
 
-Each session commits and pushes `state/` before it ends. That is not
-housekeeping — see the second lesson below. If a session does not push, the
-next one starts blind.
+09:45 rather than 08:30 is deliberate: it puts order submission inside regular
+hours rather than testing Alpaca's premarket queue unattended on the first day
+that ever placed an order, and it is 15 minutes after the open, matching this
+system's own view that the first 15 minutes are not to be trusted.
+
+Each session commits and pushes `state/` before it ends. If a session does not
+push, the next one starts blind.
+
+## Model routing in practice
+
+`model_check` reads `TRADING_AGENT_MODEL` and cannot verify it. One
+environment means one value, so it cannot be simultaneously truthful for a
+Sonnet trading day and an Opus review day. Resolved as follows:
+
+- **The variable stays `claude-sonnet-5`**, truthful for the unattended
+  trading days. That is where the gate matters most, because nobody is
+  watching, and an over-claiming gate would green-light rule promotion on a
+  session not cleared for it.
+- **Thursday is attended and runs Opus.** A human confirms the real model, then
+  passes it explicitly: `python3 -m tools.model_check weekly-review --model
+  claude-opus-5 --effort xhigh`. The `--model` flag is a documented feature of
+  the tool, and an override supplied by a present human who has verified the
+  value is honest. **Never use it to assert a model you have not confirmed**,
+  and never in an unattended session.
+
+Measured floors, for reference — the trading tasks are non-blocking, so a
+downgrade warns and continues rather than stopping:
+
+| Config | Trading tasks | weekly-review |
+|---|---|---|
+| Opus @ high | warns: effort below the xhigh floor | blocked |
+| Opus @ xhigh | clean | clean |
+| Sonnet @ xhigh | clean | blocked, correctly |
+| Sonnet @ max | clean | blocked, correctly |
+
+Opus at a reduced effort level is the worst of the four: it trips the effort
+floor on the trading tasks it is meant to serve, and costs more than Sonnet to
+do it.
 
 ## What was decided, and why (the short version)
 

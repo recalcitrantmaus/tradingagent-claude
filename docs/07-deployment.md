@@ -138,3 +138,20 @@ Do not proceed to live trading on the strength of a good week. Require:
 - [ ] **The same model configuration you intend to run live**
 
 Note what is *not* on that list: hitting 5% in any week.
+
+## 6. Routines and MCP connectors — a Phase 3 prerequisite
+
+A Routine created from inside a session carries only the MCP connectors that
+session itself holds, and a Routine with none fires sessions with no
+`mcp__<server>__*` tools at all.
+
+This is harmless in Phase 2. Alpaca is reached over plain HTTPS through
+`urllib` in `adapters/alpaca.py`, so the trading Routines need no connector.
+
+**It is disqualifying in Phase 3.** Robinhood agentic trading *is* an MCP
+server, so a Routine with no stored connector fires a session that cannot
+place a Robinhood order at all — and connecting Robinhood later does not
+retroactively fix Routines already created. Before Phase 3, create the trading
+Routines from the claude.ai Routines UI, or from a session that already holds
+the Robinhood connector, and verify the tool surface in a fired session before
+trusting it with an order.
