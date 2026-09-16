@@ -72,38 +72,50 @@ assumption — re-run anything you doubt.
 
 ## How the first week runs
 
-**Wednesday 2026-09-16 was lost to a scheduling defect and then salvaged as a
-dry-run rehearsal.** The 09:45 firing came up in an empty container: a Routine
-created through `create_trigger` carries no git source. Nothing was traded and
-the broker stayed flat. Read `docs/10-runtime-requirements.md` before touching
-the schedule, and `state/rehearsals/2026-09-16.md` for what the rehearsal
-found — three controls that were not controls, now fixed.
+**Wednesday 2026-09-16 traded nothing.** The 09:45 firing came up in an empty
+container — a Routine created through `create_trigger` carries no git source —
+and the salvaged session was dry-run only. Read
+`docs/10-runtime-requirements.md` before touching the schedule, and
+`state/rehearsals/2026-09-16.md` for what that rehearsal found: three controls
+that were not controls, now fixed and tested.
 
-Friday's four firings are bound to a **persistent runner session that has the
-repository attached** (`create_session(source_url=…, outcome_branch=…)`, then
-triggers with `persistent_session_id`). Verified end to end: trigger delivery
-succeeds, and the source and state survive a container re-provision.
+**Thursday 2026-09-17 is the first session that will ever submit a live order.**
+The originally-planned Thursday review was scrapped in favour of trading it.
+Friday is armed with the same shape; a human reviews between them.
 
-| When (ET) | What it does |
-|---|---|
-| Fri 09:45 | preflight, open, brief, news, plan, dry run, **submit** |
-| Fri 12:30 | manage — trail, scale out, exit broken theses. No new entries. |
-| Fri 15:30 | manage + explicit **weekend** carry decision per position |
-| Fri 16:05 | close, journal, `trading_day week`, exit-criteria checklist |
+| When (ET) | Thu 09-17 | Fri 09-18 |
+|---|---|---|
+| 09:45 | preflight, open, brief, news, plan, dry run, **submit** | same |
+| 12:30 | manage — trail, scale out, exit broken theses. No new entries. | same |
+| 15:30 | manage + explicit carry-or-flatten per position | + **weekend** carry decision |
+| 16:05 | close, journal, plain-language summary for a human | + `trading_day week` |
 
-Two known limits of this shape, both deliberate trade-offs:
+Each day has its **own** runner session with the repository attached
+(`create_session(source_url=…, outcome_branch=…)`, then triggers bound with
+`persistent_session_id`). One runner per trading day, never one spanning a
+week — context accumulates within a session, and each day's judgement should
+come from the committed record rather than from yesterday's conversation.
+
+Verified end to end on 2026-09-16: trigger delivery into a repo-attached
+session succeeds, and the source and state survive a container re-provision.
+
+### Where the outcomes are
+
+Every session commits and pushes before it ends, so **the repository is the
+record** — `state/briefs/`, `state/news/`, `state/plans/`, `state/reports/`,
+`state/rehearsals/`, `state/ledger.json`, `state/fills.jsonl`. The close
+session also writes `state/reports/<date>-summary.md` in plain language for
+someone who has not been watching.
+
+Two limits of this shape, both deliberate:
 
 - **No push or email notifications.** The server rejects `notifications` on a
-  `persistent_session_id` Routine; only fresh-session-per-fire Routines take
-  them. Check the runner session, or rebuild the Routines in the claude.ai
-  Routines UI, which gives fresh sessions *and* notifications *and* the
-  connectors Phase 3 needs.
-- **Context accumulates** across the four firings, since they share one
-  session. Acceptable for a day; create a new runner per trading day rather
-  than letting one span a week.
-
-The UI remains the better long-term home. This shape is what can be built
-from inside a session, and it works.
+  `persistent_session_id` Routine; only fresh-session-per-fire Routines accept
+  them, and those cannot carry a repo. Rebuilding the Routines in the claude.ai
+  Routines UI gets fresh sessions, notifications, *and* the connectors Phase 3
+  needs — it remains the better long-term home.
+- **A failed session is silent.** Nothing pushed means nothing ran. Check the
+  broker directly before assuming a quiet day was an uneventful one.
 
 ## Model routing in practice
 
