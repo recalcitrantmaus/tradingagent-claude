@@ -24,6 +24,41 @@ def check(name: str, fix: str = ""):
     return deco
 
 
+@check("repository",
+       "The session was started without a git source. A scheduled Routine "
+       "created through the MCP tool does NOT carry one — it inherits the "
+       "environment, not the repo. Create the Routine from the claude.ai "
+       "Routines UI with the repository attached, or bind it to a persistent "
+       "session created with source_url. An unattended session cannot clone "
+       "its way out: the repo is private and `git clone` needs a permission "
+       "approval no one is there to give.")
+def _repository():
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=ROOT,
+                              capture_output=True, text=True)
+
+    if git("rev-parse", "--is-inside-work-tree").returncode != 0:
+        return False, f"{ROOT} is not a git work tree — no repo, no risk engine"
+
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if branch == "HEAD":
+        return False, "detached HEAD; a session cannot push its state from here"
+
+    remotes = git("remote").stdout.split()
+    if "origin" not in remotes:
+        return False, "no 'origin' remote; state could be written but never pushed"
+
+    # Auth against the private repo is what actually has to work — a readable
+    # working copy proves nothing about whether this session can persist to it.
+    f = git("fetch", "origin", branch)
+    if f.returncode != 0:
+        return False, f"git fetch failed: {f.stderr.strip()[:110]}"
+
+    behind = git("rev-list", "--count", f"HEAD..origin/{branch}").stdout.strip()
+    note = f" ({behind} commit(s) behind origin — pull first)" if behind not in ("", "0") else ""
+    return True, f"on {branch}, origin reachable{note}"
+
+
 @check("network policy",
        "See docs/08-network-policy.md. Network changes apply to a RUNNING "
        "session, so no restart is needed for this one.")

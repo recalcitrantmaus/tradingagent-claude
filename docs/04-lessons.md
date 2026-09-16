@@ -165,3 +165,39 @@ a circuit breaker. And test the configuration you are about to *run*, not the
 one you have been running — this whole class of failure appeared only in the
 unattended shape.
 **Status:** active.
+
+### 2026-09-16 — The scheduled session had no repository, and could not get one
+**Evidence:** the first autonomous firing failed immediately. The Routine's
+stored config reads `"sources":[], "outcomes":[]` — `create_trigger` carries no
+git source, because a fresh-session-on-fire inherits the *environment*, not the
+repository. The container came up empty and nothing ran.
+
+It could not recover on its own, for two independent reasons, both verified
+rather than assumed: the repo is private, and a source-less test session
+attempting `git clone` was refused by the permission classifier — there is no
+human present to approve it. That refusal is correct. An unattended session
+talking itself into cloning a private repo is not a capability worth having.
+
+A second defect was hiding behind the first: every prompt hardcoded
+`/home/user/tradingagent-claude`, which is this interactive session's path. A
+session created with `source_url` lands at `/root/<branch-name>`. The prompts
+would have failed even with the repo present.
+
+**Change:** `preflight_phase2` gained a `repository` check, first in the list —
+work tree, branch, origin remote, and a real `git fetch` against the private
+repo, because a readable working copy proves nothing about whether the session
+can persist anything. `docs/10-runtime-requirements.md` records the full
+surface and the two configurations that actually work.
+
+**Lesson for future rules:** the first firing is the test, and nothing before
+it counts. Everything upstream had been verified — keys, network, risk gates,
+data, state durability — and the thing that broke was the one part that only
+exists at fire time. **Verify the artifact you are scheduling, not the
+environment you are scheduling it from.** The session I checked it in was never
+the session that would run it.
+
+The session failed safe, and that is worth recording too: it found no repo and
+stopped, rather than reaching for the broker API directly. The broker showed
+$300.00, no positions, no orders. That behaviour is now an explicit rule rather
+than a lucky default.
+**Status:** active.
