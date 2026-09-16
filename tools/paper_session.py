@@ -18,13 +18,16 @@ import datetime as dt
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adapters.alpaca import AlpacaAdapter, DryRunAlpaca
 from adapters.base import AdapterError, OrderTicket
+from dataclasses import replace
+
 from engine.config import DEFAULT
+from engine.posture import limits_for, for_date as posture_for
 from engine.market import Bar, atr
 from engine.portfolio import Portfolio
 from engine.risk import RiskOfficer, OrderProposal, State
@@ -33,6 +36,7 @@ from tools.review import closed_trades
 
 DEFAULT_SYMBOLS = ["F", "SOFI", "PLTR", "NIO", "RIOT", "HOOD"]
 PLAN_DIR = Path(__file__).resolve().parents[1] / "state" / "plans"
+BRIEF_DIR = Path(__file__).resolve().parents[1] / "state" / "briefs"
 
 
 def _bars(rows: List[Dict]) -> List[Bar]:
@@ -40,11 +44,18 @@ def _bars(rows: List[Dict]) -> List[Bar]:
                 r["low"], r["close"], r["volume"]) for r in rows]
 
 
-def propose_from_plan(today: dt.date) -> List[OrderProposal]:
-    """Today's plan from the trade-plan skill, if it wrote one."""
+def propose_from_plan(today: dt.date) -> Optional[List[OrderProposal]]:
+    """Today's plan from the trade-plan skill.
+
+    Returns None when no plan file exists, and a list when one does — which
+    may be empty. The distinction is the whole point: an empty plan is a
+    deliberate decision to trade nothing, and it must not be confused with
+    having no opinion. Returning [] for both let `x or mechanical()` discard a
+    written refusal and substitute the breakout scanner's view instead.
+    """
     p = PLAN_DIR / f"{today.isoformat()}.json"
     if not p.exists():
-        return []
+        return None
     out = []
     for row in json.loads(p.read_text()):
         out.append(OrderProposal(**row))
@@ -140,14 +151,37 @@ def main() -> int:
             print(f"   {j}")
         return 1
 
-    # ---- 3. proposals: today's plan first, mechanical baseline otherwise ----
+    # ---- 3. posture gate: the brief is binding, and it is checked here ----
+    posture, note = posture_for(BRIEF_DIR, today)
+    limits = limits_for(posture)
+    print(f"posture        : {note}")
+    if not limits.allows_new_risk:
+        print(f"!! {limits.reason} — no entries. Exits remain permitted.")
+        return 0
+    if limits.max_risk_per_trade_pct is not None:
+        ro.cfg = replace(
+            ro.cfg,
+            max_risk_per_trade_pct=limits.max_risk_per_trade_pct,
+            max_concurrent_positions=(limits.max_concurrent_positions
+                                      or ro.cfg.max_concurrent_positions))
+        print(f"   {limits.reason}")
+
+    # ---- 4. proposals: a written plan wins, even when it is empty ----
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
-    proposals = propose_from_plan(today) or propose_mechanical(adapter, symbols)
+    planned = propose_from_plan(today)
+    if planned is None:
+        proposals = propose_mechanical(adapter, symbols)
+    else:
+        proposals = planned          # [] means trade nothing, deliberately
+        if not proposals:
+            print("\nplan for today is empty — a deliberate NO-TRADE. "
+                  "The mechanical scanner is NOT consulted.")
+            return 0
     if not proposals:
         print("\nno proposals today. An empty plan is a valid outcome.")
         return 0
 
-    # ---- 4. gate, then route ----
+    # ---- 5. gate, then route ----
     print(f"\n{len(proposals)} proposal(s):")
     sent = 0
     for p in proposals:

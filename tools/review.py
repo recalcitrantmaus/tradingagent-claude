@@ -15,7 +15,17 @@ from tools import state
 
 
 def closed_trades(fills):
-    """Pair entries with exits per symbol; return realized trades with R."""
+    """Pair entries with exits per symbol; return realized trades with R.
+
+    Dry-run fills are dropped before anything is paired. `paper_session`
+    appends a record for every approved proposal including under --dry-run,
+    tagged dry_run, and two things go wrong if they are counted: previewed
+    tickets accrue toward the 30 closed trades and the measured expectancy
+    that unlock the option sleeve, and a phantom dry-run *entry* sits at the
+    head of the FIFO queue where it will pair against the next real sell of
+    that symbol and corrupt that real trade's entry price and R.
+    """
+    fills = [f for f in fills if not f.get("dry_run")]
     open_lots, trades = {}, []
     for f in fills:
         sym = f["symbol"]

@@ -201,3 +201,55 @@ stopped, rather than reaching for the broker API directly. The broker showed
 $300.00, no positions, no orders. That behaviour is now an explicit rule rather
 than a lucky default.
 **Status:** active.
+
+### 2026-09-16 — The day-1 rehearsal found three controls that were not controls
+**Evidence:** the dry-run rehearsal (`state/rehearsals/2026-09-16.md`) produced
+an empty plan and zero tickets, and then found three defects that an empty day
+happened to hide. All three verified independently before being fixed.
+
+1. **An empty plan handed control to the mechanical scanner.**
+   `tools/paper_session.py:145` read
+   `propose_from_plan(today) or propose_mechanical(...)`. An empty plan is
+   `[]`, which is falsy, so `or` discarded it and ran the 20-day-breakout
+   scanner instead. **A deliberate refusal to trade was indistinguishable, to
+   that code, from having no opinion.** On any day the agent writes `[]`
+   because of an FOMC, a halt, or an unreadable regime, the runner would have
+   substituted breakout proposals and could have submitted them. It was
+   harmless on 2026-09-16 only because the scanner also found nothing.
+2. **`NO_TRADE` posture had no enforcement anywhere.** `posture`, `NO_TRADE`
+   and `RISK_OFF` appeared exactly once across all `.py` files — inside a
+   comment string. The brief's posture, which `premarket-brief` calls binding,
+   was enforced only by the model's own compliance. That is the wrong side of
+   the one rule that outranks everything.
+3. **Dry-run fills polluted the measured track record.** `paper_session`
+   appends a fill for every approved proposal including under `--dry-run`,
+   tagged `dry_run`, and `review.closed_trades()` had no filter. Previewed
+   tickets would accrue toward the 30 closed trades and the expectancy that
+   unlock the option sleeve — options unlockable on trades that never
+   happened — and worse, a phantom dry-run *entry* sits at the head of the
+   FIFO queue where it pairs against the next **real** sell and corrupts that
+   real trade's entry price and R.
+
+**Change:** `engine/posture.py` makes posture deterministic, parsed from the
+brief's `## Posture` section rather than by scanning the document (a brief
+discusses posture in prose, and a keyword search reads those as the decision).
+Everything fails closed: no brief, unreadable brief, or unparseable posture all
+resolve to `NO_TRADE`, and ambiguity inside the section resolves to the most
+conservative token present. `paper_session` now gates on it before proposals
+are even gathered, and `RISK_OFF` tightens the config to 1% per trade and one
+position. `propose_from_plan` returns `None` for an absent plan and a list for
+a present one, so an empty plan is binding and the scanner is not consulted.
+`closed_trades` drops dry-run fills before pairing. 13 new tests, 67 total.
+
+**Lesson for future rules:** "the gate passed" and "nothing reached the gate"
+look identical in a log and mean opposite things. Two of these three defects
+were invisible on a day with no trades, and the rehearsal only caught them
+because it went looking for what it had *failed* to test rather than reporting
+a clean run. A day-1 gate that submits nothing exercises nothing — say so, and
+then go test the untested path deliberately.
+
+The second lesson is about where a rule lives. Posture was written down, agreed,
+and documented as binding, and none of that made it a control. **A rule that
+lives only in prose is a preference.** If it protects capital it belongs in
+`engine/`, with a test, or it is not real.
+**Status:** active.
