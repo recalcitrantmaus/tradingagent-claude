@@ -33,24 +33,37 @@ Two configurations that do work:
 The second was verified working on 2026-09-16: repo present, git clean, all
 six skills loaded natively, `preflight_phase2` green.
 
-## 2. Never hardcode the repository path
+## 2. Never hardcode the repository path — it is not stable
 
-The path depends on how the session was created:
+Three different paths have been observed for the same repository:
 
-| Session origin | Path |
+| Observation | Path |
 |---|---|
-| `web_claude_ai` with a source | `/home/user/tradingagent-claude` |
-| `create_session(source_url=…)` | `/root/trading-agent-robinhood-cb9xo7` (branch name) |
+| This interactive session (`web_claude_ai` with a source) | `/home/user/tradingagent-claude` |
+| `create_session(source_url=…)`, first turn | `/root/trading-agent-robinhood-cb9xo7` |
+| **The same session** after its container was re-provisioned | `/home/user/trading-agent` |
 
-The second is named for the **branch**, not the repo. Every prompt written
-before this was discovered hardcoded the first path and would have failed even
-with the repo present. Locate it instead:
+The third is the one that matters. The path changed *within a single session*,
+across a container re-provision, with no change to the session config. So it is
+not enough to discover the path once at session start and reuse it — a
+long-lived runner woken by a trigger hours later may find itself somewhere else.
+
+Every session must locate the repository at the start of **every** turn, and
+must never carry a path forward from a previous turn:
 
 ```bash
-cd "$(git -C /root/trading-agent-robinhood-cb9xo7 rev-parse --show-toplevel 2>/dev/null \
-      || git -C /home/user/tradingagent-claude rev-parse --show-toplevel 2>/dev/null \
-      || find / -maxdepth 4 -name CLAUDE.md -path '*trading*' -printf '%h\n' 2>/dev/null | head -1)"
+REPO="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || REPO="$(find / -maxdepth 5 -name CLAUDE.md -path '*trading*' \
+             -printf '%h\n' 2>/dev/null | head -1)"
+[ -n "$REPO" ] || { echo "no repository — DO NOT TRADE"; exit 1; }
+cd "$REPO"
 ```
+
+The session normally starts inside the work tree, so `git rev-parse` alone
+usually answers it. The fallback exists because the failure mode is silent: a
+`cd` to a stale path lands in a directory that does not exist, and every
+subsequent command fails in a way that looks like a broken tool rather than a
+missing repo.
 
 ## 3. Environment-level, inherited correctly by fired sessions
 
