@@ -9,11 +9,22 @@
       "equity": 300.0,
       "escalations": [],
       "risk_state": "NORMAL"
+    },
+    {
+      "date": "2026-09-16",
+      "day_pnl": 0.0,
+      "equity": 300.0,
+      "escalations": [],
+      "risk_state": "NORMAL"
     }
   ],
   "equity_curve": [
     [
       "2026-09-15",
+      300.0
+    ],
+    [
+      "2026-09-16",
       300.0
     ]
   ],
