@@ -253,11 +253,28 @@ class TestNetcheckHonesty(unittest.TestCase):
         self.assertFalse(ok, "a 403 means reachable, not usable")
         self.assertIn("DEGRADED", msg)
 
+    def test_a_bot_wall_served_as_401_is_degraded(self):
+        """reuters.com and marketwatch.com both did exactly this.
+
+        Both were reported "ok — host answered" for weeks because the status
+        code was inspected and the body was not. A challenge is a challenge
+        whatever number it arrives under.
+        """
+        import io
+        import urllib.error
+        body = io.BytesIO(b'<html><head><style>#cmsg{animation: A 1.5s;}</style>')
+        ok, msg = self._probe_with(urllib.error.HTTPError(
+            "https://example.com/x", 401, "Unauthorized", {}, body))
+        self.assertFalse(ok)
+        self.assertIn("DEGRADED", msg)
+        self.assertIn("challenge", msg)
+
     def test_401_still_counts_as_reachable(self):
         """Missing a key is a credentials problem, not a closed network."""
         import urllib.error
-        ok, _ = self._probe_with(
-            urllib.error.HTTPError("https://example.gov/x", 401, "Unauthorized", {}, None))
+        import io
+        ok, _ = self._probe_with(urllib.error.HTTPError(
+            "https://example.gov/x", 401, "Unauthorized", {}, io.BytesIO(b"{}")))
         self.assertTrue(ok)
 
     def test_user_agent_always_carries_a_contact(self):

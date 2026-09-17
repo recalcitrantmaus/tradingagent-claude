@@ -38,49 +38,89 @@ HOSTS: List[Tuple[str, str, str, str]] = [
     ("paper-api.alpaca.markets", "/v2/clock",
      "Alpaca paper trading — Phase 2 order routing", "required"),
     ("data.alpaca.markets", "/v2/stocks/SPY/bars?timeframe=1Day&limit=1",
-     "Alpaca market data — prices, bars, the whole technical layer", "required"),
+     "Alpaca market data AND the news API (/v1beta1/news) — prices, bars, "
+     "and symbol-tagged headlines from an authenticated source", "required"),
     ("api.alpaca.markets", "/v2/clock",
      "Alpaca live trading — Phase 3 only", "required"),
     ("agent.robinhood.com", "/mcp/trading",
      "Robinhood agentic MCP — Phase 3 order routing", "required"),
 
-    # ---- primary sources: what news-intel ranks above every outlet ----
+    # ---- primary: verified serving 200 on 2026-09-17 with the contact UA ----
     ("www.sec.gov", "/cgi-bin/browse-edgar?action=getcompany",
      "SEC EDGAR filings — primary source for company facts", "primary"),
     ("www.federalreserve.gov", "/newsevents.htm",
      "Fed statements and calendar", "primary"),
     ("www.bls.gov", "/bls/newsrels.htm",
      "CPI, jobs — primary release, not a summary of one", "primary"),
-    ("www.bea.gov", "/news/current-releases",
-     "GDP, PCE", "primary"),
-    # `/` rather than `/resource-center`, which is a 404, and this host takes
-    # 10-19s to answer — at the old 12s timeout it looked blocked when it was
-    # merely slow. A probe path that does not exist is a bug in the probe.
-    ("home.treasury.gov", "/",
-     "Yield curve, auctions", "primary"),
+    ("www.bea.gov", "/news/current-releases", "GDP, PCE", "primary"),
+    ("home.treasury.gov", "/", "Yield curve, auctions", "primary"),
     ("www.finra.org", "/rules-guidance",
      "Day-trading and margin rules — verify before Phase 3", "primary"),
 
-    # ---- optional: fallback data and crypto ----
+    # ---- optional: verified working fallbacks ----
     ("api.coingecko.com", "/api/v3/ping",
      "Crypto prices — free tier, no key", "optional"),
-    ("stooq.com", "/q/d/l/?s=spy.us&i=d",
-     "Free end-of-day history — a second opinion on Alpaca's bars", "optional"),
     ("query1.finance.yahoo.com", "/v8/finance/chart/SPY?range=5d&interval=1d",
-     "Unofficial quote fallback", "optional"),
+     "Independent price cross-check. Rate-limits under load, so it must never "
+     "gate a trading day — see docs/04-lessons.md 2026-09-17", "optional"),
+    ("www.coindesk.com", "/markets",
+     "Crypto-native coverage — the one news HTML host that serves us", "optional"),
     ("docs.robinhood.com", "/crypto/trading/",
      "Robinhood crypto API reference", "optional"),
 
-    # ---- optional: news outlets for WebFetch (WebSearch already works) ----
-    ("www.reuters.com", "/markets/", "Wire coverage", "news"),
-    ("apnews.com", "/hub/financial-markets", "Wire coverage", "news"),
-    ("www.cnbc.com", "/markets/", "Market coverage", "news"),
-    ("www.marketwatch.com", "/markets", "Market coverage", "news"),
-    ("www.coindesk.com", "/markets", "Crypto-native coverage", "news"),
-    ("www.theblock.co", "/", "Crypto-native coverage", "news"),
+    # ---- proposed: NOT yet allowlisted, so NOT yet verified ----
+    # Everything below returned "proxy blocked CONNECT" on 2026-09-17, meaning
+    # the egress policy refused before the host was ever asked. Their status is
+    # therefore UNKNOWN, not good. Add them to the allowlist and re-run
+    # `python3 -m tools.netcheck --all`; promote to primary only what answers.
+    #
+    # Ranked by how likely a non-browser client is to be served. Machine-
+    # readable government endpoints are built for programmatic access and
+    # almost always serve; consumer news HTML mostly does not, which is why
+    # the old news tier is gone rather than expanded.
+    ("data.sec.gov", "/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenues.json",
+     "SEC structured company facts as JSON — a different host from www.sec.gov",
+     "proposed"),
+    ("fred.stlouisfed.org", "/graph/fredgraph.csv?id=ICSA",
+     "FRED macro series as CSV, no key — jobless claims, yields, spreads. "
+     "Covers the DOL claims print that started this", "proposed"),
+    ("api.fiscaldata.treasury.gov",
+     "/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?page[size]=1",
+     "Treasury fiscal data as JSON", "proposed"),
+    ("www.newyorkfed.org", "/markets/reference-rates/sofr",
+     "SOFR and reference rates — the rate that actually clears", "proposed"),
+    ("publicreporting.cftc.gov", "/resource/6dca-aqww.json?$limit=1",
+     "CFTC Commitments of Traders — positioning", "proposed"),
+    ("api.census.gov", "/data/timeseries/eits/marts?get=cell_value&time=2026",
+     "Census retail sales", "proposed"),
+    ("www.eia.gov", "/petroleum/supply/weekly/",
+     "EIA energy inventories", "proposed"),
+
+    # RSS rather than the HTML page: feeds are meant for machines and usually
+    # serve a non-browser client where the site itself throws a challenge.
+    # These carry the political spread the news-intel skill asks for.
+    ("feeds.bbci.co.uk", "/news/business/rss.xml", "BBC business RSS", "proposed"),
+    ("feeds.npr.org", "/1006/rss.xml", "NPR business RSS", "proposed"),
+    ("www.theguardian.com", "/uk/business/rss", "Guardian business RSS", "proposed"),
+    ("moxie.foxbusiness.com", "/google-publisher/markets.xml",
+     "Fox Business markets RSS", "proposed"),
+    ("thehill.com", "/business/feed/", "The Hill business RSS", "proposed"),
+    ("cointelegraph.com", "/rss", "Cointelegraph RSS", "proposed"),
+    ("decrypt.co", "/feed", "Decrypt RSS", "proposed"),
+
+    # ---- REMOVED 2026-09-17, all verified dead, kept here as a record ----
+    # Do not re-add without re-testing; each was reported healthy for weeks.
+    #   stooq.com            HTTP 200 + JS bot challenge
+    #   www.reuters.com      HTTP 401 + JS bot challenge
+    #   www.marketwatch.com  HTTP 401 + JS bot challenge
+    #   apnews.com           HTTP 403 + JS bot challenge
+    #   www.theblock.co      HTTP 403 + JS bot challenge
+    #   www.cnbc.com         HTTP 403
+    # Market news now comes from Alpaca's /v1beta1/news (authenticated,
+    # symbol-tagged, already required) and from WebSearch, which works.
 ]
 
-TIERS = {"required", "primary", "optional", "news"}
+TIERS = {"required", "primary", "optional", "proposed"}
 
 
 # Signatures of a bot-challenge page served with a 200.
@@ -89,6 +129,16 @@ CHALLENGE_MARKERS = (
     "crypto.subtle.digest",
     "Checking your browser",
     "cf-browser-verification",
+    # Akamai/PerimeterX serve their wall as a 401 with this inline animation.
+    # reuters.com and marketwatch.com both did, and both were reported "ok,
+    # host answered" because the status code was inspected and the body was
+    # not. A challenge is a challenge whatever number it arrives under.
+    "#cmsg{animation",
+    "_Incapsula_Resource",
+    "__cf_chl",
+    "challenge-platform",
+    "Just a moment...",
+    "enable JavaScript and cookies",
 )
 
 
@@ -146,6 +196,16 @@ def probe(host: str, path: str, timeout: int = 30) -> Tuple[bool, str]:
                                "challenge, not data. Reachable, not usable.")
             return True, f"HTTP {r.status}"
     except urllib.error.HTTPError as e:
+        # Inspect the BODY, not just the status. A bot wall served as 401 is
+        # still a bot wall, and status-only inspection is what made two dead
+        # news sources read as healthy.
+        try:
+            body = e.read(4096).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        if any(m in body for m in CHALLENGE_MARKERS):
+            return False, (f"DEGRADED — HTTP {e.code} carrying a JavaScript bot "
+                           f"challenge, not data. Reachable, not usable.")
         # The host answered, but answering is not the same as serving data.
         # 401 and 429 mean the network is open and we lack a key or a quota —
         # a reachability check should pass those. 403 on a public page is a

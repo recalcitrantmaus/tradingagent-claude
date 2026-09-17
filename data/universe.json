@@ -28,268 +28,333 @@
   "symbols": [
     {
       "symbol": "XLE",
-      "price": 64.06,
-      "dollar_volume": 94459346
+      "price": 64.1,
+      "dollar_volume": 131251352
     },
     {
       "symbol": "SMCI",
       "price": 40.38,
-      "dollar_volume": 69591619
+      "dollar_volume": 79265052
     },
     {
       "symbol": "BAC",
-      "price": 58.11,
-      "dollar_volume": 61847926
+      "price": 58.4,
+      "dollar_volume": 72725462
     },
     {
       "symbol": "XLF",
-      "price": 55.87,
-      "dollar_volume": 56775988
+      "price": 56.02,
+      "dollar_volume": 71278871
     },
     {
       "symbol": "KRE",
-      "price": 73.09,
-      "dollar_volume": 45348617
-    },
-    {
-      "symbol": "DRAM",
-      "price": 57.62,
-      "dollar_volume": 35089716
-    },
-    {
-      "symbol": "IREN",
-      "price": 43.32,
-      "dollar_volume": 34971153
-    },
-    {
-      "symbol": "NKE",
-      "price": 35.89,
-      "dollar_volume": 34414419
-    },
-    {
-      "symbol": "NOK",
-      "price": 10.52,
-      "dollar_volume": 33210934
+      "price": 73.23,
+      "dollar_volume": 52342299
     },
     {
       "symbol": "BITO",
-      "price": 10.26,
-      "dollar_volume": 33039488
+      "price": 10.29,
+      "dollar_volume": 46283607
     },
     {
-      "symbol": "EWZ",
-      "price": 37.63,
-      "dollar_volume": 31050921
-    },
-    {
-      "symbol": "HPE",
-      "price": 61.23,
-      "dollar_volume": 28094406
+      "symbol": "IREN",
+      "price": 43.53,
+      "dollar_volume": 40719896
     },
     {
       "symbol": "XLU",
-      "price": 41.56,
-      "dollar_volume": 27768813
+      "price": 41.67,
+      "dollar_volume": 39987871
+    },
+    {
+      "symbol": "NOK",
+      "price": 10.51,
+      "dollar_volume": 38931793
+    },
+    {
+      "symbol": "NKE",
+      "price": 35.79,
+      "dollar_volume": 38090975
+    },
+    {
+      "symbol": "DRAM",
+      "price": 57.68,
+      "dollar_volume": 37915140
+    },
+    {
+      "symbol": "EWZ",
+      "price": 37.73,
+      "dollar_volume": 34184212
+    },
+    {
+      "symbol": "HPE",
+      "price": 61.3,
+      "dollar_volume": 32708547
     },
     {
       "symbol": "IBIT",
-      "price": 43.27,
-      "dollar_volume": 26872747
-    },
-    {
-      "symbol": "VZ",
-      "price": 48.91,
-      "dollar_volume": 23678627
+      "price": 43.39,
+      "dollar_volume": 31092840
     },
     {
       "symbol": "BMY",
-      "price": 63.4,
-      "dollar_volume": 22666248
+      "price": 63.42,
+      "dollar_volume": 28479766
     },
     {
-      "symbol": "T",
-      "price": 25.53,
-      "dollar_volume": 21966803
-    },
-    {
-      "symbol": "HBAN",
-      "price": 15.79,
-      "dollar_volume": 20984274
-    },
-    {
-      "symbol": "CMCSA",
-      "price": 23.32,
-      "dollar_volume": 20818262
+      "symbol": "VZ",
+      "price": 48.74,
+      "dollar_volume": 27944290
     },
     {
       "symbol": "FPS",
-      "price": 36.95,
-      "dollar_volume": 20467344
+      "price": 37.34,
+      "dollar_volume": 27791453
     },
     {
-      "symbol": "XLB",
-      "price": 50.74,
-      "dollar_volume": 20151036
+      "symbol": "VCLT",
+      "price": 71.48,
+      "dollar_volume": 25144920
     },
     {
-      "symbol": "ON",
-      "price": 68.07,
-      "dollar_volume": 19687342
+      "symbol": "T",
+      "price": 25.48,
+      "dollar_volume": 25060955
     },
     {
-      "symbol": "MAGS",
-      "price": 70.48,
-      "dollar_volume": 19685051
+      "symbol": "HBAN",
+      "price": 15.89,
+      "dollar_volume": 23908289
     },
     {
-      "symbol": "UBER",
-      "price": 70.91,
-      "dollar_volume": 18624228
+      "symbol": "CMCSA",
+      "price": 23.18,
+      "dollar_volume": 23436094
     },
     {
       "symbol": "CIFR",
-      "price": 17.38,
-      "dollar_volume": 17961615
+      "price": 17.29,
+      "dollar_volume": 23333350
     },
     {
-      "symbol": "FCX",
-      "price": 71.41,
-      "dollar_volume": 17933765
+      "symbol": "UBER",
+      "price": 70.89,
+      "dollar_volume": 23282131
     },
     {
-      "symbol": "JETS",
-      "price": 28.29,
-      "dollar_volume": 17816646
+      "symbol": "XLB",
+      "price": 50.81,
+      "dollar_volume": 23153042
     },
     {
-      "symbol": "DVN",
-      "price": 48.24,
-      "dollar_volume": 17528969
+      "symbol": "ON",
+      "price": 68.1,
+      "dollar_volume": 22508889
+    },
+    {
+      "symbol": "MAGS",
+      "price": 70.51,
+      "dollar_volume": 22251898
     },
     {
       "symbol": "KMI",
-      "price": 31.13,
-      "dollar_volume": 16911466
+      "price": 31.18,
+      "dollar_volume": 22121703
     },
     {
-      "symbol": "WULF",
-      "price": 16.46,
-      "dollar_volume": 16905918
+      "symbol": "FCX",
+      "price": 71.16,
+      "dollar_volume": 21519834
     },
     {
-      "symbol": "BP",
-      "price": 45.3,
-      "dollar_volume": 16903061
-    },
-    {
-      "symbol": "NU",
-      "price": 13.98,
-      "dollar_volume": 16783902
-    },
-    {
-      "symbol": "SLV",
-      "price": 59.4,
-      "dollar_volume": 16446969
+      "symbol": "DVN",
+      "price": 48.3,
+      "dollar_volume": 20817203
     },
     {
       "symbol": "BSX",
-      "price": 43.07,
-      "dollar_volume": 16324607
+      "price": 43.09,
+      "dollar_volume": 20745114
     },
     {
-      "symbol": "BMNR",
-      "price": 23.7,
-      "dollar_volume": 16155650
-    },
-    {
-      "symbol": "IONQ",
-      "price": 40.01,
-      "dollar_volume": 15772982
-    },
-    {
-      "symbol": "USB",
-      "price": 60.16,
-      "dollar_volume": 15714514
+      "symbol": "NU",
+      "price": 13.96,
+      "dollar_volume": 20738864
     },
     {
       "symbol": "OXY",
-      "price": 58.8,
-      "dollar_volume": 15667319
+      "price": 58.88,
+      "dollar_volume": 20480643
+    },
+    {
+      "symbol": "SLV",
+      "price": 59.38,
+      "dollar_volume": 19901933
+    },
+    {
+      "symbol": "IONQ",
+      "price": 40.45,
+      "dollar_volume": 19412804
     },
     {
       "symbol": "CSX",
-      "price": 47.66,
-      "dollar_volume": 15539771
+      "price": 47.94,
+      "dollar_volume": 19029572
     },
     {
-      "symbol": "EEM",
-      "price": 66.92,
-      "dollar_volume": 15493499
+      "symbol": "HAL",
+      "price": 33.9,
+      "dollar_volume": 18979505
+    },
+    {
+      "symbol": "BP",
+      "price": 45.39,
+      "dollar_volume": 18965531
     },
     {
       "symbol": "SLB",
-      "price": 52.24,
-      "dollar_volume": 15340015
+      "price": 52.1,
+      "dollar_volume": 18943456
     },
     {
-      "symbol": "ARKG",
-      "price": 51.83,
-      "dollar_volume": 15030648
+      "symbol": "WULF",
+      "price": 16.54,
+      "dollar_volume": 18668428
     },
     {
       "symbol": "PSQ",
-      "price": 25.91,
-      "dollar_volume": 14680269
+      "price": 25.88,
+      "dollar_volume": 18580287
+    },
+    {
+      "symbol": "JETS",
+      "price": 28.39,
+      "dollar_volume": 18537023
+    },
+    {
+      "symbol": "BMNR",
+      "price": 24.11,
+      "dollar_volume": 18365286
+    },
+    {
+      "symbol": "EEM",
+      "price": 67.0,
+      "dollar_volume": 18332970
+    },
+    {
+      "symbol": "USB",
+      "price": 60.45,
+      "dollar_volume": 17859979
+    },
+    {
+      "symbol": "SCHD",
+      "price": 33.88,
+      "dollar_volume": 17475643
+    },
+    {
+      "symbol": "ARKG",
+      "price": 51.55,
+      "dollar_volume": 17128375
     },
     {
       "symbol": "INDA",
       "price": 48.05,
-      "dollar_volume": 14658841
+      "dollar_volume": 16725041
     },
     {
-      "symbol": "SCHD",
-      "price": 33.83,
-      "dollar_volume": 14525571
-    },
-    {
-      "symbol": "VCLT",
-      "price": 71.45,
-      "dollar_volume": 14057914
-    },
-    {
-      "symbol": "HAL",
-      "price": 34,
-      "dollar_volume": 13921096
-    },
-    {
-      "symbol": "IP",
-      "price": 34.76,
-      "dollar_volume": 13918078
-    },
-    {
-      "symbol": "BTI",
-      "price": 55.83,
-      "dollar_volume": 12990636
-    },
-    {
-      "symbol": "PBR",
-      "price": 20.82,
-      "dollar_volume": 12584381
+      "symbol": "WBD",
+      "price": 28.23,
+      "dollar_volume": 16342291
     },
     {
       "symbol": "PLTD",
-      "price": 5.11,
-      "dollar_volume": 12444271
+      "price": 5.1,
+      "dollar_volume": 16238053
     },
     {
-      "symbol": "KDP",
-      "price": 31.62,
-      "dollar_volume": 12250102
+      "symbol": "IP",
+      "price": 34.84,
+      "dollar_volume": 15942366
+    },
+    {
+      "symbol": "PBR",
+      "price": 20.9,
+      "dollar_volume": 15696130
+    },
+    {
+      "symbol": "HPQ",
+      "price": 33.52,
+      "dollar_volume": 15377334
+    },
+    {
+      "symbol": "PFE",
+      "price": 27.72,
+      "dollar_volume": 14347124
     },
     {
       "symbol": "O",
-      "price": 57.05,
-      "dollar_volume": 12237910
+      "price": 57.01,
+      "dollar_volume": 14182777
+    },
+    {
+      "symbol": "BTI",
+      "price": 55.88,
+      "dollar_volume": 13991514
+    },
+    {
+      "symbol": "AAL",
+      "price": 13.05,
+      "dollar_volume": 13830232
+    },
+    {
+      "symbol": "KDP",
+      "price": 31.76,
+      "dollar_volume": 13826176
+    },
+    {
+      "symbol": "NVO",
+      "price": 43.01,
+      "dollar_volume": 13694642
+    },
+    {
+      "symbol": "B",
+      "price": 43.68,
+      "dollar_volume": 13507210
+    },
+    {
+      "symbol": "ROIV",
+      "price": 39.63,
+      "dollar_volume": 13473205
+    },
+    {
+      "symbol": "VTEB",
+      "price": 48.37,
+      "dollar_volume": 13291863
+    },
+    {
+      "symbol": "RWM",
+      "price": 14.01,
+      "dollar_volume": 12804383
+    },
+    {
+      "symbol": "VALE",
+      "price": 14.47,
+      "dollar_volume": 12758395
+    },
+    {
+      "symbol": "CMG",
+      "price": 33.72,
+      "dollar_volume": 12727716
+    },
+    {
+      "symbol": "ETHA",
+      "price": 18.6,
+      "dollar_volume": 12699131
+    },
+    {
+      "symbol": "SUNB",
+      "price": 74,
+      "dollar_volume": 12263428
     },
     {
       "symbol": "SPIB",
@@ -297,484 +362,419 @@
       "dollar_volume": 12073234
     },
     {
-      "symbol": "NVO",
-      "price": 43.08,
-      "dollar_volume": 11921092
+      "symbol": "RKT",
+      "price": 12.61,
+      "dollar_volume": 11914422
     },
     {
-      "symbol": "HPQ",
-      "price": 33.34,
-      "dollar_volume": 11316199
+      "symbol": "RKLB",
+      "price": 67.73,
+      "dollar_volume": 11882348
     },
     {
-      "symbol": "ROIV",
-      "price": 39.72,
-      "dollar_volume": 11283468
-    },
-    {
-      "symbol": "WBD",
-      "price": 28.23,
-      "dollar_volume": 11246154
-    },
-    {
-      "symbol": "CMG",
-      "price": 33.88,
-      "dollar_volume": 10974918
-    },
-    {
-      "symbol": "SUNB",
-      "price": 73.93,
-      "dollar_volume": 10944006
-    },
-    {
-      "symbol": "B",
-      "price": 43.69,
-      "dollar_volume": 10936830
-    },
-    {
-      "symbol": "AAL",
-      "price": 12.98,
-      "dollar_volume": 10832840
-    },
-    {
-      "symbol": "VALE",
-      "price": 14.42,
-      "dollar_volume": 10725120
-    },
-    {
-      "symbol": "PFE",
-      "price": 27.75,
-      "dollar_volume": 10416535
-    },
-    {
-      "symbol": "S",
-      "price": 23.69,
-      "dollar_volume": 10261158
-    },
-    {
-      "symbol": "VTEB",
-      "price": 48.38,
-      "dollar_volume": 10221823
-    },
-    {
-      "symbol": "COO",
-      "price": 53.07,
-      "dollar_volume": 10152397
+      "symbol": "RIOT",
+      "price": 21.89,
+      "dollar_volume": 11796960
     },
     {
       "symbol": "HLN",
       "price": 9.21,
-      "dollar_volume": 9829136
-    },
-    {
-      "symbol": "RWM",
-      "price": 14.01,
-      "dollar_volume": 9795400
-    },
-    {
-      "symbol": "RIOT",
-      "price": 21.59,
-      "dollar_volume": 9630565
-    },
-    {
-      "symbol": "RKLB",
-      "price": 66.4,
-      "dollar_volume": 9385242
-    },
-    {
-      "symbol": "ONDS",
-      "price": 7.39,
-      "dollar_volume": 9383449
-    },
-    {
-      "symbol": "LUV",
-      "price": 40.54,
-      "dollar_volume": 9109500
-    },
-    {
-      "symbol": "APLD",
-      "price": 25.83,
-      "dollar_volume": 9022832
-    },
-    {
-      "symbol": "MDLZ",
-      "price": 61.7,
-      "dollar_volume": 9013393
-    },
-    {
-      "symbol": "IJH",
-      "price": 73.39,
-      "dollar_volume": 8866596
-    },
-    {
-      "symbol": "IOVA",
-      "price": 10.67,
-      "dollar_volume": 8784131
-    },
-    {
-      "symbol": "DT",
-      "price": 55.81,
-      "dollar_volume": 8776741
-    },
-    {
-      "symbol": "STM",
-      "price": 48.64,
-      "dollar_volume": 8770327
-    },
-    {
-      "symbol": "CCL",
-      "price": 22.37,
-      "dollar_volume": 8753023
-    },
-    {
-      "symbol": "PURR",
-      "price": 12.5,
-      "dollar_volume": 8553700
-    },
-    {
-      "symbol": "MARA",
-      "price": 11.39,
-      "dollar_volume": 8547629
-    },
-    {
-      "symbol": "SOFI",
-      "price": 16.84,
-      "dollar_volume": 8523920
-    },
-    {
-      "symbol": "AS",
-      "price": 26.54,
-      "dollar_volume": 8421307
-    },
-    {
-      "symbol": "ETHA",
-      "price": 18.52,
-      "dollar_volume": 8369762
+      "dollar_volume": 11788273
     },
     {
       "symbol": "ASTS",
-      "price": 62.26,
-      "dollar_volume": 8235566
+      "price": 63.01,
+      "dollar_volume": 11778533
     },
     {
-      "symbol": "ARWR",
-      "price": 68.6,
-      "dollar_volume": 8192967
-    },
-    {
-      "symbol": "SNAP",
-      "price": 5.97,
-      "dollar_volume": 8090425
-    },
-    {
-      "symbol": "TFC",
-      "price": 48.41,
-      "dollar_volume": 8030147
-    },
-    {
-      "symbol": "HDV",
-      "price": 28.8,
-      "dollar_volume": 7983216
-    },
-    {
-      "symbol": "KR",
-      "price": 60.76,
-      "dollar_volume": 7963327
-    },
-    {
-      "symbol": "F",
-      "price": 13.71,
-      "dollar_volume": 7942340
+      "symbol": "IJH",
+      "price": 73.44,
+      "dollar_volume": 11635996
     },
     {
       "symbol": "CDE",
-      "price": 20.11,
-      "dollar_volume": 7741580
+      "price": 20.17,
+      "dollar_volume": 11604890
     },
     {
-      "symbol": "CVNA",
-      "price": 66.69,
-      "dollar_volume": 7709075
+      "symbol": "ONDS",
+      "price": 7.41,
+      "dollar_volume": 11582657
+    },
+    {
+      "symbol": "COO",
+      "price": 53.12,
+      "dollar_volume": 11438914
+    },
+    {
+      "symbol": "S",
+      "price": 23.43,
+      "dollar_volume": 11431335
     },
     {
       "symbol": "FXI",
-      "price": 34.2,
-      "dollar_volume": 7612764
+      "price": 34.21,
+      "dollar_volume": 11427166
     },
     {
-      "symbol": "RKT",
-      "price": 12.46,
-      "dollar_volume": 7499853
+      "symbol": "LUV",
+      "price": 40.7,
+      "dollar_volume": 11235072
     },
     {
-      "symbol": "MCHP",
-      "price": 70.39,
-      "dollar_volume": 7378139
+      "symbol": "APLD",
+      "price": 26.23,
+      "dollar_volume": 11158795
     },
     {
-      "symbol": "INIO",
-      "price": 20.04,
-      "dollar_volume": 7367771
+      "symbol": "SNAP",
+      "price": 5.91,
+      "dollar_volume": 11074755
     },
     {
-      "symbol": "PINS",
-      "price": 18.48,
-      "dollar_volume": 7361508
+      "symbol": "TFC",
+      "price": 48.69,
+      "dollar_volume": 11014543
     },
     {
-      "symbol": "EQT",
-      "price": 50.16,
-      "dollar_volume": 7328247
+      "symbol": "DT",
+      "price": 55.56,
+      "dollar_volume": 11005037
+    },
+    {
+      "symbol": "MDLZ",
+      "price": 61.81,
+      "dollar_volume": 10977602
+    },
+    {
+      "symbol": "BKLN",
+      "price": 20.68,
+      "dollar_volume": 10742937
+    },
+    {
+      "symbol": "CCL",
+      "price": 22.32,
+      "dollar_volume": 10742500
+    },
+    {
+      "symbol": "STM",
+      "price": 48.65,
+      "dollar_volume": 10605846
     },
     {
       "symbol": "SH",
-      "price": 32.75,
-      "dollar_volume": 7252356
-    },
-    {
-      "symbol": "RIVN",
-      "price": 15.87,
-      "dollar_volume": 7250384
-    },
-    {
-      "symbol": "EZU",
-      "price": 68.89,
-      "dollar_volume": 7218019
-    },
-    {
-      "symbol": "EWU",
-      "price": 47.92,
-      "dollar_volume": 7210570
-    },
-    {
-      "symbol": "RIG",
-      "price": 5.61,
-      "dollar_volume": 7161782
-    },
-    {
-      "symbol": "PR",
-      "price": 23,
-      "dollar_volume": 7159440
-    },
-    {
-      "symbol": "UMC",
-      "price": 24.23,
-      "dollar_volume": 7154998
+      "price": 32.72,
+      "dollar_volume": 10430416
     },
     {
       "symbol": "KVUE",
-      "price": 17.84,
-      "dollar_volume": 7138462
+      "price": 17.82,
+      "dollar_volume": 10362457
     },
     {
-      "symbol": "USHY",
-      "price": 36.38,
-      "dollar_volume": 7122982
+      "symbol": "F",
+      "price": 13.73,
+      "dollar_volume": 10362045
     },
     {
-      "symbol": "ALHC",
-      "price": 9.14,
-      "dollar_volume": 7051764
+      "symbol": "MARA",
+      "price": 11.64,
+      "dollar_volume": 10328754
     },
     {
-      "symbol": "MO",
-      "price": 69.16,
-      "dollar_volume": 7047957
+      "symbol": "SOFI",
+      "price": 16.89,
+      "dollar_volume": 10036458
     },
     {
-      "symbol": "CORZ",
-      "price": 17.46,
-      "dollar_volume": 7009736
+      "symbol": "PURR",
+      "price": 12.72,
+      "dollar_volume": 9918959
     },
     {
-      "symbol": "LVS",
-      "price": 41.33,
-      "dollar_volume": 6946278
+      "symbol": "RIVN",
+      "price": 15.88,
+      "dollar_volume": 9894824
     },
     {
-      "symbol": "QBTS",
-      "price": 17.61,
-      "dollar_volume": 6860310
+      "symbol": "IOVA",
+      "price": 10.41,
+      "dollar_volume": 9792245
+    },
+    {
+      "symbol": "EQT",
+      "price": 50.27,
+      "dollar_volume": 9723173
+    },
+    {
+      "symbol": "HDV",
+      "price": 28.84,
+      "dollar_volume": 9720538
+    },
+    {
+      "symbol": "KR",
+      "price": 60.78,
+      "dollar_volume": 9663898
+    },
+    {
+      "symbol": "UMC",
+      "price": 24.35,
+      "dollar_volume": 9419140
+    },
+    {
+      "symbol": "UNG",
+      "price": 10.43,
+      "dollar_volume": 9390515
+    },
+    {
+      "symbol": "AS",
+      "price": 26.59,
+      "dollar_volume": 9303197
     },
     {
       "symbol": "HL",
-      "price": 18.98,
-      "dollar_volume": 6763904
+      "price": 19,
+      "dollar_volume": 9268618
     },
     {
-      "symbol": "CNC",
-      "price": 66.56,
-      "dollar_volume": 6753311
+      "symbol": "ARWR",
+      "price": 67.75,
+      "dollar_volume": 9255260
     },
     {
-      "symbol": "BND",
-      "price": 71.39,
-      "dollar_volume": 6714271
+      "symbol": "QBTS",
+      "price": 17.65,
+      "dollar_volume": 9232609
     },
     {
-      "symbol": "TEVA",
-      "price": 39.52,
-      "dollar_volume": 6703224
+      "symbol": "CVNA",
+      "price": 67.11,
+      "dollar_volume": 9146086
+    },
+    {
+      "symbol": "FITB",
+      "price": 53.09,
+      "dollar_volume": 9063892
+    },
+    {
+      "symbol": "INIO",
+      "price": 20.01,
+      "dollar_volume": 8973965
+    },
+    {
+      "symbol": "CORZ",
+      "price": 17.52,
+      "dollar_volume": 8910423
+    },
+    {
+      "symbol": "CZR",
+      "price": 29.73,
+      "dollar_volume": 8672804
+    },
+    {
+      "symbol": "PR",
+      "price": 22.9,
+      "dollar_volume": 8660620
+    },
+    {
+      "symbol": "PINS",
+      "price": 18.3,
+      "dollar_volume": 8658521
+    },
+    {
+      "symbol": "MCHP",
+      "price": 70.48,
+      "dollar_volume": 8642117
     },
     {
       "symbol": "MNST",
-      "price": 44.38,
-      "dollar_volume": 6647453
+      "price": 44.47,
+      "dollar_volume": 8536728
+    },
+    {
+      "symbol": "USHY",
+      "price": 36.41,
+      "dollar_volume": 8527653
+    },
+    {
+      "symbol": "OTIS",
+      "price": 68.92,
+      "dollar_volume": 8414728
+    },
+    {
+      "symbol": "PATH",
+      "price": 13.79,
+      "dollar_volume": 8400689
+    },
+    {
+      "symbol": "MO",
+      "price": 69.23,
+      "dollar_volume": 8377799
+    },
+    {
+      "symbol": "VEA",
+      "price": 72.19,
+      "dollar_volume": 8326755
+    },
+    {
+      "symbol": "RIG",
+      "price": 5.63,
+      "dollar_volume": 8304256
+    },
+    {
+      "symbol": "KGC",
+      "price": 28.52,
+      "dollar_volume": 8186771
+    },
+    {
+      "symbol": "ALHC",
+      "price": 9.27,
+      "dollar_volume": 8132928
+    },
+    {
+      "symbol": "TEVA",
+      "price": 39.34,
+      "dollar_volume": 8064857
+    },
+    {
+      "symbol": "SCHX",
+      "price": 30.05,
+      "dollar_volume": 7913728
+    },
+    {
+      "symbol": "LVS",
+      "price": 41.41,
+      "dollar_volume": 7761491
+    },
+    {
+      "symbol": "BND",
+      "price": 71.4,
+      "dollar_volume": 7682354
+    },
+    {
+      "symbol": "CNC",
+      "price": 67.06,
+      "dollar_volume": 7654430
     },
     {
       "symbol": "ONON",
       "price": 26.52,
-      "dollar_volume": 6506291
+      "dollar_volume": 7652622
+    },
+    {
+      "symbol": "KHC",
+      "price": 24.77,
+      "dollar_volume": 7642592
+    },
+    {
+      "symbol": "AMZD",
+      "price": 8.72,
+      "dollar_volume": 7534394
+    },
+    {
+      "symbol": "AGNC",
+      "price": 9.99,
+      "dollar_volume": 7485587
+    },
+    {
+      "symbol": "KEY",
+      "price": 21.02,
+      "dollar_volume": 7482146
+    },
+    {
+      "symbol": "MAS",
+      "price": 68.45,
+      "dollar_volume": 7440720
+    },
+    {
+      "symbol": "OKLO",
+      "price": 40.38,
+      "dollar_volume": 7430889
+    },
+    {
+      "symbol": "EZU",
+      "price": 68.81,
+      "dollar_volume": 7402373
+    },
+    {
+      "symbol": "EWU",
+      "price": 47.95,
+      "dollar_volume": 7395900
+    },
+    {
+      "symbol": "NCLH",
+      "price": 14.49,
+      "dollar_volume": 7349618
     },
     {
       "symbol": "EMLC",
       "price": 25.27,
-      "dollar_volume": 6441994
+      "dollar_volume": 7332798
     },
     {
       "symbol": "APA",
-      "price": 44.98,
-      "dollar_volume": 6382482
+      "price": 44.97,
+      "dollar_volume": 7291121
     },
     {
-      "symbol": "PATH",
-      "price": 13.93,
-      "dollar_volume": 6307371
+      "symbol": "ENB",
+      "price": 48.55,
+      "dollar_volume": 7217312
     },
     {
-      "symbol": "KEY",
-      "price": 20.93,
-      "dollar_volume": 6269174
-    },
-    {
-      "symbol": "SAN",
-      "price": 14.81,
-      "dollar_volume": 6254041
-    },
-    {
-      "symbol": "MGY",
-      "price": 25.68,
-      "dollar_volume": 6247318
-    },
-    {
-      "symbol": "KHC",
-      "price": 24.71,
-      "dollar_volume": 6224894
-    },
-    {
-      "symbol": "ITUB",
-      "price": 8.3,
-      "dollar_volume": 6218111
-    },
-    {
-      "symbol": "AVTR",
-      "price": 15.98,
-      "dollar_volume": 6164359
-    },
-    {
-      "symbol": "FITB",
-      "price": 52.84,
-      "dollar_volume": 6142069
-    },
-    {
-      "symbol": "XLRE",
-      "price": 42.98,
-      "dollar_volume": 6077567
-    },
-    {
-      "symbol": "UNG",
-      "price": 10.45,
-      "dollar_volume": 6069715
-    },
-    {
-      "symbol": "AGNC",
-      "price": 9.97,
-      "dollar_volume": 6021023
+      "symbol": "SCHB",
+      "price": 29.39,
+      "dollar_volume": 7194025
     },
     {
       "symbol": "CARR",
-      "price": 54.12,
-      "dollar_volume": 5904384
+      "price": 54.56,
+      "dollar_volume": 7184628
     },
     {
-      "symbol": "CZR",
-      "price": 29.7,
-      "dollar_volume": 5878066
-    },
-    {
-      "symbol": "VMRK",
-      "price": 63.15,
-      "dollar_volume": 5869035
-    },
-    {
-      "symbol": "HST",
-      "price": 22.03,
-      "dollar_volume": 5862778
-    },
-    {
-      "symbol": "OTIS",
-      "price": 68.72,
-      "dollar_volume": 5795776
-    },
-    {
-      "symbol": "EQNR",
-      "price": 44.26,
-      "dollar_volume": 5769259
-    },
-    {
-      "symbol": "SPDN",
-      "price": 8.62,
-      "dollar_volume": 5732507
-    },
-    {
-      "symbol": "SCHX",
-      "price": 30.02,
-      "dollar_volume": 5721699
-    },
-    {
-      "symbol": "KWEB",
-      "price": 24.39,
-      "dollar_volume": 5639480
-    },
-    {
-      "symbol": "RBLX",
-      "price": 47.63,
-      "dollar_volume": 5634744
-    },
-    {
-      "symbol": "FRO",
-      "price": 54.6,
-      "dollar_volume": 5630843
-    },
-    {
-      "symbol": "AMZD",
-      "price": 8.7,
-      "dollar_volume": 5616015
-    },
-    {
-      "symbol": "KNX",
-      "price": 67.29,
-      "dollar_volume": 5583253
-    },
-    {
-      "symbol": "GFL",
-      "price": 43.22,
-      "dollar_volume": 5581128
-    },
-    {
-      "symbol": "GFS",
-      "price": 45.13,
-      "dollar_volume": 5559294
+      "symbol": "AVTR",
+      "price": 16.03,
+      "dollar_volume": 7132116
     },
     {
       "symbol": "CNM",
-      "price": 42.81,
-      "dollar_volume": 5492352
+      "price": 42.9,
+      "dollar_volume": 7112348
     },
     {
-      "symbol": "AFRM",
-      "price": 70.39,
-      "dollar_volume": 5491649
+      "symbol": "SCHG",
+      "price": 35.38,
+      "dollar_volume": 7100801
+    },
+    {
+      "symbol": "EQNR",
+      "price": 44.25,
+      "dollar_volume": 7095488
+    },
+    {
+      "symbol": "ITUB",
+      "price": 8.32,
+      "dollar_volume": 7082910
+    },
+    {
+      "symbol": "BN",
+      "price": 37.15,
+      "dollar_volume": 7054822
+    },
+    {
+      "symbol": "RBLX",
+      "price": 47.3,
+      "dollar_volume": 7027456
+    },
+    {
+      "symbol": "CNQ",
+      "price": 50.3,
+      "dollar_volume": 7007954
+    },
+    {
+      "symbol": "MGY",
+      "price": 25.7,
+      "dollar_volume": 6949347
     }
   ]
 }

@@ -433,3 +433,44 @@ third-party rate limiter happened to fire on a day someone was watching.
 **A dependency you would never trade on is still a dependency that can stop
 you trading.**
 **Status:** active.
+
+### 2026-09-17 — Five of six news sources were serving bot walls, reported healthy
+**Evidence:** netcheck inspected the status code and not the body, so a
+challenge page arriving as 401 read as "host answered — network is open".
+Re-probed with body inspection:
+
+| Host | Real status |
+|---|---|
+| www.reuters.com | HTTP 401 + JS bot challenge |
+| www.marketwatch.com | HTTP 401 + JS bot challenge |
+| apnews.com | HTTP 403 + JS bot challenge |
+| www.theblock.co | HTTP 403 + JS bot challenge |
+| www.cnbc.com | HTTP 403 |
+| www.coindesk.com | **200 — the only one that serves us** |
+| stooq.com | HTTP 200 + JS bot challenge (known since Phase 1) |
+
+Every government primary, by contrast, serves us fine once the User-Agent
+carries a contact. The split is not about permission, it is about what the
+endpoint is *for*: machine-readable government data is built for programmatic
+access, and consumer news HTML is built for browsers and defended against
+everything else.
+
+**Change:** the `news` tier is deleted rather than repaired — five hosts that
+cannot serve us are not a source list, they are six lines of false comfort.
+Market news now comes from **Alpaca's `/v1beta1/news`**, which was available
+the whole time: authenticated, symbol-tagged, timestamped, on a host already
+in the required tier, costing nothing to adopt. WebSearch covers the rest.
+
+Fourteen replacements are proposed and explicitly **unverified** — all were
+refused by the egress proxy before the host was ever asked, so their status is
+unknown rather than good. They sit in a `proposed` tier that the default
+netcheck run ignores, and are promoted only by answering. They favour JSON and
+RSS endpoints over HTML for the reason above.
+
+**Lesson for future rules:** when a whole category of source fails, ask what
+the category has in common before replacing it like for like. Swapping six
+challenged news sites for six more would have produced the same list with
+newer names. **And a status code is a claim about a request, not about the
+response body** — this is the fourth defect in a week where data was present
+and meant something other than it appeared.
+**Status:** active.
