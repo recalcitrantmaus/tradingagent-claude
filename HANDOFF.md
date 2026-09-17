@@ -183,6 +183,49 @@ They now name the working ones explicitly. **Building a capability and wiring
 it into the skill that needs it are two separate jobs**, and only the second
 one changes what a session actually does.
 
+## After Friday: a second week, and what it has to answer
+
+Week one produced almost no trading data. Wednesday was lost to a scheduling
+defect, Thursday was a deliberate `RISK_OFF`, and Friday is the first session
+with a real universe, working sources and a proven order path. **Zero closed
+trades is zero evidence about the only question Phase 2 exists to answer** —
+whether model-generated theses have positive expectancy. The week's real
+output was infrastructure, and infrastructure is not the exit criterion.
+
+The plan is a second full week of testing before any deployment planning. It
+should be designed around what is still unproven rather than repeated as-is:
+
+- the posture gate blocking a **real** order (only the `RISK_OFF` tightening
+  path has run)
+- an empty plan binding against a scanner that **disagrees** (both times so
+  far, the scanner agreed by coincidence)
+- an engine-sized order reaching a **fill** — the smoke test proved the
+  broker accepts a bracket, not that the whole chain works on an order
+  somebody wanted
+- the management path actually **managing** something: trailing, scaling out,
+  an overnight carry decision with a position on
+- whether the strategy or the R >= 1.5 threshold, rather than the plumbing, is
+  what keeps the plan empty
+
+### The Routine shape has to change for a week
+
+This week's triggers are one-shots bound to a **per-day runner session**. That
+does not scale to five days:
+
+- context accumulates inside a session, so one runner cannot span a week;
+  each trading day needs its own, which means creating them by hand
+- `notifications` are rejected on a `persistent_session_id` Routine, so
+  reports land in the session rather than on a phone
+- Routines created in-session store **no MCP connectors**, which is inert for
+  Alpaca over HTTPS but disqualifying for Robinhood over MCP in Phase 3
+
+**Recurring Routines created in the claude.ai Routines UI with the repository
+attached** solve all three: fresh session per firing, notifications, and the
+connectors Phase 3 needs. That is the recommended shape for week two, and it
+is the same setup Phase 3 requires, so it is worth doing once properly.
+See `docs/10-runtime-requirements.md` for why the repo must be attached at
+session start and cannot be cloned on demand.
+
 ## Model routing in practice
 
 `model_check` reads `TRADING_AGENT_MODEL` and cannot verify it. One
