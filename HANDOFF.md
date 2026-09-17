@@ -117,6 +117,44 @@ Two limits of this shape, both deliberate:
 - **A failed session is silent.** Nothing pushed means nothing ran. Check the
   broker directly before assuming a quiet day was an uneventful one.
 
+## The universe, and why two sessions found nothing
+
+`tools/screen.py` builds the tradeable universe from named criteria, commits it
+to `data/universe.json`, screens it, and measures the base rate.
+
+```
+python3 -m tools.screen --build-universe   # refresh data/universe.json
+python3 -m tools.screen                    # today's breakouts
+python3 -m tools.screen --base-rate 90     # how often does this fire at all?
+```
+
+**Run the screen before forming a view on whether there is a setup.** The two
+empty sessions of 2026-09-16/17 were not a quiet tape. The runner's candidate
+list was six hardcoded tickers, and the 85-name screen quoted in those briefs
+was reproducible from nothing. Measured properly: 522 of 11,833 active US
+equities pass $3-$75 and the liquidity floor, 59 of the last 60 sessions had at
+least one 20-day breakout, and the day a brief reported none had six.
+
+The criteria are decisions, so they are named in `CRITERIA` and each carries
+its reason. The two that bind hardest:
+
+- **`max_price` 75.** Not a market fact — at $300 with whole-share sizing the
+  engine cannot buy one share of anything dearer. `tools/smoke_submit.py`
+  settled whether fractional sizing could lift it: **it cannot.** Alpaca
+  rejects a fractional bracket (`fractional orders must be simple orders`), so
+  a fractional entry is an entry with no attached stop. The ceiling stays.
+- **`min_dollar_volume` is in IEX units, not consolidated.** The free feed
+  reports IEX prints only — about 4% of tape, measured. A "$25M" floor here
+  demands roughly $600M of real volume and passed 14 names out of 11,833.
+
+## The order path is proven
+
+`python3 -m tools.smoke_submit` places one bracket order priced where it cannot
+fill, confirms Alpaca attached the protective legs, and cancels it. It refuses
+unless the market is open and the account is flat, and writes nothing to the
+ledger or the fill log. Verified 2026-09-17: bracket accepted, two legs, stop
+attached atomically. Re-run before Phase 3 against Robinhood.
+
 ## Model routing in practice
 
 `model_check` reads `TRADING_AGENT_MODEL` and cannot verify it. One
