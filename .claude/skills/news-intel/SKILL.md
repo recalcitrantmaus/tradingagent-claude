@@ -13,14 +13,37 @@ you.
 
 Sample across, and label each item with, its lane:
 
-| Lane | Examples |
+| Lane | Use these — verified serving us on 2026-09-17 |
 |---|---|
-| Wire / market data | Reuters, AP, Bloomberg, CNBC, MarketWatch |
-| Right-leaning | WSJ editorial, Fox Business, NY Post business |
-| Left-leaning | NYT, Guardian business, MSNBC business |
-| Financial trade | Barron's, FT, Investor's Business Daily |
-| Primary source | SEC EDGAR filings, Fed statements, BLS/BEA releases, company IR |
-| Crypto-native | CoinDesk, The Block, protocol blogs and governance forums |
+| Wire / market data | **Alpaca news API** — `GET data.alpaca.markets/v1beta1/news?limit=50&sort=desc`, authenticated, timestamped, **symbol-tagged**. Plus BBC business RSS (`feeds.bbci.co.uk/news/business/rss.xml`) |
+
+**The Alpaca feed is Benzinga, and only Benzinga** — 50 of 50 items on
+2026-09-17. It is fast, symbol-tagged and excellent for *finding* an item, but
+under this skill's own rule it is **one outlet, so it cannot corroborate
+itself**. Anything it surfaces still needs a primary source or a second lane
+before it can size a position.
+
+| Right-leaning | Fox Business markets RSS (`moxie.foxbusiness.com/google-publisher/markets.xml`) |
+| Left-leaning | Guardian business RSS (`www.theguardian.com/uk/business/rss`), NPR business RSS (`feeds.npr.org/1006/rss.xml`) |
+| Policy / centrist | The Hill business RSS (`thehill.com/business/feed/`) |
+| Primary source | SEC EDGAR (`www.sec.gov`, and `data.sec.gov` for XBRL facts as JSON), Fed, BLS, BEA, Treasury, NY Fed SOFR, CFTC COT, and **FRED via `adapters.fred`** for any macro series |
+| Crypto-native | CoinDesk (`www.coindesk.com/markets`), Cointelegraph RSS (`cointelegraph.com/rss`), Decrypt RSS (`decrypt.co/feed`), protocol blogs and governance forums |
+
+`WebSearch` works and is the general-purpose fallback for anything above.
+
+**Do not reach for Reuters, AP, CNBC, MarketWatch, The Block, Bloomberg, WSJ,
+FT, Barron's or NYT.** Every one of them either serves this agent a JavaScript
+bot challenge or refuses it outright — measured, not assumed. They will cost
+you a round trip and return nothing. Use the RSS feed of an outlet rather than
+its HTML page wherever one exists: feeds are built for machines, the pages are
+defended against them.
+
+**Prefer a number with a date over a headline about a number.** For anything
+FRED carries — jobless claims, yields, spreads, CPI, unemployment, VIX —
+`adapters.fred.latest("ICSA")` returns the value *and* its observation date,
+which a headline usually does not. `snapshot()` also reports how stale each
+reading is. A macro figure quoted without its date reads as sourced while
+being stale, and that is worse than not quoting it.
 
 **A claim is only actionable if it appears in a primary source or in at least
 two lanes.** One outlet is a rumor. Several outlets in the same lane are one

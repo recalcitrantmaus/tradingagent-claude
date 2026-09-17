@@ -39,6 +39,33 @@ Two horizons, because they answer different questions:
 Write both as one sentence each. If you cannot write the sentence, you do not
 understand the regime, and position size stays at half.
 
+Pull the rate, spread and vol inputs from `adapters.fred` rather than from a
+headline — each reading arrives with its observation date:
+
+```
+python3 -c "from adapters.fred import snapshot; import json; print(json.dumps(snapshot(), indent=2))"
+```
+
+`DGS10`, `T10Y2Y`, `BAMLH0A0HYM2`, `VIXCLS`, `ICSA`, `CPIAUCSL`, `UNRATE`.
+Quote the `as_of` date alongside any value you use. If `stale_days` is large
+for a series you are leaning on, say so — a number is only as current as its
+observation date, not as the moment you fetched it.
+
+**Then run the screen before forming any view on whether there is a setup:**
+
+```
+python3 -m tools.screen
+```
+
+It reads the committed universe in `data/universe.json`. On 2026-09-16 and
+09-17 this skill twice concluded "no setup" from a hand-built list of names,
+while the committed screen found six breakouts. The measured base rate is that
+**59 of 60 sessions carry at least one**, so an empty screen is a two-percent
+event: treat it as a reason to suspect the instrument, not as a finding about
+the market. If you disagree with the universe, recommend a change to
+`CRITERIA` in `tools/screen.py` — do not quietly substitute a list of your own,
+because a screen that lives only in a session cannot be checked by anyone.
+
 ## 3. News (the fast layer)
 
 Delegate to the `news-intel` skill. Require it to return sources, not

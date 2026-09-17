@@ -155,6 +155,34 @@ unless the market is open and the account is flat, and writes nothing to the
 ledger or the fill log. Verified 2026-09-17: bracket accepted, two legs, stop
 attached atomically. Re-run before Phase 3 against Robinhood.
 
+## Sources: what works, and what the skills now point at
+
+Rebuilt 2026-09-17 after five of six news outlets turned out to be serving bot
+walls while netcheck reported them healthy. `python3 -m tools.netcheck --all`
+is the current truth; every host below was verified twice — it answered, *and*
+its body parsed into the data it is supposed to carry.
+
+- **Market news:** Alpaca's `/v1beta1/news` (authenticated, timestamped,
+  symbol-tagged, on a host already in the required tier). It is **Benzinga
+  only**, so it is one outlet and cannot corroborate itself.
+- **Macro numbers:** `adapters.fred` — jobless claims, yields, spreads, CPI,
+  unemployment, VIX, keyless. Every reading carries its observation date and a
+  staleness count. This is how the DOL claims print is obtained; `www.dol.gov`
+  itself refuses us.
+- **Filings:** `data.sec.gov` for XBRL facts as JSON, `www.sec.gov` for EDGAR.
+- **News lanes:** seven RSS feeds (BBC, NPR, Guardian, Fox Business, The Hill,
+  Cointelegraph, Decrypt) carrying the political spread. Use an outlet's feed
+  rather than its HTML page — feeds are built for machines.
+- **Dead, do not re-add without re-testing:** Reuters, AP, CNBC, MarketWatch,
+  The Block, stooq (bot walls); api.census.gov (needs a key, and FRED serves
+  the same series without one).
+
+The three skills that consume sources — `news-intel`, `premarket-brief`,
+`trade-plan` — were pointing at the dead outlets and at none of the new tools.
+They now name the working ones explicitly. **Building a capability and wiring
+it into the skill that needs it are two separate jobs**, and only the second
+one changes what a session actually does.
+
 ## Model routing in practice
 
 `model_check` reads `TRADING_AGENT_MODEL` and cannot verify it. One

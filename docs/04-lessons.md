@@ -512,3 +512,34 @@ volume, one-bar series), and a screen that existed but nothing called. Clearing
 one does not clear the next. **Verify against the thing you actually want out
 of it, then check that something actually asks.**
 **Status:** active.
+
+### 2026-09-17 — The skills were still pointing at the dead sources
+**Evidence:** after a week of source work, a grep across all six skills for
+`fred`, `v1beta1/news`, `tools.screen`, `universe`, `rss` and `netcheck`
+returned **nothing**. Meanwhile `news-intel` still named Reuters, AP,
+Bloomberg, CNBC, MarketWatch and The Block as its lanes — every one of them
+verified that morning as serving this agent a bot wall.
+
+So the screen, the committed universe, `adapters.fred` and the Alpaca news API
+all existed, were all verified working, and **nothing asked for any of them.**
+The Friday trigger prompt named the screen only because it was written by
+hand; the skills, which are the durable home, named none of it.
+
+**Change:** `news-intel` now lists only sources verified serving us, with the
+dead ones named as dead so nobody re-adds them, and a rule to prefer an
+outlet's RSS feed over its HTML page. `premarket-brief` pulls rate, spread and
+vol from `adapters.fred` with observation dates, and must run `tools.screen`
+before concluding there is no setup. `trade-plan` takes candidates from the
+committed universe and must state the denominator it screened.
+
+One caveat went in with it: Alpaca's news feed is **Benzinga only**, 50 of 50
+items. It is fast and symbol-tagged, but under the skill's own two-lane rule
+it is a single outlet and cannot corroborate itself.
+
+**Lesson for future rules:** building a capability and wiring it into the thing
+that needs it are two separate jobs, and only the second one changes what a
+session does. This is the third state — *used* — and it is the one with no
+error message. A broken source throws; an unused tool is silent, and the work
+looks finished from every angle except the one that matters. **After building
+something, grep for its own name in the callers.**
+**Status:** active.

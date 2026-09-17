@@ -11,10 +11,18 @@ exist at all.
 
 ## Preconditions
 
-- A brief exists for today and its `Posture` is not `NO_TRADE`.
+- A brief exists for today and its `Posture` is not `NO_TRADE`. Posture is
+  enforced in code by `engine/posture.py` and fails closed — a missing or
+  unparseable brief reads as `NO_TRADE` and the runner refuses every entry.
 - Risk state is `NORMAL`.
+- Candidates come from `python3 -m tools.screen`, which reads the committed
+  universe. State the denominator you screened. An empty plan justified by
+  "nothing looked good" is not reviewable unless the reader knows how many
+  names you looked at and which list they came from.
 - If either fails, output an empty plan with the reason. An empty plan is a
-  successful outcome, not a failure.
+  successful outcome, not a failure — and it is **binding**: when
+  `state/plans/<date>.json` exists and is empty, the runner does not fall back
+  to the mechanical scanner. Writing `[]` is a decision, so make it one.
 
 ## Every proposal must specify
 
