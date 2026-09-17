@@ -68,45 +68,39 @@ HOSTS: List[Tuple[str, str, str, str]] = [
     ("docs.robinhood.com", "/crypto/trading/",
      "Robinhood crypto API reference", "optional"),
 
-    # ---- proposed: NOT yet allowlisted, so NOT yet verified ----
-    # Everything below returned "proxy blocked CONNECT" on 2026-09-17, meaning
-    # the egress policy refused before the host was ever asked. Their status is
-    # therefore UNKNOWN, not good. Add them to the allowlist and re-run
-    # `python3 -m tools.netcheck --all`; promote to primary only what answers.
-    #
-    # Ranked by how likely a non-browser client is to be served. Machine-
-    # readable government endpoints are built for programmatic access and
-    # almost always serve; consumer news HTML mostly does not, which is why
-    # the old news tier is gone rather than expanded.
+    # ---- promoted 2026-09-17 after the allowlist opened ----
+    # Every one verified twice: it answered, AND the body parsed into the data
+    # it is supposed to carry. A 200 was not treated as sufficient, because a
+    # 200 is what stooq, reuters and census.gov all return.
     ("data.sec.gov", "/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenues.json",
-     "SEC structured company facts as JSON — a different host from www.sec.gov",
-     "proposed"),
+     "SEC company facts as XBRL JSON — 11 USD facts for Apple on probe",
+     "primary"),
     ("fred.stlouisfed.org", "/graph/fredgraph.csv?id=ICSA",
-     "FRED macro series as CSV, no key — jobless claims, yields, spreads. "
-     "Covers the DOL claims print that started this", "proposed"),
+     "FRED macro series as keyless CSV. Carries the jobless-claims print that "
+     "www.dol.gov refuses us, plus yields, spreads, CPI and VIX", "primary"),
     ("api.fiscaldata.treasury.gov",
      "/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?page[size]=1",
-     "Treasury fiscal data as JSON", "proposed"),
+     "Treasury fiscal data as JSON", "primary"),
     ("www.newyorkfed.org", "/markets/reference-rates/sofr",
-     "SOFR and reference rates — the rate that actually clears", "proposed"),
+     "SOFR and reference rates — the rate that actually clears", "primary"),
     ("publicreporting.cftc.gov", "/resource/6dca-aqww.json?$limit=1",
-     "CFTC Commitments of Traders — positioning", "proposed"),
-    ("api.census.gov", "/data/timeseries/eits/marts?get=cell_value&time=2026",
-     "Census retail sales", "proposed"),
+     "CFTC Commitments of Traders — positioning", "primary"),
     ("www.eia.gov", "/petroleum/supply/weekly/",
-     "EIA energy inventories", "proposed"),
+     "EIA energy inventories", "optional"),
 
-    # RSS rather than the HTML page: feeds are meant for machines and usually
-    # serve a non-browser client where the site itself throws a challenge.
-    # These carry the political spread the news-intel skill asks for.
-    ("feeds.bbci.co.uk", "/news/business/rss.xml", "BBC business RSS", "proposed"),
-    ("feeds.npr.org", "/1006/rss.xml", "NPR business RSS", "proposed"),
-    ("www.theguardian.com", "/uk/business/rss", "Guardian business RSS", "proposed"),
+    # ---- news: RSS, because the HTML sites are bot-walled ----
+    # These replace the deleted news tier and carry the political spread the
+    # news-intel skill asks for. Feeds are built for machines; all seven
+    # returned 10-49 parsed items where the equivalent HTML pages returned
+    # challenges.
+    ("feeds.bbci.co.uk", "/news/business/rss.xml", "BBC business RSS", "news"),
+    ("feeds.npr.org", "/1006/rss.xml", "NPR business RSS", "news"),
+    ("www.theguardian.com", "/uk/business/rss", "Guardian business RSS", "news"),
     ("moxie.foxbusiness.com", "/google-publisher/markets.xml",
-     "Fox Business markets RSS", "proposed"),
-    ("thehill.com", "/business/feed/", "The Hill business RSS", "proposed"),
-    ("cointelegraph.com", "/rss", "Cointelegraph RSS", "proposed"),
-    ("decrypt.co", "/feed", "Decrypt RSS", "proposed"),
+     "Fox Business markets RSS", "news"),
+    ("thehill.com", "/business/feed/", "The Hill business RSS", "news"),
+    ("cointelegraph.com", "/rss", "Cointelegraph RSS", "news"),
+    ("decrypt.co", "/feed", "Decrypt RSS", "news"),
 
     # ---- REMOVED 2026-09-17, all verified dead, kept here as a record ----
     # Do not re-add without re-testing; each was reported healthy for weeks.
@@ -116,11 +110,14 @@ HOSTS: List[Tuple[str, str, str, str]] = [
     #   apnews.com           HTTP 403 + JS bot challenge
     #   www.theblock.co      HTTP 403 + JS bot challenge
     #   www.cnbc.com         HTTP 403
+    #   api.census.gov       HTTP 200 + an HTML "Missing Key" page; needs a
+    #                        free API key, and FRED already serves the same
+    #                        retail-sales series (RSAFS) without one.
     # Market news now comes from Alpaca's /v1beta1/news (authenticated,
     # symbol-tagged, already required) and from WebSearch, which works.
 ]
 
-TIERS = {"required", "primary", "optional", "proposed"}
+TIERS = {"required", "primary", "optional", "news"}
 
 
 # Signatures of a bot-challenge page served with a 200.
@@ -139,6 +136,11 @@ CHALLENGE_MARKERS = (
     "challenge-platform",
     "Just a moment...",
     "enable JavaScript and cookies",
+    # api.census.gov answers 200 with an HTML "Missing Key" page when no API
+    # key is supplied. A 200 carrying an error page is the same lie as a 200
+    # carrying a bot challenge.
+    "<title>Missing Key</title>",
+    "Invalid Key",
 )
 
 

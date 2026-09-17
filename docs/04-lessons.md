@@ -474,3 +474,41 @@ newer names. **And a status code is a claim about a request, not about the
 response body** — this is the fourth defect in a week where data was present
 and meant something other than it appeared.
 **Status:** active.
+
+### 2026-09-17 — Promoting sources on a 200 would have repeated the whole week's mistake
+**Evidence:** the allowlist opened and all fourteen proposed hosts returned
+HTTP 200. Promoting there would have been the same error that made
+`www.bls.gov` sit green for two sessions. Each was verified a second time
+against the data it is supposed to carry, and one failed:
+
+- `api.census.gov` answers **200 with an HTML "Missing Key" page**. It needs a
+  free API key. Dropped rather than keyed, because FRED already serves the
+  same retail-sales series (`RSAFS`) without one.
+- The other thirteen parsed: 11 XBRL facts from `data.sec.gov`, 3,116 rows
+  from FRED, CFTC and Treasury JSON, and 10-49 items from each of the seven
+  RSS feeds.
+
+The RSS bet paid off. Every feed serves us where the equivalent HTML page
+serves a bot wall — BBC, NPR, Guardian, Fox Business, The Hill, Cointelegraph,
+Decrypt. Feeds are built for machines; the pages are defended against them.
+
+**FRED is the single biggest gain.** It carries the jobless-claims print that
+`www.dol.gov` refuses us (196,000 for the week ending 2026-09-12) plus DGS10,
+T10Y2Y, the high-yield spread, CPI, unemployment and VIX — keyless, no wall.
+`adapters/fred.py` makes it usable rather than merely reachable, and every
+reading carries its observation date and a staleness count, because a macro
+number without its date reads as sourced while being stale, which is worse
+than no number at all.
+
+**Change:** thirteen promoted — five structured-data sources to `primary`, EIA
+to `optional`, seven feeds to a rebuilt `news` tier. "Missing Key" and
+"Invalid Key" joined the challenge markers, so a 200 carrying an error page is
+caught the same way a 200 carrying a bot challenge is.
+
+**Lesson for future rules:** there are three states, not two — *reachable*,
+*usable*, and *used*. This week found failures at all three: hosts that
+answered but served walls, data that parsed but meant something else (IEX
+volume, one-bar series), and a screen that existed but nothing called. Clearing
+one does not clear the next. **Verify against the thing you actually want out
+of it, then check that something actually asks.**
+**Status:** active.

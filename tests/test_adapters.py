@@ -359,3 +359,56 @@ class TestPreflightDataPrecedence(unittest.TestCase):
             self.assertIn("DISAGREES", detail)
         finally:
             marketdata.cross_check = original
+
+
+class TestFredAdapter(unittest.TestCase):
+    """A macro number without its date reads as sourced while being stale."""
+
+    def _stub(self, csv):
+        from adapters import fred
+        original = fred._fetch
+        fred._fetch = lambda sid, timeout=30: csv
+        return fred, original
+
+    def test_parses_observations_oldest_first(self):
+        fred, original = self._stub(
+            "observation_date,ICSA\n2026-09-05,201000\n2026-09-12,196000\n")
+        try:
+            rows = fred.series("ICSA")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[-1], (dt.date(2026, 9, 12), 196000.0))
+        finally:
+            fred._fetch = original
+
+    def test_missing_values_are_dropped_not_zeroed(self):
+        """FRED writes an unreported observation as '.'.
+
+        Reading that as 0.0 turns a gap into a reading of zero, which for a
+        credit spread or a policy rate is not a small error.
+        """
+        fred, original = self._stub(
+            "observation_date,X\n2026-09-05,2.70\n2026-09-08,.\n2026-09-12,2.75\n")
+        try:
+            rows = fred.series("X")
+            self.assertEqual([v for _, v in rows], [2.70, 2.75])
+        finally:
+            fred._fetch = original
+
+    def test_an_all_missing_series_raises_rather_than_returning_empty(self):
+        fred, original = self._stub("observation_date,X\n2026-09-05,.\n")
+        try:
+            with self.assertRaises(AdapterError):
+                fred.series("X")
+        finally:
+            fred._fetch = original
+
+    def test_snapshot_reports_staleness(self):
+        fred, original = self._stub(
+            "observation_date,ICSA\n2020-01-01,100\n")
+        try:
+            snap = fred.snapshot(["ICSA"])
+            self.assertEqual(snap["ICSA"]["as_of"], "2020-01-01")
+            self.assertGreater(snap["ICSA"]["stale_days"], 1000)
+            self.assertIn("jobless", snap["ICSA"]["name"])
+        finally:
+            fred._fetch = original
