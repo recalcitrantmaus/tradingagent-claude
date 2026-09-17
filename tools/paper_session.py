@@ -34,7 +34,22 @@ from engine.risk import RiskOfficer, OrderProposal, State
 from tools import state
 from tools.review import closed_trades
 
-DEFAULT_SYMBOLS = ["F", "SOFI", "PLTR", "NIO", "RIOT", "HOOD"]
+# Kept only as the emergency fallback when data/universe.json is absent. Six
+# hardcoded tickers were the real reason two sessions "found no setup": the
+# screen was not thin, the candidate list was. See tools/screen.py.
+FALLBACK_SYMBOLS = ["F", "SOFI", "PLTR", "NIO", "RIOT", "HOOD"]
+
+
+def default_symbols() -> List[str]:
+    """The committed universe, or the six-name fallback with a loud warning."""
+    try:
+        from tools.screen import load_universe
+        return [r["symbol"] for r in load_universe()["symbols"]]
+    except SystemExit:
+        print("!! no data/universe.json — falling back to six hardcoded tickers. "
+              "This is not a universe. Run: python3 -m tools.screen "
+              "--build-universe", file=sys.stderr)
+        return list(FALLBACK_SYMBOLS)
 PLAN_DIR = Path(__file__).resolve().parents[1] / "state" / "plans"
 BRIEF_DIR = Path(__file__).resolve().parents[1] / "state" / "briefs"
 
@@ -93,7 +108,7 @@ def main() -> int:
     g.add_argument("--dry-run", action="store_true", default=True)
     g.add_argument("--submit", action="store_true",
                    help="actually send to the Alpaca PAPER endpoint")
-    ap.add_argument("--symbols", default=",".join(DEFAULT_SYMBOLS))
+    ap.add_argument("--symbols", default="")
     args = ap.parse_args()
 
     today = dt.date.today()
@@ -167,7 +182,8 @@ def main() -> int:
         print(f"   {limits.reason}")
 
     # ---- 4. proposals: a written plan wins, even when it is empty ----
-    symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    symbols = ([s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+               or default_symbols())
     planned = propose_from_plan(today)
     if planned is None:
         proposals = propose_mechanical(adapter, symbols)

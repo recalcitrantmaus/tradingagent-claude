@@ -320,3 +320,47 @@ merely being read badly — that is not caution, it is a parsing bug wearing
 caution's clothes. Distinguish "I cannot tell what this says" from "I am
 reading the wrong part of it."
 **Status:** active.
+
+### 2026-09-17 — "No setup today" was a six-ticker list, not a market condition
+**Evidence:** two sessions reported finding nothing and set posture partly on
+it. The runner's own candidate list was `DEFAULT_SYMBOLS = ["F", "SOFI",
+"PLTR", "NIO", "RIOT", "HOOD"]` — six tickers, hardcoded — and the 85-name
+screen quoted in the briefs existed only inside a session, reproducible from
+nothing. The open question was whether an affordable universe is structurally
+too thin for a 20-day breakout to fire. It is not, and the measurement was not
+close:
+
+| | |
+|---|---|
+| US equities, active and tradable | 11,833 |
+| Passing $3-$75 and the liquidity floor | **522** |
+| Universe taken (top 150 by dollar volume) | 150 |
+| Sessions in the last 60 with ≥1 breakout | **59** |
+| Total signals over 60 sessions | 551 (9.3 per firing day) |
+| Breakouts on 2026-09-17, the day a brief said none | **6** |
+
+The strategy fires almost every day. Two empty sessions were a sampling
+artifact of a six-name list.
+
+Building the universe surfaced a second defect of the same family as the
+`bars()` and 403 bugs — data present, meaning something other than it appears.
+A $25M dollar-volume floor passed **14 names out of 11,833**, because Alpaca's
+free feed reports IEX prints only: Ford showed 1.7M shares against Yahoo's
+45.8M consolidated, about 4%. The floor was silently demanding ~$600M of real
+volume. It is now named in IEX units, calibrated against a measured ratio, and
+documented as coarse.
+
+**Change:** `tools/screen.py` builds the universe from explicit, named criteria
+and commits it to `data/universe.json`, screens it, and measures the base rate.
+`paper_session` reads that universe; the six tickers remain only as a fallback
+that warns loudly that it is not a universe. Ten tests, including one that
+fails if the committed universe shrinks back toward a handful of names.
+
+**Lesson for future rules:** an empty result is a claim about the world, and it
+inherits every assumption in the thing that produced it. "Nothing is breaking
+out" was really "nothing among these six is breaking out", and the difference
+never reached the brief because the candidate list was a constant in a module
+nobody re-read. **Before trusting a negative, state the denominator out loud.**
+A screen that can veto a trade belongs in the repository with a test, so the
+denominator is a committed fact rather than a sentence in a report.
+**Status:** active.
