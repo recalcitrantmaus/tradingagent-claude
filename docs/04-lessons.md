@@ -364,3 +364,41 @@ nobody re-read. **Before trusting a negative, state the denominator out loud.**
 A screen that can veto a trade belongs in the repository with a test, so the
 denominator is a committed fact rather than a sentence in a report.
 **Status:** active.
+
+### 2026-09-17 — The submit path works; fractional sizing cannot carry a stop
+**Evidence:** after two sessions the order path had still never executed, so
+`AlpacaAdapter.submit` was untested against a real broker — a mechanical risk
+independent of any strategy, and one the first real trade would have
+discovered unattended. `tools/smoke_submit.py` placed one bracket order priced
+15% below the market so it could not fill, then cancelled it.
+
+| Probe | Result |
+|---|---|
+| Whole-share bracket | **ACCEPTED**, `order_class=bracket`, **2 legs**: stop 10.95 and target 13.98 |
+| Fractional 0.5, bracket | **REJECTED** — `42210000: fractional orders must be simple orders` |
+
+Nothing filled, nothing was left resting, no position was taken, and
+`state/fills.jsonl` still does not exist. The account reads $300.00 flat.
+
+Two things settled. The stop really does attach atomically — the design was
+right and is now demonstrated, not assumed. And **the ~$75 affordability
+ceiling cannot be lifted by enabling fractional shares**, which had looked like
+the obvious way to widen a $300 account's universe: Alpaca will not attach
+protective legs to a fractional order, so a fractional entry is an entry
+without a stop. That is the one thing this system will not do, and the
+constraint is now a measured fact rather than an assumption.
+
+**Change:** `tools/smoke_submit.py` is committed and re-runnable. It refuses
+unless the market is open and the account is flat, prices the order where it
+cannot fill, cancels in a `finally`, and writes nothing to the ledger or the
+fill log — a rehearsal must not be able to contaminate the record it exists to
+protect. Re-run it before Phase 3 against Robinhood.
+
+**Lesson for future rules:** an untested write path is not a neutral gap, it is
+a scheduled surprise, and the cheapest moment to find out is the one where
+nothing is at stake. Test it deliberately rather than waiting for a real trade
+to do it for you. **And when a constraint looks arbitrary, check whether the
+alternative costs something you had decided was non-negotiable** — "just enable
+fractional shares" would have quietly traded the atomic stop for a wider
+universe, and nobody would have noticed until a gap.
+**Status:** active.
