@@ -21,7 +21,10 @@ import urllib.request
 from engine.market import Bar
 from .base import AdapterError
 
-UA = "Mozilla/5.0 (X11; Linux x86_64)"
+# One User-Agent for the whole agent. A second, different one here is how
+# a source ends up refusing one code path and serving another.
+from tools.netcheck import user_agent as _user_agent
+UA = _user_agent()
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart"
 COINGECKO = "https://api.coingecko.com/api/v3"
 

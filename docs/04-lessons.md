@@ -402,3 +402,34 @@ alternative costs something you had decided was non-negotiable** — "just enabl
 fractional shares" would have quietly traded the atomic stop for a wider
 universe, and nobody would have noticed until a gap.
 **Status:** active.
+
+### 2026-09-17 — The keyless fallback could cancel a trading day
+**Evidence:** preflight's `live data` check called Yahoo alone. Yahoo returned
+HTTP 429 and preflight exited non-zero, which means DO NOT TRADE. Observed
+directly — three consecutive runs, two of them red, with every other check
+green and Alpaca answering normally the whole time.
+
+That inverts the documented precedence. `CLAUDE.md` puts Alpaca first and
+describes Yahoo as "keyless, undocumented, fine as a cross-check, never the
+sole basis for a trade" — and the gate was built on the cross-check.
+
+**Change:** Alpaca decides; Yahoo is compared when it answers and reported
+absent when it does not. A disagreement over 50bps is surfaced loudly, because
+a silent disagreement between two sources is worth more than either number
+alone. Two tests pin both halves.
+
+Two smaller things fell out of the same pass. `adapters/marketdata.py` was
+sending `Mozilla/5.0 (X11; Linux x86_64)` — impersonating a browser, which is
+both dishonest and useless here, since dol.gov *refuses* browser UAs and Yahoo
+serves the honest one identically. There is now one User-Agent for the whole
+agent, and a test that fails if a second one appears. And `home.treasury.gov`
+was reported blocked when it was merely slow: the probe path was a 404 and the
+host takes 10-19s against a 12s timeout.
+
+**Lesson for future rules:** rank your data sources, then check that the code
+agrees with the ranking. Precedence written in a document and precedence
+encoded in a gate had drifted apart, and the drift only showed up because a
+third-party rate limiter happened to fire on a day someone was watching.
+**A dependency you would never trade on is still a dependency that can stop
+you trading.**
+**Status:** active.

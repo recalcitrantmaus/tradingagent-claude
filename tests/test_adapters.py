@@ -260,15 +260,41 @@ class TestNetcheckHonesty(unittest.TestCase):
             urllib.error.HTTPError("https://example.gov/x", 401, "Unauthorized", {}, None))
         self.assertTrue(ok)
 
-    def test_user_agent_never_defaults_to_a_personal_contact(self):
+    def test_user_agent_always_carries_a_contact(self):
+        """SEC, BLS and DOL refuse any UA without an address in parentheses.
+
+        They check only the shape — a fake address is accepted — so this
+        asserts a contact is present, and the choice of a real one is a
+        separate, deliberate commitment recorded in DEFAULT_CONTACT.
+        """
         import os
         from tools import netcheck
         saved = os.environ.pop("TRADING_AGENT_CONTACT", None)
         try:
-            self.assertNotIn("@", netcheck.user_agent())
+            ua = netcheck.user_agent()
+            self.assertIn("@", ua, "a UA with no contact is refused by SEC/BLS/DOL")
+            self.assertIn(netcheck.DEFAULT_CONTACT, ua)
         finally:
             if saved is not None:
                 os.environ["TRADING_AGENT_CONTACT"] = saved
+
+    def test_user_agent_does_not_impersonate_a_browser(self):
+        """adapters/marketdata.py used to send Mozilla/5.0.
+
+        Spoofing is both dishonest and ineffective here: a browser UA is
+        refused by dol.gov, and Yahoo serves the honest one identically.
+        """
+        from tools import netcheck
+        from adapters import marketdata
+        for ua in (netcheck.user_agent(), marketdata.UA):
+            self.assertNotIn("Mozilla", ua)
+            self.assertIn("tradingagent-claude", ua)
+
+    def test_one_user_agent_across_the_agent(self):
+        """Two different UAs is how one source refuses one code path only."""
+        from tools import netcheck
+        from adapters import marketdata
+        self.assertEqual(marketdata.UA, netcheck.user_agent())
 
     def test_user_agent_carries_the_configured_contact(self):
         import os
@@ -282,3 +308,37 @@ class TestNetcheckHonesty(unittest.TestCase):
                 os.environ.pop("TRADING_AGENT_CONTACT", None)
             else:
                 os.environ["TRADING_AGENT_CONTACT"] = saved
+
+
+class TestPreflightDataPrecedence(unittest.TestCase):
+    """The fallback must never be able to cancel a trading day."""
+
+    def test_cross_check_failure_does_not_block(self):
+        from adapters import marketdata
+        from tools import preflight_phase2 as pf
+        original = marketdata.cross_check
+
+        def boom(*a, **kw):
+            raise AdapterError("HTTP 429")
+        marketdata.cross_check = boom
+        try:
+            check = next(fn for name, fn, _ in pf.CHECKS if name == "live data")
+            ok, detail = check()
+            self.assertTrue(ok, "a 429 from the keyless fallback is not a stop")
+            self.assertIn("cross-check unavailable", detail)
+        finally:
+            marketdata.cross_check = original
+
+    def test_a_cross_check_disagreement_is_surfaced(self):
+        """50bps apart means stand down on that symbol; it must not be silent."""
+        from adapters import marketdata
+        from tools import preflight_phase2 as pf
+        original = marketdata.cross_check
+        marketdata.cross_check = lambda *a, **kw: {
+            "agree": False, "diff_bps": 250.0}
+        try:
+            check = next(fn for name, fn, _ in pf.CHECKS if name == "live data")
+            _, detail = check()
+            self.assertIn("DISAGREES", detail)
+        finally:
+            marketdata.cross_check = original

@@ -123,14 +123,46 @@ def _state():
     return rs == "NORMAL", f"risk state {rs}, mode {d.get('mode')}"
 
 
-@check("live data", "Check netcheck; a DEGRADED source is unavailable.")
+@check("live data",
+       "Alpaca bars are the primary source and the only one that gates "
+       "trading. If Alpaca itself is failing, do not trade — every stop and "
+       "every size is computed from this series.")
 def _data():
+    """Gate on Alpaca. Treat Yahoo as the cross-check it is.
+
+    This used to call Yahoo alone, so a 429 from a keyless, undocumented
+    endpoint exited non-zero and meant DO NOT TRADE for the day. That inverts
+    the documented precedence — CLAUDE.md puts Alpaca first and calls Yahoo
+    "fine as a cross-check, never the sole basis for a trade" — and it makes a
+    rate limit on the fallback able to cancel a trading session.
+
+    So: Alpaca decides. Yahoo is compared when it answers, because a silent
+    disagreement between two sources is worth more than either number alone,
+    and is simply reported absent when it does not.
+    """
     try:
-        from adapters.marketdata import daily_bars
-        b = daily_bars("SPY", rng="1mo")
-        return True, f"SPY {len(b)} bars through {b[-1].date}, last {b[-1].close:.2f}"
+        from adapters.alpaca import AlpacaAdapter
+        rows = AlpacaAdapter(live=False).bars("SPY", limit=25)
+        if len(rows) < 20:
+            return False, (f"Alpaca returned only {len(rows)} bars for SPY — "
+                           f"too short to compute a 20-day lookback")
+        last = rows[-1]
     except Exception as e:
-        return False, str(e)[:110]
+        return False, f"Alpaca bars unavailable: {str(e)[:100]}"
+
+    note = ""
+    try:
+        from adapters.marketdata import cross_check
+        c = cross_check("SPY", last["close"])
+        note = (f", cross-check {c['diff_bps']:.1f}bps"
+                if c.get("agree") else
+                f", !! CROSS-CHECK DISAGREES by {c['diff_bps']:.1f}bps — "
+                f"stand down on this symbol")
+    except Exception as e:
+        note = f", cross-check unavailable ({type(e).__name__}) — not a blocker"
+
+    return True, (f"SPY {len(rows)} bars through {last['date']}, "
+                  f"last {last['close']:.2f}{note}")
 
 
 def main() -> int:
