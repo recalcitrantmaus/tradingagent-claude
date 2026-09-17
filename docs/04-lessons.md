@@ -253,3 +253,70 @@ and documented as binding, and none of that made it a control. **A rule that
 lives only in prose is a preference.** If it protects capital it belongs in
 `engine/`, with a test, or it is not real.
 **Status:** active.
+
+### 2026-09-17 — Two primary sources were returning nothing, and preflight called it green
+**Evidence:** `www.sec.gov` and `www.bls.gov` answered HTTP 403 to every
+request this agent made. `netcheck.probe` caught the `HTTPError` and returned
+`True, "HTTP 403 (host answered — network is open)"`, so both sat green in
+every preflight while serving the brief nothing. The module's own header says
+403 should be reported DEGRADED; the code did the opposite. Two sessions built
+a thesis without SEC or BLS and neither said so, because nothing told them.
+
+The cause was ours, not the allowlist. Measured across UAs:
+
+| User-Agent sent | dol.gov | bls.gov | sec.gov |
+|---|---|---|---|
+| (none) | 200 | 403 | 403 |
+| `tradingagent-claude` | 403 | 403 | 403 |
+| `tradingagent-claude/1.0 (+<repo url>)` | 200 | 403 | 403 |
+| `tradingagent-claude (<an email>)` | **200** | **200** | **200** |
+
+Only a contact-shaped UA carrying an email satisfies all three, which is what
+SEC's access policy asks for by name. A browser UA was tried and is *worse*
+(403 from dol.gov), so impersonation is neither necessary nor effective.
+
+**Change:** a 403 is now DEGRADED, not ok — 401 and 429 still pass, because
+lacking a key is not a closed network. `netcheck.user_agent()` reads
+`TRADING_AGENT_CONTACT` and **never defaults to a personal address**: that
+string travels in an outbound header to third parties on every request, so
+whose address it is must be a deliberate choice, not a default someone
+inherits. Unset, SEC/BLS/DOL refuse us and netcheck says so.
+
+Fixing the honesty immediately exposed a second defect: netcheck counted
+`primary` failures as blocking, so preflight went red and would have stopped
+Friday trading altogether. A degraded primary source is a reason to trust the
+day's thesis less, not a reason to stop — `required` (broker, market data) and
+`primary` (SEC, BLS, Treasury) now exit differently, and preflight reports
+`READY, WITH DEGRADATION`, naming each source the brief must record as
+unavailable.
+
+**Lesson for future rules:** a check that cannot fail is not a check. "Host
+answered" was easier to implement than "host served data", and the easier
+question is the one that got asked for weeks. The existing rule — *reachable
+is not usable* — was already written down and still did not stop this, because
+it lived in a docstring rather than in the branch. **And when you make a check
+honest, expect it to fail immediately and expect that to be inconvenient; the
+inconvenience is the finding, but do not let a newly-honest check become a
+blunter instrument than the thing it replaced.**
+**Status:** active.
+
+### 2026-09-17 — The posture parser read the reasoning as the decision
+**Evidence:** `parse()` scanned the whole `## Posture` section and took the
+most conservative token present. A brief that states `RISK_OFF` and then
+argues for it — "this is not a NO_TRADE regime, and plainly not RISK_ON" —
+resolved to `NO_TRADE`, blocking a day the brief had cleared. The 2026-09-17
+brief is exactly that shape and only escaped because its reasoning happened
+not to name another posture.
+
+**Change:** the first line in the section that names **any** posture is the
+decision; lines below it are reasoning and are ignored. Lines with no token
+are skipped, so a preamble is harmless. Two or more tokens on the decision
+line, no token anywhere, or no section at all still fail closed to
+`NO_TRADE` — every failure mode lands in the same safe place.
+
+**Lesson for future rules:** conservative defaults are not free. Failing
+closed is right when the input is genuinely ambiguous, and wrong when it is
+merely being read badly — that is not caution, it is a parsing bug wearing
+caution's clothes. Distinguish "I cannot tell what this says" from "I am
+reading the wrong part of it."
+**Status:** active.

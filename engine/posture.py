@@ -52,11 +52,22 @@ def limits_for(p: Posture) -> PostureLimits:
 def parse(text: str) -> Posture:
     """The posture from a brief's `## Posture` section.
 
-    Anchored on the heading rather than scanning the document: a brief
-    discusses posture in prose ("a reason to downgrade posture", "no entry is
-    authorised while posture is NO_TRADE" in the watchlist), and a keyword
-    search would read those as the decision. Ambiguity inside the section
-    resolves to the most conservative token present.
+    Anchored twice over. First on the heading, because a brief discusses
+    posture in prose ("a reason to downgrade posture"; "no entry is authorised
+    while posture is NO_TRADE" in the watchlist) and a document-wide keyword
+    search reads those as the decision. Then on the section's **first
+    non-empty line**, which is where `premarket-brief` puts the token:
+
+        ## Posture
+        RISK_ON | NEUTRAL | RISK_OFF | NO_TRADE  + the single reason
+
+    Anchoring on the first line rather than scanning the whole section is the
+    stricter reading, and it fixes a real false negative: a section whose
+    reasoning says "we are not in a NO_TRADE regime" would otherwise resolve
+    to NO_TRADE and block a legitimate day. It stays safe because every way of
+    failing lands on NO_TRADE — no line, no token, or more than one token on
+    that line all mean the brief did not state a posture this code can act on,
+    and a posture that cannot be read is not a posture.
     """
     if not text:
         return Posture.NO_TRADE
@@ -69,14 +80,16 @@ def parse(text: str) -> Posture:
     nxt = re.search(r"^\s*#{1,6}\s+\S", rest, re.MULTILINE)
     block = rest[:nxt.start()] if nxt else rest
 
-    found = {p for p in Posture
-             if re.search(rf"\b{p.value}\b", block, re.IGNORECASE)}
-    if not found:
-        return Posture.NO_TRADE
-    for p in _SEVERITY:                      # most conservative wins
-        if p in found:
-            return p
-    return Posture.NO_TRADE
+    for line in block.splitlines():
+        hits = [p for p in Posture
+                if re.search(rf"\b{p.value}\b", line, re.IGNORECASE)]
+        if not hits:
+            continue                 # prose carrying no token: keep looking
+        # The first line that names a posture is the decision. Lines below it
+        # are reasoning, and reasoning routinely names the postures it is
+        # arguing against — that is what must not be read as the decision.
+        return hits[0] if len(hits) == 1 else Posture.NO_TRADE
+    return Posture.NO_TRADE          # no posture stated at all: fail closed
 
 
 def for_date(briefs_dir: Path, day: dt.date) -> tuple[Posture, str]:

@@ -227,3 +227,58 @@ class TestLedgerContinuity(unittest.TestCase):
             self.assertNotIn(f"\n{pattern}", f"\n{ignore}",
                              f"{pattern} must stay tracked or state cannot "
                              f"survive a fresh container")
+
+
+class TestNetcheckHonesty(unittest.TestCase):
+    """A host that answers is not a host that serves data."""
+
+    def _probe_with(self, exc):
+        import urllib.request
+        from tools import netcheck
+        original = urllib.request.urlopen
+
+        def boom(*a, **kw):
+            raise exc
+        urllib.request.urlopen = boom
+        try:
+            return netcheck.probe("example.gov", "/x")
+        finally:
+            urllib.request.urlopen = original
+
+    def test_403_is_degraded_not_ok(self):
+        """www.bls.gov sat green in preflight while returning nothing."""
+        import urllib.error
+        ok, msg = self._probe_with(
+            urllib.error.HTTPError("https://example.gov/x", 403, "Forbidden", {}, None))
+        self.assertFalse(ok, "a 403 means reachable, not usable")
+        self.assertIn("DEGRADED", msg)
+
+    def test_401_still_counts_as_reachable(self):
+        """Missing a key is a credentials problem, not a closed network."""
+        import urllib.error
+        ok, _ = self._probe_with(
+            urllib.error.HTTPError("https://example.gov/x", 401, "Unauthorized", {}, None))
+        self.assertTrue(ok)
+
+    def test_user_agent_never_defaults_to_a_personal_contact(self):
+        import os
+        from tools import netcheck
+        saved = os.environ.pop("TRADING_AGENT_CONTACT", None)
+        try:
+            self.assertNotIn("@", netcheck.user_agent())
+        finally:
+            if saved is not None:
+                os.environ["TRADING_AGENT_CONTACT"] = saved
+
+    def test_user_agent_carries_the_configured_contact(self):
+        import os
+        from tools import netcheck
+        saved = os.environ.get("TRADING_AGENT_CONTACT")
+        os.environ["TRADING_AGENT_CONTACT"] = "someone@example.com"
+        try:
+            self.assertIn("someone@example.com", netcheck.user_agent())
+        finally:
+            if saved is None:
+                os.environ.pop("TRADING_AGENT_CONTACT", None)
+            else:
+                os.environ["TRADING_AGENT_CONTACT"] = saved

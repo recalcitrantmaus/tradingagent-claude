@@ -30,9 +30,30 @@ class TestPostureParsing(unittest.TestCase):
                 "## Watchlist\nNo entry is authorised while posture is NO_TRADE.\n")
         self.assertIs(parse(text), Posture.RISK_ON)
 
-    def test_ambiguity_inside_the_section_resolves_conservatively(self):
+    def test_ambiguity_on_the_decision_line_resolves_conservatively(self):
         self.assertIs(parse("## Posture\nRISK_ON, or arguably NO_TRADE\n"),
                       Posture.NO_TRADE)
+
+    def test_reasoning_below_the_decision_line_is_not_the_decision(self):
+        """The real false negative this parser had to fix.
+
+        A brief states its posture, then argues for it by naming the postures
+        it rejected. Scanning the whole section read those as the decision and
+        resolved to NO_TRADE — blocking a day the brief had cleared. Today's
+        brief is exactly this shape.
+        """
+        text = ("## Posture\nRISK_OFF\n\n"
+                "**Single reason:** conditions to cap risk, not to add it. "
+                "This is not a NO_TRADE regime, and it is plainly not RISK_ON.\n"
+                "## Watchlist\n")
+        self.assertIs(parse(text), Posture.RISK_OFF)
+
+    def test_preamble_without_a_token_is_skipped(self):
+        self.assertIs(parse("## Posture\n\nSee below.\nRISK_ON + reason\n"),
+                      Posture.RISK_ON)
+
+    def test_section_with_no_token_at_all_fails_closed(self):
+        self.assertIs(parse("## Posture\nmaybe tomorrow\n"), Posture.NO_TRADE)
 
     def test_unparseable_and_empty_fail_closed(self):
         for text in ("", "no heading here at all", "## Posture\nmaybe?\n"):

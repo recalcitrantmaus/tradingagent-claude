@@ -65,10 +65,16 @@ def _repository():
 def _network():
     r = subprocess.run([sys.executable, "-m", "tools.netcheck"],
                        cwd=ROOT, capture_output=True, text=True)
-    if r.returncode == 0:
-        return True, "all required and primary hosts reachable"
     blocked = [l.split()[0] for l in r.stdout.splitlines() if " FAIL " in l]
-    return False, f"blocked: {', '.join(blocked[:6])}"
+    if r.returncode != 0:
+        return False, f"REQUIRED host(s) blocked: {', '.join(blocked[:6])}"
+    if blocked:
+        # netcheck exits 0, so nothing required is down. Say it loudly anyway:
+        # these sources will serve the brief nothing, and the brief has to
+        # carry that as an explicit "unavailable" rather than quietly omit it.
+        return True, (f"DEGRADED primary source(s): {', '.join(blocked[:6])} — "
+                      f"record as unavailable in the brief and downgrade posture")
+    return True, "all required and primary hosts reachable"
 
 
 @check("broker credentials",
@@ -129,18 +135,30 @@ def _data():
 
 def main() -> int:
     print("Phase 2 preflight\n" + "=" * 68)
-    failures = []
+    failures, warnings = [], []
     for name, fn, fix in CHECKS:
         try:
             ok, detail = fn()
         except Exception as e:                       # a check must never crash the run
             ok, detail = False, f"{type(e).__name__}: {str(e)[:90]}"
-        print(f"  [{'ok ' if ok else 'XX '}] {name:22} {detail}")
+        warn = ok and detail.startswith("DEGRADED")
+        mark = "XX " if not ok else ("!! " if warn else "ok ")
+        print(f"  [{mark}] {name:22} {detail}")
         if not ok:
             failures.append((name, fix))
+        elif warn:
+            warnings.append((name, detail))
 
     print("=" * 68)
     if not failures:
+        if warnings:
+            print("READY, WITH DEGRADATION — these must reach the brief:\n")
+            for name, detail in warnings:
+                print(f"  {name}: {detail}")
+            print("\nProceed, but the thesis is worth less than a clean day's. "
+                  "Say which sources\nwere unavailable, by name, and downgrade "
+                  "posture. Do not fill a gap from memory.")
+            return 0
         print("READY. Start with the premarket-brief skill.")
         return 0
     print(f"NOT READY — {len(failures)} check(s) failed:\n")
