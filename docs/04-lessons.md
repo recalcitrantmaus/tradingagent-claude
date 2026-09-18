@@ -990,3 +990,48 @@ body. Each was a real value, correctly read, answering a question it was not
 about. **When a control reads a variable, check that the variable can vary with
 the thing being checked.**
 **Status:** active.
+
+### 2026-09-18 — A short entry would bypass the entire risk gate
+**Evidence:** asked whether the agent should run a puts or downside strategy
+to answer Q3's negative expectancy, I checked what `RiskOfficer.evaluate`
+does with a sell. It is the first four lines:
+
+```python
+c, d = self.cfg, Decision(approved=True)
+if p.side != "buy":
+    d.reasons.append("exits are always permitted")
+    return d
+```
+
+**Any** proposal that is not a buy returns APPROVED immediately — before the
+account-state check, before the stop requirement, before sizing, before every
+cap. Nothing anywhere in `engine/` or `tools/` distinguishes *sell to close*
+from *sell to open*. A grep for `short`, `sell_to_open` or a side-aware entry
+path returns nothing but unrelated matches.
+
+Today that assumption holds, because the system is long-only and every sell
+really is an exit. It stops holding the moment anyone adds a downside
+strategy — a short entry, or a long put, presents as a sell and is waved
+through with no stop, no size, no state check. In practice the `Decision`
+carries `qty = 0.0`, so the broker would reject the resulting ticket; but the
+gate said **yes**, and a control that approves an unstopped opening trade and
+relies on a downstream system to catch it is not a control.
+
+This is the same shape as the rest of the week: the code is correct only under
+a premise that is not written down and not enforced. "Exits are always
+permitted" is true. "Every sell is an exit" is the premise, and it is a
+property of the current strategy rather than of the system.
+
+**Change:** none yet — recorded before any downside work begins, not after.
+The fix is that `OrderProposal` must carry intent (open vs close) rather than
+inferring it from side, and only a *closing* sell short-circuits the gate. An
+opening sell must pass a stop requirement — an upside stop — and its own
+sizing path, because a short's risk is not bounded by its notional the way a
+long's is, and none of the current caps model that.
+
+**Lesson for future rules:** when a branch exists because of something that
+happens to be true about today's strategy, write the premise into the branch,
+not into the reader's head. **`if side != "buy"` encodes "every sell is an
+exit" without ever saying so** — and the cost of the unstated premise is paid
+by whoever first adds the feature that breaks it.
+**Status:** active.
