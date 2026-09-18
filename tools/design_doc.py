@@ -171,6 +171,28 @@ DECISIONS = [
   "missing stop worse, not better, for an agent that wakes on a schedule.",
   "docs/04-lessons.md 2026-09-18",
   "No code change — D-03 already covers it", "Active"),
+ ("D-23", "2026-09-18", "Strategy",
+  "Measure which of the three diagnoses is happening before adjusting any "
+  "threshold because nothing is trading",
+  "'The strategy finds nothing', 'the account cannot take what it finds' and "
+  "'the plan refuses what it could take' produce an identical symptom — an "
+  "empty plan — and have three different fixes. Measured: 533 signals in 60 "
+  "sessions, 507 approved by the engine at $300, tradeable on 98% of days. "
+  "The universe was never the constraint; the plan is.",
+  "docs/04-lessons.md 2026-09-18; tools.screen --replay 60",
+  "tools/screen.py replay(), which calls RiskOfficer.evaluate itself",
+  "Active"),
+ ("D-24", "2026-09-18", "Strategy",
+  "UNRESOLVED: mechanical vs structural target. Deferred to weekly-review at "
+  "Opus/xhigh",
+  "close + 3*ATR is 2.0R by construction and can never fail the expected-R "
+  "gate; a structural target produced 0.3-0.5R on all three of Friday's "
+  "candidates and zero trades in three sessions. Both cannot govern. This "
+  "decides what the strategy IS and is not a threshold to nudge on a quiet "
+  "morning.",
+  "docs/04-lessons.md 2026-09-18",
+  "Nothing yet — deliberately open",
+  "OPEN"),
  ("D-22", "2026-09-18", "Carry",
   "Positions are carried overnight by design, not flattened daily",
   "Target is entry + 3*ATR, a multi-day objective, and PDT allows only 3 day "
