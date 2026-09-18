@@ -596,3 +596,51 @@ a rule, and it breaks the *sizing* rules, not this one. **For every rule in
 the constitution, name the simulated arm that violates it. If there isn't one,
 the suite is not evidence about that rule.**
 **Status:** active.
+
+### 2026-09-18 — The fill log recorded intent, not fills
+**Evidence:** looking for a way to test the live submit path, I read what
+`paper_session --submit` does *after* `adapter.submit` returns:
+
+```python
+result = adapter.submit(ticket)
+state.append_fill({..., "qty": d.qty, "price": p.price, ...})
+```
+
+It writes a fill for every accepted order, unconditionally, at the **proposed**
+price and the **approved** quantity, with no check that anything filled. These
+are bracket *limit* orders. A limit at the last trade can rest all day and
+expire unfilled, and that order would still have been written to
+`state/fills.jsonl` as an entry.
+
+That log is not cosmetic. It is the input to `closed_trades()`, which is the
+input to `set_track_record()`, which is the input to the option-unlock gate:
+30 closed trades at >= +0.10R. So an order that never traded would have
+counted toward unlocking the instrument that simulation found negative at
+every capital level, and the phantom entry would have sat at the head of that
+symbol's FIFO queue waiting to pair against the next real sell and corrupt its
+entry price and R.
+
+The irony is that `closed_trades` already carries a careful docstring about
+exactly this damage — written to explain why *dry-run* rows are filtered. The
+same damage through the live path went unnoticed, because the live path had
+never once run. Two sessions of empty plans meant the bug could not surface.
+
+**Change:** `AlpacaAdapter.order()` and `await_fill()` poll a submitted order
+to a terminal state; `paper_session` now records only what the broker reports
+filled, at the broker's `filled_avg_price` and `filled_qty`, and prints the
+realised slippage against the proposal. A partial fill records the part that
+filled and carries the remainder as resting. An unfilled or rejected order
+writes nothing and is carried into `ledger["working_orders"]` for
+session-close to reconcile. The decision is a pure function, `fill_record()`,
+so it is testable without a broker: ten new tests in
+`tests/test_posture_and_fills.py` cover working, accepted, partially-filled,
+rejected, zero-price and dry-run outcomes. 110 tests pass.
+
+**Lesson for future rules:** "the submit path is untested" was the wrong frame,
+and it hid this. The *adapter* submit path was proven on 2026-09-17 by
+`smoke_submit` — bracket accepted, two legs attached. What had never run was
+everything downstream of it, and that is where the defect was. A write path
+has two halves, sending and recording, and the second one is the half that
+lies quietly. **When something is "untested", name the specific line that has
+never executed, not the feature.**
+**Status:** active.

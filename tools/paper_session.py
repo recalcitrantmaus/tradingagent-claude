@@ -34,6 +34,11 @@ from engine.risk import RiskOfficer, OrderProposal, State
 from tools import state
 from tools.review import closed_trades
 
+# How long to wait for a marketable limit to resolve before calling it
+# resting. Long enough for a normal fill, short enough that a session is
+# not held open by an order that is plainly not going to trade.
+FILL_WAIT_SECONDS = 30.0
+
 # Kept only as the emergency fallback when data/universe.json is absent. Six
 # hardcoded tickers were the real reason two sessions "found no setup": the
 # screen was not thin, the candidate list was. See tools/screen.py.
@@ -100,6 +105,34 @@ def propose_mechanical(adapter, symbols: List[str]) -> List[OrderProposal]:
                 stop=max(px - 1.5 * a, px * 0.92), target=px + 3.0 * a,
                 thesis=f"20-day breakout over {prior_high:.2f}, ATR {a:.2f}"))
     return out
+
+
+
+REFUSED_STATUSES = ("rejected", "canceled", "cancelled", "expired")
+
+
+def fill_record(p, qty_approved: float, ticket, order: Dict) -> Optional[Dict]:
+    """The fill-log row an order outcome earns, or None if it earns nothing.
+
+    Separated from main() so the rule can be tested without a broker. The rule
+    is one sentence: **only an actual fill is written, and it is written at the
+    price and quantity the broker reports, never at the proposed ones.**
+
+    An order that is still working is not a position. Writing it would put a
+    phantom entry at the head of that symbol's FIFO queue in closed_trades(),
+    where it corrupts the entry price and R of the next real trade in that
+    symbol, and it would count toward the 30 closed trades and the +0.10R
+    expectancy that unlock the option sleeve. The dry-run path already
+    documents that damage; this is the same damage through the live path.
+    """
+    qty = float(order.get("filled_qty") or 0)
+    px = order.get("filled_avg_price")
+    if qty <= 0 or not px:
+        return None
+    return {"symbol": p.symbol, "side": "buy", "qty": qty, "price": float(px),
+            "stop": p.stop, "fees": 0.0, "multiplier": p.multiplier,
+            "reason": "entry", "thesis": p.thesis, "dry_run": False,
+            "order_id": order.get("id"), "limit_price": ticket.limit_price}
 
 
 def main() -> int:
@@ -199,7 +232,8 @@ def main() -> int:
 
     # ---- 5. gate, then route ----
     print(f"\n{len(proposals)} proposal(s):")
-    sent = 0
+    sent = filled = working = refused = 0
+    resting: List[Dict] = []
     for p in proposals:
         d = ro.evaluate(p, pf, prices, today)
         if not d.approved:
@@ -213,16 +247,61 @@ def main() -> int:
             thesis=p.thesis)
         print(f"  APPROVE {p.symbol}: {d.reasons[-1]}")
         result = adapter.submit(ticket)
-        state.append_fill({"symbol": p.symbol, "side": "buy", "qty": d.qty,
-                           "price": p.price, "stop": p.stop, "fees": 0.0,
-                           "multiplier": p.multiplier, "reason": "entry",
-                           "thesis": p.thesis, "dry_run": bool(result.get("dry_run"))})
         sent += 1
+
+        # A dry run sends nothing, so there is nothing to wait for. The row is
+        # still written, tagged, because the preview log is how a no-trade day
+        # proves what it would have done; closed_trades() drops it.
+        if result.get("dry_run"):
+            state.append_fill({"symbol": p.symbol, "side": "buy", "qty": d.qty,
+                               "price": p.price, "stop": p.stop, "fees": 0.0,
+                               "multiplier": p.multiplier, "reason": "entry",
+                               "thesis": p.thesis, "dry_run": True})
+            continue
+
+        # Submitting is not filling. Record what the broker actually did.
+        oid = result.get("id")
+        o = adapter.await_fill(oid, seconds=FILL_WAIT_SECONDS)
+        status = (o.get("status") or "unknown").lower()
+        qty, px = o.get("filled_qty") or 0.0, o.get("filled_avg_price")
+        o.setdefault("id", oid)
+        row = fill_record(p, d.qty, ticket, o)
+        if row is not None:
+            state.append_fill(row)
+            filled += 1
+            slip = (px - p.price) / p.price if p.price else 0.0
+            print(f"    FILLED {qty:g} @ {px:.4f} "
+                  f"(proposed {p.price:.4f}, slippage {slip:+.2%})")
+            if qty < d.qty:
+                print(f"    partial: {d.qty - qty:g} of {d.qty:g} still working")
+                resting.append({"symbol": p.symbol, "order_id": oid,
+                                "status": status, "unfilled_qty": d.qty - qty})
+        elif status in REFUSED_STATUSES:
+            refused += 1
+            reason = (o.get("reject_reason") or o.get("status") or "")
+            print(f"    {status.upper()} by the broker — nothing recorded"
+                  f"{': ' + str(reason) if o.get('reject_reason') else ''}")
+        else:
+            working += 1
+            resting.append({"symbol": p.symbol, "order_id": oid,
+                            "status": status, "unfilled_qty": d.qty})
+            print(f"    WORKING (status {status}) after {FILL_WAIT_SECONDS:.0f}s "
+                  f"— no fill, nothing recorded. session-close must reconcile.")
 
     ledger["last_reconciled"] = today.isoformat()
     ledger["peak_equity"] = pf.peak_equity
+    if args.submit:
+        ledger["working_orders"] = resting
     state.save(ledger)
-    print(f"\n{sent} order(s) {'submitted' if args.submit else 'previewed'}")
+    if args.submit:
+        print(f"\n{sent} order(s) submitted: {filled} filled, "
+              f"{working} still working, {refused} refused by the broker")
+        if resting:
+            print("   resting orders carried into the ledger for session-close:")
+            for r in resting:
+                print(f"     {r['symbol']} {r['order_id']} ({r['status']})")
+    else:
+        print(f"\n{sent} order(s) previewed")
     return 0
 
 

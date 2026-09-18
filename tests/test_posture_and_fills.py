@@ -150,3 +150,132 @@ class TestDryRunFillsNeverCount(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+# ---------------------------------------------------------------------------
+# Submitting is not filling.
+# ---------------------------------------------------------------------------
+from adapters.base import OrderTicket
+from engine.risk import OrderProposal as _OP
+from tools.paper_session import fill_record
+
+
+def _proposal():
+    return _OP(symbol="XYZ", asset_class="equity", side="buy",
+               price=10.00, stop=9.20, target=12.00, thesis="test")
+
+
+def _ticket():
+    return OrderTicket(symbol="XYZ", asset_class="equity", side="buy",
+                       qty=7, limit_price=10.00, stop_price=9.20,
+                       take_profit=12.00, thesis="test")
+
+
+class TestOnlyRealFillsAreRecorded(unittest.TestCase):
+    """The fill log is the input to measured expectancy and the option unlock.
+
+    Anything written there that did not actually happen corrupts both, plus
+    the entry price of the next real trade in that symbol via the FIFO pairing
+    in closed_trades(). So the rule is narrow on purpose.
+    """
+
+    def test_a_working_order_writes_nothing(self):
+        o = {"id": "abc", "status": "new", "filled_qty": 0,
+             "filled_avg_price": None}
+        self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))
+
+    def test_an_accepted_but_unfilled_order_writes_nothing(self):
+        for status in ("accepted", "pending_new", "held", "partially_filled"):
+            with self.subTest(status=status):
+                o = {"id": "abc", "status": status, "filled_qty": 0,
+                     "filled_avg_price": None}
+                self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))
+
+    def test_a_rejected_order_writes_nothing(self):
+        o = {"id": "abc", "status": "rejected", "filled_qty": 0,
+             "filled_avg_price": None}
+        self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))
+
+    def test_a_fill_is_recorded_at_the_brokers_price_not_the_proposed_one(self):
+        o = {"id": "abc", "status": "filled", "filled_qty": 7,
+             "filled_avg_price": 10.043}
+        row = fill_record(_proposal(), 7, _ticket(), o)
+        self.assertIsNotNone(row)
+        # 10.00 was the proposal. Recording it would understate slippage and
+        # overstate every R this trade ever produces.
+        self.assertEqual(row["price"], 10.043)
+        self.assertEqual(row["qty"], 7)
+        self.assertEqual(row["stop"], 9.20)
+        self.assertFalse(row["dry_run"])
+        self.assertEqual(row["order_id"], "abc")
+
+    def test_a_partial_fill_records_only_the_part_that_filled(self):
+        o = {"id": "abc", "status": "partially_filled", "filled_qty": 3,
+             "filled_avg_price": 10.01}
+        row = fill_record(_proposal(), 7, _ticket(), o)
+        self.assertEqual(row["qty"], 3)      # not the 7 that was approved
+
+    def test_a_zero_price_fill_is_not_trusted(self):
+        # A filled_avg_price of 0 or None is a broker anomaly, not a free
+        # share. Recording it would divide by zero in R and show infinite edge.
+        for px in (0, None, ""):
+            with self.subTest(px=px):
+                o = {"id": "abc", "status": "filled", "filled_qty": 7,
+                     "filled_avg_price": px}
+                self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))
+
+    def test_the_recorded_row_survives_closed_trades_pairing(self):
+        from tools.review import closed_trades
+        entry = fill_record(_proposal(), 7, _ticket(),
+                            {"id": "a", "status": "filled", "filled_qty": 7,
+                             "filled_avg_price": 10.00})
+        entry["ts"] = "2026-03-02T10:00:00+00:00"
+        exit_ = dict(entry, side="sell", price=11.60,
+                     ts="2026-03-02T14:00:00+00:00")
+        trades = closed_trades([entry, exit_])
+        self.assertEqual(len(trades), 1)
+        # risk = (10.00 - 9.20) * 7 = 5.60; pnl = 1.60 * 7 = 11.20 -> 2.0R
+        self.assertAlmostEqual(trades[0]["R"], 2.0, places=6)
+
+
+class TestAwaitFillSemantics(unittest.TestCase):
+    def test_a_terminal_status_stops_polling_immediately(self):
+        from adapters.alpaca import AlpacaAdapter
+        calls = []
+
+        class Stub(AlpacaAdapter):
+            def __init__(self):
+                pass
+            def order(self, order_id):
+                calls.append(order_id)
+                return {"id": order_id, "status": "filled", "filled_qty": "7",
+                        "filled_avg_price": "10.04"}
+
+        o = Stub().await_fill("abc", seconds=30, interval=5)
+        self.assertEqual(len(calls), 1)          # no sleeping on a done order
+        self.assertTrue(o["resolved"])
+        self.assertEqual(o["filled_qty"], 7.0)   # coerced from the string
+        self.assertEqual(o["filled_avg_price"], 10.04)
+
+    def test_an_order_that_never_resolves_is_reported_unresolved(self):
+        from adapters.alpaca import AlpacaAdapter
+
+        class Stub(AlpacaAdapter):
+            def __init__(self):
+                pass
+            def order(self, order_id):
+                return {"id": order_id, "status": "new", "filled_qty": "0",
+                        "filled_avg_price": None}
+
+        o = Stub().await_fill("abc", seconds=0, interval=0)
+        self.assertFalse(o["resolved"])
+        self.assertEqual(o["filled_qty"], 0.0)
+        self.assertIsNone(o["filled_avg_price"])
+        # and it earns no row
+        self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))
+
+    def test_the_dry_run_adapter_answers_the_same_interface(self):
+        from adapters.alpaca import DryRunAlpaca
+        o = DryRunAlpaca.await_fill(None, "abc")
+        self.assertTrue(o["resolved"])
+        self.assertIsNone(fill_record(_proposal(), 7, _ticket(), o))

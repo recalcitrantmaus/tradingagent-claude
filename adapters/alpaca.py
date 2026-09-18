@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 import datetime as dt
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -95,6 +96,44 @@ class AlpacaAdapter:
     def open_orders(self) -> List[Dict]:
         q = urllib.parse.urlencode({"status": "open"})
         return self._request("GET", f"{self.base}/v2/orders?{q}")
+
+    def order(self, order_id: str) -> Dict:
+        return self._request("GET", f"{self.base}/v2/orders/{order_id}")
+
+    # Terminal in the sense that matters here: the order will not fill later.
+    TERMINAL_STATUSES = {"filled", "canceled", "cancelled", "expired",
+                         "rejected", "done_for_day", "stopped", "suspended"}
+
+    def await_fill(self, order_id: str, seconds: float = 20.0,
+                   interval: float = 2.0) -> Dict:
+        """Poll one order until it resolves, or report it still working.
+
+        Submitting is not filling. A bracket limit sent at the last trade can
+        rest for hours, and an unfilled order is not a position. The caller
+        must not write one to the fill log: it would sit at the head of that
+        symbol's FIFO queue and corrupt the entry price and R of the next real
+        trade, and it would accrue toward the 30 closed trades that unlock the
+        option sleeve. Exactly the damage `closed_trades` already documents
+        for dry-run rows, arriving through the live path instead.
+
+        Returns the order with `filled_qty` and `filled_avg_price` coerced to
+        numbers, plus `resolved`: True once the order reached a terminal
+        state, False if it was still working when the clock ran out.
+        """
+        deadline = time.monotonic() + seconds
+        o: Dict = {}
+        while True:
+            o = self.order(order_id)
+            if (o.get("status") or "").lower() in self.TERMINAL_STATUSES:
+                break
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(interval)
+        o["filled_qty"] = float(o.get("filled_qty") or 0)
+        avg = o.get("filled_avg_price")
+        o["filled_avg_price"] = float(avg) if avg else None
+        o["resolved"] = (o.get("status") or "").lower() in self.TERMINAL_STATUSES
+        return o
 
     def bars(self, symbol: str, limit: int = 250, timeframe: str = "1Day") -> List[Dict]:
         """The most recent `limit` bars, oldest first.
@@ -210,6 +249,12 @@ class DryRunAlpaca(AlpacaAdapter):
         self.sent.append(ticket)
         print(f"[DRY RUN] would submit: {ticket.human()}")
         return {"dry_run": True, "ticket": ticket.human()}
+
+    def await_fill(self, order_id: str, seconds: float = 20.0,
+                   interval: float = 2.0) -> Dict:
+        """Nothing was sent, so nothing can fill. Resolved, with zero filled."""
+        return {"status": "dry_run", "filled_qty": 0.0,
+                "filled_avg_price": None, "resolved": True, "dry_run": True}
 
     def cancel_all(self) -> Dict:
         print("[DRY RUN] would cancel all open orders")
