@@ -17,6 +17,7 @@ must mean the same thing when someone re-reads the decision next week.
 import argparse
 import datetime as dt
 import json
+import statistics
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -187,10 +188,98 @@ def base_rate(adapter, symbols: List[str], sessions: int) -> Dict:
             "busiest": sorted(per_day.items(), key=lambda kv: -kv[1])[:5]}
 
 
+
+def replay(adapter, symbols: List[str], sessions: int, equity: float) -> Dict:
+    """Of the breakouts the screen finds, how many could this account TAKE?
+
+    base_rate() answers whether the strategy fires. This answers the question
+    that actually decides whether the strategy is usable at $300: whether a
+    signal survives whole-share rounding, the 25% single-position cap, the 2%
+    risk budget and the cash reserve.
+
+    It pushes each historical signal through `RiskOfficer.evaluate` itself
+    rather than restating the arithmetic, so the answer cannot drift away from
+    the engine when the engine changes. The proposal shape is the mechanical
+    one (`target = close + 3*ATR` against `stop = max(close - 1.5*ATR,
+    close*0.92)`), which is the shape `paper_session.propose_mechanical`
+    builds. Note what that implies for the expected-R gate: 3*ATR against at
+    most 1.5*ATR is 2.0R by construction, so a mechanical proposal can never
+    fail it. A plan that sets a STRUCTURAL target — the next real resistance —
+    is a different distribution entirely, and this replay says nothing about it.
+    """
+    import datetime as _dt
+    from engine.config import DEFAULT as _CFG
+    from engine.portfolio import Portfolio as _PF
+    from engine.risk import RiskOfficer as _RO, OrderProposal as _OP
+
+    need = sessions + LOOKBACK + ATR_PERIOD + 5
+    signals = []
+    scanned = 0
+    for sym in symbols:
+        try:
+            bars = _bars(adapter.bars(sym, limit=need))
+        except AdapterError:
+            continue
+        if len(bars) < LOOKBACK + ATR_PERIOD + 2:
+            continue
+        scanned += 1
+        start = max(LOOKBACK + ATR_PERIOD, len(bars) - sessions)
+        for i in range(start, len(bars)):
+            if not breakout_at(bars, i):
+                continue
+            a = atr(bars[max(0, i - ATR_PERIOD - 1):i + 1], ATR_PERIOD)
+            if not a:
+                continue
+            px = bars[i].close
+            signals.append({"symbol": sym, "date": bars[i].date.isoformat(),
+                            "price": px, "atr": a,
+                            "stop": max(px - 1.5 * a, px * 0.92),
+                            "target": px + 3.0 * a})
+
+    ro = _RO(_CFG)
+    today = _dt.date.today()
+    ro.start_day(today, equity)
+    approved, rejects, days = [], {}, {}
+    for s in signals:
+        pf = _PF(equity)
+        pf.cash = equity
+        d = ro.evaluate(_OP(symbol=s["symbol"], asset_class="equity",
+                            side="buy", price=s["price"], stop=s["stop"],
+                            target=s["target"], thesis="replay"),
+                        pf, {}, today)
+        if d.approved:
+            s["qty"] = d.qty
+            s["risk"] = d.qty * (s["price"] - s["stop"])
+            s["notional"] = d.qty * s["price"]
+            approved.append(s)
+            days[s["date"]] = days.get(s["date"], 0) + 1
+        else:
+            why = d.reasons[-1]
+            key = (why.split("binding constraint:")[-1].strip()
+                   if "binding constraint" in why else why[:60])
+            rejects[key] = rejects.get(key, 0) + 1
+
+    med = lambda xs: statistics.median(xs) if xs else 0.0
+    return {"symbols_scanned": scanned, "sessions": sessions,
+            "equity": equity, "signals": len(signals),
+            "approved": len(approved), "rejected": len(signals) - len(approved),
+            "reject_reasons": rejects, "tradeable_days": len(days),
+            "median_signals_per_tradeable_day": med(list(days.values())),
+            "median_qty": med([a["qty"] for a in approved]),
+            "median_price": med([a["price"] for a in approved]),
+            "median_notional": med([a["notional"] for a in approved]),
+            "median_risk": med([a["risk"] for a in approved]),
+            "max_risk": max([a["risk"] for a in approved], default=0.0)}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--build-universe", action="store_true")
     ap.add_argument("--base-rate", type=int, metavar="SESSIONS")
+    ap.add_argument("--replay", type=int, metavar="SESSIONS",
+                    help="replay signals through the risk engine "
+                         "and report what this account could take")
+    ap.add_argument("--equity", type=float, default=300.0)
     ap.add_argument("--max-price", type=float)
     ap.add_argument("--size", type=int)
     a = ap.parse_args()
@@ -225,6 +314,29 @@ def main() -> int:
             print(f"signals per firing day: "
                   f"{r['total_signals']/r['days_with_at_least_one']:.1f}")
             print(f"busiest days: {r['busiest']}")
+        return 0
+
+    if a.replay:
+        r = replay(adapter, syms, a.replay, a.equity)
+        eq = r["equity"]
+        print(f"\nreplayed {r['signals']} signals from {r['symbols_scanned']} "
+              f"symbols over ~{r['sessions']} sessions, at ${eq:,.0f} equity\n")
+        print(f"  APPROVED by the engine : {r['approved']:4d}  "
+              f"({r['approved']/r['signals']:.1%})" if r["signals"] else "  no signals")
+        print(f"  REJECTED               : {r['rejected']:4d}")
+        for k, v in sorted(r["reject_reasons"].items(), key=lambda kv: -kv[1]):
+            print(f"      {v:4d}  {k}")
+        if r["approved"]:
+            print(f"\n  tradeable days: {r['tradeable_days']} of ~{r['sessions']}"
+                  f"  ({r['tradeable_days']/r['sessions']:.0%}), median "
+                  f"{r['median_signals_per_tradeable_day']:.0f} signals each")
+            print(f"  median position: {r['median_qty']:.0f} shares @ "
+                  f"${r['median_price']:.2f} = ${r['median_notional']:.2f} "
+                  f"({r['median_notional']/eq:.1%} of equity)")
+            print(f"  median risk    : ${r['median_risk']:.2f} "
+                  f"({r['median_risk']/eq:.2%} of equity, "
+                  f"{r['median_risk']/(eq*0.02):.0%} of the 2% budget); "
+                  f"max ${r['max_risk']:.2f}")
         return 0
 
     r = screen(adapter, syms)

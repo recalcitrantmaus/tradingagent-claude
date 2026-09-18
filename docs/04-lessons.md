@@ -742,3 +742,74 @@ disappears. Ask of every protective mechanism not only "is it attached?" but
 Phase 3** — leg TIF inheritance is broker behaviour, not a standard, and this
 one was discovered by asking the broker rather than by reading anything.
 **Status:** active.
+
+### 2026-09-18 — The universe is not too thin. The plan is the constraint.
+**Question asked:** three sessions produced zero trades, and the standing
+hypothesis was structural — that a 20-day breakout inside a universe an account
+can afford (whole shares, 2% risk, a 25% single-position cap on $300) is simply
+too rare to trade. That is a system question, and answering it by lowering a
+threshold on a future quiet day would have been the wrong way to find out.
+
+**Evidence:** `tools/screen.py --base-rate 60` over the committed 150-symbol
+universe, then `--replay 60`, which pushes every historical signal through
+`RiskOfficer.evaluate` itself rather than restating the sizing arithmetic:
+
+| | |
+|---|---|
+| Signals in 60 sessions | **533** |
+| Sessions with at least one | **59 of 60 (98%)** |
+| Approved by the engine at $300 | **507 (95.1%)** |
+| Rejected | 26 — 24 on the single-position cap, 2 on the 2% risk budget |
+| Tradeable days | **59 of 60**, median **7** tradeable signals each |
+| Median position | 2 shares @ $34.64 = $61.95 (20.6% of equity) |
+| Median risk taken | $2.34 — 0.78% of equity, **39% of the 2% budget** |
+
+The hypothesis is wrong, and not narrowly wrong. The account could have taken a
+sized, stopped, engine-approved trade on 98% of the last 60 sessions, with a
+median of seven to choose from. The affordability ceiling is real but it is not
+the binding constraint: it turns away 26 of 533 signals, and the constraint
+doing the turning is the 25% single-position cap (`0.25 × $300 = $75`), not
+volatility and not the risk budget.
+
+So the zero-trade weeks were not the universe. Wednesday was a scheduling
+defect and Thursday was a deliberate RISK_OFF, but **Friday is the real
+datum**: the screen found three, the engine approved all three, and the plan
+refused all three on structural reward-to-risk of 0.3-0.5R.
+
+**The tension that leaves, stated plainly.** Two different definitions of
+"target" are in play and they do not agree:
+
+- The **mechanical** target, `close + 3*ATR`, is what `propose_mechanical`
+  builds and what this replay measured. Against a stop of at most `1.5*ATR` it
+  is 2.0R by construction — so it can never fail the expected-R gate added
+  today, and on this evidence it would trade nearly every day.
+- The **structural** target, the next real level, is what the model reads off
+  the chart. On Friday it produced 0.3-0.5R on all three candidates, which the
+  new gate would now reject in code rather than in prose.
+
+Both cannot govern. The mechanical target trades a lot and is a rule with no
+market read in it; the structural target has a market read and has produced
+zero trades in three sessions. This is a decision about what the strategy *is*,
+and it is not a threshold to be nudged on a quiet morning. It belongs to a
+weekly-review session at Opus/xhigh with the evidence in front of it.
+
+One more number worth carrying into that decision: the median approved trade
+risks **39% of the permitted 2% budget**, because whole-share rounding at a
+median 2 shares is coarse. The account systematically under-deploys its own
+risk allowance, and there is no fix for that which does not cost the atomic
+stop (see 2026-09-17 on fractional shares). It is a fact about trading $300,
+not a defect.
+
+**Change:** `tools/screen.py --replay N [--equity E]`, so this is re-runnable
+evidence rather than a one-off answer, and so it tracks the engine
+automatically when the engine changes. No rule was changed on the strength of
+it — that is deliberate, and it is the next session's decision, not this one's.
+
+**Lesson for future rules:** "the strategy finds nothing" and "the account
+cannot take what it finds" and "the plan refuses what it could take" are three
+different diagnoses with three different fixes, and from inside a quiet week
+they produce an identical symptom: an empty plan. Two of the three were wrong
+here, and the one that was right was the one nobody had proposed. **Before
+adjusting a threshold because nothing is trading, measure which of the three
+is actually happening.**
+**Status:** active.
