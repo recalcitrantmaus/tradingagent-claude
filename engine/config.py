@@ -31,6 +31,16 @@ class RiskConfig:
         "crypto": 0.20,
     })
 
+    # --- reward to risk ---
+    # "Expected R >= 1.5" was written in CLAUDE.md, the runbook and the
+    # trade-plan skill from the beginning, and existed in none of them as code:
+    # RiskOfficer.evaluate never read `target`, so the gate was unreachable.
+    # The simulator did not catch it because every simulated strategy sets
+    # target = entry + 3*ATR against a 1.5*ATR stop, which is 2.0R by
+    # construction and could not have failed a 1.5 gate even if one had run.
+    min_expected_r: float = 1.5
+    require_target: bool = True      # no target, no grade, no trade
+
     # --- mandatory exits ---
     equity_stop_atr_mult: float = 1.5        # stop = entry - 1.5 * ATR(14)
     equity_stop_max_pct: float = 0.08        # ...but never wider than 8%

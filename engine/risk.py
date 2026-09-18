@@ -162,6 +162,7 @@ class RiskOfficer:
                 and p.symbol not in portfolio.positions:
             return d.reject(f"already at max {c.max_concurrent_positions} positions")
 
+
         # --- asset-class specific gates ---
         if p.asset_class == "option":
             if eq < c.option_min_equity:
@@ -191,6 +192,26 @@ class RiskOfficer:
                     f"observe {c.option_observe_open_minutes}")
             if c.assume_pdt_regime and len(self.day_trades) >= c.max_day_trades_per_5d:
                 d.reasons.append("at day-trade budget: this must be held overnight")
+
+        # --- reward to risk, in code rather than in a skill file ---
+        if c.require_target and p.target is None:
+            return d.reject("no target supplied; expected R cannot be graded")
+        if p.target is not None:
+            if p.target <= p.price:
+                return d.reject("target is not above entry")
+            expected_r = (p.target - p.price) / (p.price - p.stop)
+            # Tolerance, not laxity. The config's own option exit pair — a -40%
+            # stop against a +60% take-profit — is 0.60/0.40, which in binary
+            # floating point is 1.4999999999999998 and fails a naive `< 1.5`.
+            # A rule that rejects its own documented defaults by 2e-16 would
+            # surface as an inexplicable rejection with a correct-looking
+            # reason string, which is the worst kind to debug.
+            if expected_r < c.min_expected_r - 1e-9:
+                return d.reject(
+                    f"expected R {expected_r:.2f} < required "
+                    f"{c.min_expected_r:.2f}; the target is too close to the "
+                    f"entry for the stop being taken")
+            d.reasons.append(f"expected R {expected_r:.2f}")
 
         # --- sizing ---
         risk_per_unit = (p.price - p.stop) * p.multiplier

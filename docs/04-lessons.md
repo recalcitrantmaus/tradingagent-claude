@@ -543,3 +543,56 @@ error message. A broken source throws; an unused tool is silent, and the work
 looks finished from every angle except the one that matters. **After building
 something, grep for its own name in the callers.**
 **Status:** active.
+
+### 2026-09-18 — The expected-R rule was never code, and the simulator could not have found that
+**Evidence:** "Expected R >= 1.5" is written in `CLAUDE.md`, in
+`docs/09-phase2-runbook.md` and in `.claude/skills/trade-plan/SKILL.md`. A grep
+for it across the code —
+
+```
+grep -rn -iE "expected.?r|reward.?risk|r_multiple|min_r\b|1\.5R" engine/ tools/
+```
+
+— returned exactly one hit, a docstring line in `engine/feasibility.py`.
+`RiskOfficer.evaluate` never read `p.target` at all. The field existed on
+`OrderProposal`, every caller populated it, and no line of the gate consumed
+it. The rule was unreachable by construction, not merely unenforced.
+
+The obvious follow-up: 300-seed Monte Carlo has been run against these
+guardrails repeatedly. Why did none of it surface a missing gate? Because
+**every strategy in `engine/strategies.py` sets `target = px + 3.0 * atr`
+against `stop = max(px - 1.5 * atr, px * 0.92)`.** That is 2.0R by
+construction whenever the ATR leg binds, and wider when the 8% floor does. No
+simulated proposal has ever been capable of failing a 1.5 gate, so a working
+gate and an absent gate produce byte-identical simulation output. Re-running
+`sim.run_suite --seeds 300` after adding the gate confirms it: every arm
+unchanged (trend_pullback $302.17, momentum_breakout $308.89, option_swing
+$300.00, graduated_swing $308.89, target_chaser_CONTROL $300.00, 0% ruin).
+
+Friday, 2026-09-12, is where it would have mattered. Three breakouts — FPS,
+MARA, RIOT — were **approved by the engine** and refused only by the plan,
+on structural R of 0.3–0.5. The judgement was right and it was made in prose.
+Had the session been on a worse model, or in more of a hurry, nothing in
+`engine/` would have said no.
+
+**Change:** `min_expected_r = 1.5` and `require_target = True` in
+`engine/config.py`; the gate in `engine/risk.py`, positioned after the
+asset-class checks and before sizing; seven tests in `TestExpectedRGate`.
+One of them pins the float problem: the config's own option exit pair, a -40%
+stop against a +60% take-profit, is `0.60/0.40 == 1.4999999999999998` in binary
+floating point and fails a naive `< 1.5`. The comparison carries a `1e-9`
+epsilon so the constitution does not reject its own documented defaults by
+2e-16. Another test pins the finding above — that the simulated strategies are
+2.0R by construction — so that if someone later changes a strategy's target
+multiple, the test says out loud that the simulator's coverage of this gate
+just changed.
+
+**Lesson for future rules:** a simulation only tests the gates its generators
+can fail. Every strategy here was written by the same hand that wrote the
+guardrails, so they all obey them — which means the suite measures whether
+compliant behaviour survives, never whether non-compliant behaviour is caught.
+The `target_chaser_CONTROL` arm exists precisely to be a strategy that breaks
+a rule, and it breaks the *sizing* rules, not this one. **For every rule in
+the constitution, name the simulated arm that violates it. If there isn't one,
+the suite is not evidence about that rule.**
+**Status:** active.

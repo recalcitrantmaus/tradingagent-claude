@@ -80,8 +80,12 @@ class TestEntryGate(unittest.TestCase):
 
 class TestOptionsGate(unittest.TestCase):
     def opt(self, **kw):
+        # target 3.20 is the config's own option exit pair: a -40% stop and a
+        # +60% take-profit, which is exactly 1.5R. The documented option exits
+        # sit precisely on the minimum — worth knowing, since any widening of
+        # the stop rule without widening the target would put them under it.
         base = dict(symbol="TEC_C", asset_class="option", side="buy",
-                    price=2.00, stop=1.20, multiplier=100, dte=30,
+                    price=2.00, stop=1.20, target=3.20, multiplier=100, dte=30,
                     defined_risk=True, minutes_since_open=30)
         base.update(kw)
         return OrderProposal(**base)
@@ -191,8 +195,8 @@ class TestOptionEdgeGate(unittest.TestCase):
 
     def opt(self):
         return OrderProposal(symbol="TEC_C", asset_class="option", side="buy",
-                             price=2.00, stop=1.20, multiplier=100, dte=30,
-                             defined_risk=True, minutes_since_open=30)
+                             price=2.00, stop=1.20, target=3.20, multiplier=100,
+                             dte=30, defined_risk=True, minutes_since_open=30)
 
     def test_locked_without_a_track_record(self):
         cfg = replace(DEFAULT, starting_equity=5000.0)
@@ -222,3 +226,78 @@ class TestOptionEdgeGate(unittest.TestCase):
         d = ro.evaluate(self.opt(), pf, {}, D)
         self.assertFalse(d.approved)
         self.assertIn("option floor", d.reasons[0])
+
+
+class TestExpectedRGate(unittest.TestCase):
+    """The rule that lived in three markdown files and no code.
+
+    CLAUDE.md, docs/09-phase2-runbook.md and the trade-plan skill have all
+    required "expected R >= 1.5" since the beginning. `evaluate` never read
+    `target`, so the gate was unreachable. The simulator did not catch it
+    because every simulated strategy targets entry + 3*ATR against a 1.5*ATR
+    stop — 2.0R by construction, which could not have failed a 1.5 gate had
+    one existed.
+    """
+
+    def prop(self, **kw):
+        base = dict(symbol="F", asset_class="equity", side="buy",
+                    price=10.00, stop=9.00, target=11.50)
+        base.update(kw)
+        return OrderProposal(**base)
+
+    def test_a_generous_target_passes(self):
+        pf, ro = fresh()
+        d = ro.evaluate(self.prop(target=12.00), pf, {"F": 10.0}, D)
+        self.assertTrue(d.approved, d.reasons)
+        self.assertTrue(any("expected R 2.00" in r for r in d.reasons))
+
+    def test_a_target_below_the_minimum_is_rejected(self):
+        """Friday 2026-09-18: three breakouts priced to real resistance came
+        out at 0.3-0.5R and every one was APPROVED, because nothing checked."""
+        pf, ro = fresh()
+        d = ro.evaluate(self.prop(target=10.40), pf, {"F": 10.0}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("expected R", d.reasons[0])
+
+    def test_exactly_at_the_minimum_passes(self):
+        pf, ro = fresh()
+        d = ro.evaluate(self.prop(target=11.50), pf, {"F": 10.0}, D)
+        self.assertTrue(d.approved, d.reasons)
+
+    def test_the_config_option_defaults_are_not_rejected_by_float_noise(self):
+        """-40% stop against +60% take-profit is 0.60/0.40 = 1.4999999999999998.
+
+        A gate that rejects its own documented defaults by 2e-16 produces an
+        inexplicable refusal carrying a correct-looking reason.
+        """
+        cfg = replace(DEFAULT, starting_equity=5000.0)
+        pf, ro = fresh(cfg)
+        ro.set_track_record(closed_trades=50, expectancy_R=0.25)
+        prem = 2.00
+        d = ro.evaluate(OrderProposal(
+            symbol="TEC_C", asset_class="option", side="buy", price=prem,
+            stop=prem * (1 - cfg.option_stop_premium_pct),
+            target=prem * (1 + cfg.option_take_profit_pct),
+            multiplier=100, dte=30, defined_risk=True,
+            minutes_since_open=30), pf, {}, D)
+        self.assertTrue(d.approved, d.reasons)
+
+    def test_no_target_is_refused(self):
+        pf, ro = fresh()
+        d = ro.evaluate(self.prop(target=None), pf, {"F": 10.0}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("no target", d.reasons[0])
+
+    def test_a_target_below_entry_is_refused(self):
+        pf, ro = fresh()
+        d = ro.evaluate(self.prop(target=9.50), pf, {"F": 10.0}, D)
+        self.assertFalse(d.approved)
+        self.assertIn("not above entry", d.reasons[0])
+
+    def test_the_simulated_strategies_could_never_have_failed_this(self):
+        """3*ATR target against a 1.5*ATR stop is 2.0R by construction."""
+        atr = 0.50
+        entry = 10.0
+        stop = max(entry - 1.5 * atr, entry * 0.92)
+        target = entry + 3.0 * atr
+        self.assertAlmostEqual((target - entry) / (entry - stop), 2.0)
