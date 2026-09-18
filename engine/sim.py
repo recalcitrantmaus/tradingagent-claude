@@ -133,11 +133,17 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
                 prop.price = mkt.history[prop.symbol][i].open
             d = ro.evaluate(prop, pf, prices, date)
             if not d.approved:
-                for r in d.reasons:
-                    key = r.split(";")[0][:60]
-                    res.rejections[key] = res.rejections.get(key, 0) + 1
-                    if key.startswith("size rounds to zero"):
-                        res.zero_size_rejections += 1
+                # Only the LAST reason is the rejection. Decision.reject()
+                # appends it, and everything before it is a note recorded on
+                # the way through — "expected R 2.02", "at day-trade budget".
+                # Tallying all of them put approval notes into the rejection
+                # histogram, which is the table someone reads to answer "why
+                # is nothing trading". A reason that did not reject anything
+                # has no business in it.
+                key = d.reasons[-1].split(";")[0][:60] if d.reasons else "unknown"
+                res.rejections[key] = res.rejections.get(key, 0) + 1
+                if key.startswith("size rounds to zero"):
+                    res.zero_size_rejections += 1
                 continue
             fill = bk.execute(ts, prop, d)
             if fill:

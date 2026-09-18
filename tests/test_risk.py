@@ -294,10 +294,50 @@ class TestExpectedRGate(unittest.TestCase):
         self.assertFalse(d.approved)
         self.assertIn("not above entry", d.reasons[0])
 
-    def test_the_simulated_strategies_could_never_have_failed_this(self):
-        """3*ATR target against a 1.5*ATR stop is 2.0R by construction."""
-        atr = 0.50
-        entry = 10.0
+    def test_the_simulated_strategies_are_2R_by_construction(self):
+        """3*ATR target against a 1.5*ATR stop is 2.0R by construction.
+
+        This is why the 300-seed suite produces identical output with the gate
+        and without it: no strategy in engine/strategies.py can author a
+        proposal that fails it. If someone changes a target multiple, this
+        test fails and says out loud that the suite's coverage of this gate
+        just changed.
+        """
+        atr, entry = 0.50, 10.0
         stop = max(entry - 1.5 * atr, entry * 0.92)
         target = entry + 3.0 * atr
         self.assertAlmostEqual((target - entry) / (entry - stop), 2.0)
+        # ...and the 8% floor only ever makes it better, never worse, because
+        # `max` takes the TIGHTER stop.
+        atr_wide = 2.0
+        stop_w = max(entry - 1.5 * atr_wide, entry * 0.92)
+        self.assertGreater((entry + 3.0 * atr_wide - entry) / (entry - stop_w), 2.0)
+
+    def test_the_gate_still_binds_when_the_fill_gaps_away_from_the_signal(self):
+        """Construction is 2.0R; the FILL is where the gate earns its keep.
+
+        engine/sim.py signals on the close and fills at the next open, leaving
+        the stop and target where the close put them. A gap up compresses R
+        without anything in the strategy changing, and the gate rejects the
+        chase. Measured in the 300-seed suite: a handful of
+        "expected R 1.36-1.49 < required 1.50" rejections per arm.
+
+        So the gate is not inert in simulation, as an earlier note claimed. It
+        is rare, which is why aggregate equity is unchanged, and it is exactly
+        the behaviour that should be rare.
+        """
+        pf, ro = fresh()
+        atr, close = 0.50, 10.0
+        stop = max(close - 1.5 * atr, close * 0.92)     # 9.25
+        target = close + 3.0 * atr                      # 11.50
+
+        at_close = ro.evaluate(OrderProposal(
+            symbol="AAA", asset_class="equity", side="buy",
+            price=close, stop=stop, target=target), pf, {}, D)
+        self.assertTrue(at_close.approved)
+
+        gapped = ro.evaluate(OrderProposal(
+            symbol="AAA", asset_class="equity", side="buy",
+            price=close * 1.02, stop=stop, target=target), pf, {}, D)
+        self.assertFalse(gapped.approved)
+        self.assertIn("expected R", gapped.reasons[-1])

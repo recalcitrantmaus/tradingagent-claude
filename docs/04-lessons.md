@@ -871,3 +871,38 @@ narrower lesson, which is now the fourth instance this week: when a control
 answers "protected", ask what evidence it accepted — `order_class == bracket`
 was true of the take-profit, and that was enough to pass.
 **Status:** active.
+
+### 2026-09-18 — The rejection histogram counted approvals as rejections
+**Evidence:** `engine/sim.py` tallied **every** reason on a rejected decision:
+
+```python
+if not d.approved:
+    for r in d.reasons:
+        res.rejections[key] = res.rejections.get(key, 0) + 1
+```
+
+`Decision.reasons` is a running log, not a verdict. `reject()` appends the
+verdict last; everything before it is a note recorded on the way through. So
+adding `d.reasons.append(f"expected R {expected_r:.2f}")` to the *approval*
+path earlier the same day immediately put lines like `expected R 2.02: 24`
+into the rejection histogram — a proposal that **passed** the R gate and was
+then rejected at sizing, counted once under the gate it cleared.
+
+That table is what someone reads to answer "why is nothing trading". It is the
+first place anyone would look, and it had started answering with reasons that
+rejected nothing. Same failure as the rest of the week: a number that means
+something other than what it appears to mean, in a place where it will be
+trusted.
+
+**Change:** tally `d.reasons[-1]` only. This also stops the older approval
+notes — "at day-trade budget: this must be held overnight" — from polluting it.
+Verified: the histogram now reads clean, and all five arms return identical
+equity, so nothing about the simulation changed except what it reports about
+itself.
+
+**Lesson for future rules:** appending to a shared log is not a local change.
+`reasons` is read by the simulator, by `paper_session`'s printed output and by
+the session report, and each reads it with its own assumption about what the
+list means. **Before adding to a structure something else aggregates, check
+what the aggregator thinks each element is.**
+**Status:** active.
