@@ -1035,3 +1035,48 @@ not into the reader's head. **`if side != "buy"` encodes "every sell is an
 exit" without ever saying so** — and the cost of the unstated premise is paid
 by whoever first adds the feature that breaks it.
 **Status:** active.
+
+### 2026-09-18 — Most of the edge was the universe, and I had the sign wrong
+**Evidence:** `docs/14-target-study.md` measured the no-target arm at +0.132R
+expectancy, t = +2.7 — the one statistically significant result in the study.
+I flagged the survivorship caveat in the same document and predicted its
+direction: removing it should make that arm look **better**, because the
+universe was capped at $75 and stocks that ran past it were the winners a
+breakout strategy lives on.
+
+Rebuilt point-in-time from all 13,169 tradable names, with eligibility
+recomputed at each signal date, the arm falls to **+0.054R, t = +1.1** — not
+significant. Across all 1,563 eligible names rather than the 150 most liquid,
+it is **−0.014R**. I had the sign backwards.
+
+The reason is that I was thinking about one bias and the universe carried two.
+The old set was not only *surviving*, it was `size: 150` — the most liquid
+eligible names, ranked. Separating them:
+
+| | old (150, priced today) | PIT, top 150/day | PIT, all 1,563 |
+|---|---|---|---|
+| no-target arm | +0.132 (t +2.7) | +0.054 (t +1.1) | −0.014 (t −0.6) |
+
+So liquidity selection is real and large — the strategy is negative across
+every arm in the broad tail — and survivorship was worth roughly 60% of what
+remained. The truncated-right-tail effect I worried about is real too, and it
+is simply much smaller than the healthy-company effect I did not think about:
+a universe screened on today's prices is a universe of companies that did not
+collapse, delist, or go illiquid, and that flatters a backtest far more than
+excluding a few big winners penalises it.
+
+The ranking of the arms survived the correction. The edge did not.
+
+**Change:** `tools/pit_study.py`, which rebuilds eligibility per date and
+carries a `--top N` control so the liquidity cap can be isolated from the
+survivorship correction. `docs/14-target-study.md` is flagged as superseded in
+part rather than edited, so the original claim and its correction sit together.
+
+**Lesson for future rules:** naming a bias is not the same as knowing its sign,
+and a caveat stated confidently in the wrong direction is worse than one
+stated as unknown — it launders a guess into a finding. **When a study is
+conditioned on a selection, do not reason about which way it cuts. Re-run it
+without the selection, and if that is impossible, say the result is
+conditional rather than predicting the correction.** The number to distrust
+most is the only one that came back significant.
+**Status:** active.

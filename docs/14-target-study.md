@@ -1,3 +1,10 @@
+> **SUPERSEDED IN PART, 2026-09-18.** The numbers below were measured on a
+> universe built from prices as of 2026-09-17 and are inflated by survivorship.
+> Re-run point-in-time in `docs/15-point-in-time-study.md`, the expectancy of
+> the best arm falls from +0.132R (t=+2.7, significant) to +0.054R (t=+1.1,
+> not significant). **The ranking of the arms survives; the edge does not.**
+> Read 15 before acting on anything here.
+
 # D-24: which target definition? — forward test on 2026
 
 **Answer: none of them. Targets destroy expectancy in this strategy, and the
