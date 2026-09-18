@@ -928,3 +928,65 @@ the session report, and each reads it with its own assumption about what the
 list means. **Before adding to a structure something else aggregates, check
 what the aggregator thinks each element is.**
 **Status:** active.
+
+### 2026-09-18 — The model gate reads an environment constant to answer a per-session question
+**Evidence:** the week-one close reported `python3 -m tools.model_check
+weekly-review` **exits 1** and concluded it was not cleared to review. The
+16:35 wrap session ran the same command and got the same refusal:
+
+```
+!! 'weekly-review' requires opus-tier or better; running claude-sonnet-5 (sonnet).
+!! BLOCKING: do not perform this task.
+```
+
+That session is Opus. Verified against the session record rather than the
+environment:
+
+| source | value |
+|---|---|
+| `configured_model` | `claude-opus-5` |
+| `session_context.model` | `claude-opus-5` |
+| `external_metadata.last_served_model` | `claude-opus-5` |
+| `effort_level` | `xhigh` |
+
+`engine/model_policy.current_model()` reads `TRADING_AGENT_MODEL`, which is set
+to `claude-sonnet-5` — **at the environment level**, because trading days were
+configured for Sonnet. Every session launched in that environment reports
+Sonnet, whatever it is actually running. The gate is answering a per-session
+question with an environment-wide constant, and it is right only when the two
+happen to coincide.
+
+CLAUDE.md already warns that environment variables are snapshotted at session
+start. That note was written about *adding* a variable mid-session. The sharper
+version is this: a snapshot of an environment default was never a measurement
+of the session in the first place.
+
+**Which direction the error runs, and why that is luck.** Today it failed
+*closed* — it refused a session that was properly cleared, which costs a review
+and risks nothing. But the mechanism is symmetric and the safe direction is not
+a property of the design. Setting `TRADING_AGENT_MODEL=claude-opus-5` at the
+environment level, for perfectly good reasons, would make **every** session in
+it report Opus, and a rule promoted by an under-powered session would sail
+through the one gate written to prevent exactly that. CLAUDE.md calls the
+routing table binding and says a bad rule "costs every trade until someone
+notices". That gate is currently one environment edit away from never noticing.
+
+This is the same shape as `positions_without_stops` accepting a take-profit as
+a stop, found the same afternoon, and as netcheck reading 403 as healthy. The
+control runs, returns a confident verdict, and the verdict rests on evidence
+that does not establish the claim.
+
+**Change:** none yet — recorded, not fixed. The fix is for a session cleared to
+make it, and it needs a test: `current_model()` should read the live session
+record (the `get_session` fields above) and treat a value it cannot verify
+*per session* as unverified, which the policy already treats as failure for
+blocking tasks. The environment variable is acceptable only as a fallback, and
+should be reported as a fallback when it is used.
+
+**Lesson for future rules:** ask what *scope* a control's evidence has, not
+just whether the evidence is present. An environment variable cannot describe a
+session, a take-profit cannot describe a stop, and a 200 cannot describe a
+body. Each was a real value, correctly read, answering a question it was not
+about. **When a control reads a variable, check that the variable can vary with
+the thing being checked.**
+**Status:** active.
