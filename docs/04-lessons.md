@@ -587,6 +587,28 @@ epsilon so the constitution does not reject its own documented defaults by
 multiple, the test says out loud that the simulator's coverage of this gate
 just changed.
 
+**Correction, same day.** "No simulated proposal has ever been capable of
+failing a 1.5 gate", above, is too strong, and cleaning up the rejection
+histogram later that day is what exposed it. The strategies' *construction* is
+2.0R and that part stands. But `engine/sim.py` signals on the close and **fills
+at the next open**, leaving the stop and the target where the close put them.
+A gap up compresses R without anything in the strategy changing:
+
+```
+signal at close 10.00: stop 9.25, target 11.50  -> R 2.00
+fills at open 10.20 (+2%)                       -> R 1.37   REJECTED
+fills at open 10.40 (+4%)                       -> R 0.96   REJECTED
+```
+
+The 300-seed suite carries a handful of these per arm — "expected R 1.36-1.49
+< required 1.50". So the gate is **not** inert in simulation: it refuses to
+chase a setup that degraded overnight between the signal and the fill, which
+is a second capital-protecting behaviour the original note missed entirely. It
+is rare enough that aggregate equity is unchanged either way, which is why the
+byte-identical output was read as "the gate can never bind" when it actually
+meant "the gate binds too rarely to move the median". Both facts now have
+their own test.
+
 **Lesson for future rules:** a simulation only tests the gates its generators
 can fail. Every strategy here was written by the same hand that wrote the
 guardrails, so they all obey them — which means the suite measures whether
