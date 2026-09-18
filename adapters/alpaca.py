@@ -93,9 +93,21 @@ class AlpacaAdapter:
                  "market_value": float(p["market_value"]),
                  "unrealized_pl": float(p["unrealized_pl"])} for p in rows]
 
-    def open_orders(self) -> List[Dict]:
-        q = urllib.parse.urlencode({"status": "open"})
-        return self._request("GET", f"{self.base}/v2/orders?{q}")
+    def open_orders(self, nested: bool = False) -> List[Dict]:
+        """Open orders. `nested=True` returns bracket parents with their legs
+        populated, and does NOT list those legs as separate top-level rows.
+
+        The default is flat because `positions_without_stops` depends on a
+        FILLED parent's live protective legs appearing at the top level, where
+        it can see their `type`. Measured 2026-09-18: without `nested`, an
+        unfilled bracket parent comes back with `legs` absent entirely, which
+        is why identifying parents by their legs needs this flag.
+        """
+        q = {"status": "open"}
+        if nested:
+            q["nested"] = "true"
+        return self._request(
+            "GET", f"{self.base}/v2/orders?{urllib.parse.urlencode(q)}")
 
     def order(self, order_id: str) -> Dict:
         return self._request("GET", f"{self.base}/v2/orders/{order_id}")
@@ -177,13 +189,41 @@ class AlpacaAdapter:
                  "low": b["l"], "close": b["c"], "volume": b["v"]}
                 for b in rows[-limit:]]
 
+    # An order in one of these states can still execute. `held` matters most:
+    # a bracket's legs sit held until the parent fills, and Alpaca's
+    # status=open filter EXCLUDES held, so a stop can be perfectly in place
+    # and invisible to a naive listing.
+    ACTIVE_STATUSES = {"new", "accepted", "held", "partially_filled",
+                       "pending_new", "accepted_for_bidding", "calculated",
+                       "pending_replace", "replaced"}
+    STOP_TYPES = ("stop", "stop_limit", "trailing_stop")
+
     def positions_without_stops(self) -> List[str]:
-        """Positions with no resting protective order. These are unmanaged
-        risk and session-close treats them as a flatten-or-fix event."""
-        protected = {o["symbol"] for o in self.open_orders()
-                     if o.get("type") in ("stop", "stop_limit", "trailing_stop")
-                     or o.get("order_class") in ("bracket", "oto", "oco")}
-        return [p["symbol"] for p in self.positions() if p["symbol"] not in protected]
+        """Positions with no live stop. Session-close treats these as a
+        flatten-or-fix event, so the test has to mean what it says.
+
+        It previously counted a symbol as protected if ANY open order on it
+        carried `order_class` in (bracket, oto, oco). Measured 2026-09-18: when
+        a bracket entry fills, the take-profit leg appears first and it carries
+        `order_class="bracket"` — so a position was reported protected on the
+        strength of a TAKE-PROFIT, and would have been reported protected with
+        the stop leg missing entirely. A control that passes on the wrong
+        evidence is worse than no control, because it is trusted.
+
+        So: a real order, of a stop type, in a state that can still execute.
+        Nested, because a held leg is invisible to a flat status=open listing.
+        """
+        q = urllib.parse.urlencode({"status": "all", "limit": "200",
+                                    "direction": "desc", "nested": "true"})
+        rows = self._request("GET", f"{self.base}/v2/orders?{q}")
+        protected = set()
+        for o in rows:
+            for c in [o] + list(o.get("legs") or []):
+                if (c.get("type") in self.STOP_TYPES
+                        and (c.get("status") or "").lower() in self.ACTIVE_STATUSES):
+                    protected.add(o.get("symbol"))
+        return [p["symbol"] for p in self.positions()
+                if p["symbol"] not in protected]
 
     # ------------------------------------------------------------- writing
     def submit(self, ticket: OrderTicket, confirm_live: bool = False) -> Dict:
@@ -241,9 +281,15 @@ class AlpacaAdapter:
         leg does not.
         """
         cancelled = []
-        for o in self.open_orders():
+        for o in self.open_orders(nested=True):
             if not o.get("legs"):
                 continue                      # a live leg, or a bare order
+            # Belt and braces. Identifying parents by their legs is correct
+            # but depends on a response shape that has already surprised us
+            # once; a stop must never be cancellable by this method even if
+            # that shape changes again.
+            if o.get("type") in ("stop", "stop_limit", "trailing_stop"):
+                continue
             oid = o.get("id")
             try:
                 self._request("DELETE", f"{self.base}/v2/orders/{oid}")

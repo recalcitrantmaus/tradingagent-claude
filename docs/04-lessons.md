@@ -813,3 +813,61 @@ here, and the one that was right was the one nobody had proposed. **Before
 adjusting a threshold because nothing is trading, measure which of the three
 is actually happening.**
 **Status:** active.
+
+### 2026-09-18 — Two controls that only a live order could falsify
+**Evidence:** the changes made earlier today were tested against stubs. Run
+against the paper broker with the market open and the account flat, two of
+them failed — and neither could have been caught any other way, because both
+bugs were in assumptions about the broker's response shape.
+
+**1. `cancel_unfilled_entries()` cancelled nothing.** It identifies an unfilled
+bracket parent by the fact that it still carries its `legs`. Against the real
+API:
+
+```
+GET /v2/orders?status=open                 parent comes back with legs ABSENT
+GET /v2/orders?status=open&nested=true     parent comes back with legs: [2]
+```
+
+The flat listing omits nested legs entirely, so the guard skipped every parent
+and the close would silently have carried resting entries into the next
+morning — the exact thing it was written to prevent, reporting success.
+`nested=true` fixes it. `open_orders()` keeps its flat default because
+`positions_without_stops` depends on a *filled* parent's live legs appearing at
+the top level.
+
+**2. `positions_without_stops()` counted a take-profit as a stop.** The old
+test marked a symbol protected if any open order on it had `order_class` in
+`(bracket, oto, oco)`. Filling a bracket entry live showed why that is wrong:
+
+```
+entry a725aecc  filled 1 @ 13.10
+live protective orders: [('limit', 'new')]     <- the TAKE-PROFIT, class=bracket
+positions_without_stops(): []                  <- "protected"
+```
+
+The stop leg existed (it shows in a `status=all&nested=true` listing at
+`stop=11.79`), but it was `held`, and **Alpaca's `status=open` filter excludes
+`held`**. So the control returned the right answer from the wrong evidence. Had
+the stop genuinely been cancelled while the take-profit survived — which is
+precisely the state the `day`-TIF bug created — this control would still have
+reported the position protected. It is the check that decides whether the close
+escalates, and it would have stayed quiet.
+
+Now it requires a real order, of a stop type, in a status that can still
+execute, read from a nested listing so `held` legs are visible. Five tests
+cover take-profit-only, live stop, held leg, cancelled stop, and a stop on a
+different symbol.
+
+The live probe cost one cent (a 1-share F round trip at 13.10) and left the
+account flat at $299.99.
+
+**Lesson for future rules:** a stub encodes what you believe the dependency
+returns, so a test built on one can only confirm your own assumption. Both
+bugs here were assumption bugs, both were in code written to protect a
+position, and both tested green. **For anything that guards real money against
+an external system, at least one test has to talk to that system.** And the
+narrower lesson, which is now the fourth instance this week: when a control
+answers "protected", ask what evidence it accepted — `order_class == bracket`
+was true of the take-profit, and that was enough to pass.
+**Status:** active.

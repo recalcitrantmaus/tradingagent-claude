@@ -437,7 +437,7 @@ class TestTheStopOutlivesTheSession(unittest.TestCase):
         class Stub(AlpacaAdapter):
             def __init__(self):
                 self.base = "https://paper-api.alpaca.markets"
-            def open_orders(self):
+            def open_orders(self, nested=False):
                 return [
                     # an unfilled bracket parent: still carries its legs
                     {"id": "parent-1", "symbol": "AAA", "legs": [
@@ -464,7 +464,7 @@ class TestTheStopOutlivesTheSession(unittest.TestCase):
         class Stub(AlpacaAdapter):
             def __init__(self):
                 self.base = "https://paper-api.alpaca.markets"
-            def open_orders(self):
+            def open_orders(self, nested=False):
                 return [{"id": "p1", "symbol": "AAA", "legs": [{"id": "l1"}]}]
             def _request(self, method, url, body=None):
                 raise AdapterError("HTTP 422: order is no longer cancelable")
@@ -472,3 +472,65 @@ class TestTheStopOutlivesTheSession(unittest.TestCase):
         out = Stub().cancel_unfilled_entries()
         self.assertEqual(len(out), 1)
         self.assertIn("FAILED", out[0])
+
+
+class TestUnprotectedPositionsAreDetectedHonestly(unittest.TestCase):
+    """Measured 2026-09-18: when a bracket entry fills, the take-profit leg
+    surfaces first and carries order_class="bracket". The old check counted
+    any bracket-class order as protection, so a position with its stop gone
+    and its take-profit intact read as protected. This is the control that
+    decides whether the close escalates, so it has to test for a stop.
+    """
+
+    def _stub(self, orders, positions):
+        from adapters.alpaca import AlpacaAdapter
+
+        class Stub(AlpacaAdapter):
+            def __init__(self):
+                self.base = "https://paper-api.alpaca.markets"
+            def _request(self, method, url, body=None):
+                return orders
+            def positions(self):
+                return positions
+        return Stub()
+
+    def test_a_take_profit_alone_is_not_protection(self):
+        a = self._stub(
+            [{"id": "1", "symbol": "AAA", "type": "limit",
+              "order_class": "bracket", "status": "new", "legs": []}],
+            [{"symbol": "AAA", "qty": 1.0}])
+        self.assertEqual(a.positions_without_stops(), ["AAA"])
+
+    def test_a_live_stop_is_protection(self):
+        a = self._stub(
+            [{"id": "1", "symbol": "AAA", "type": "stop",
+              "order_class": "bracket", "status": "new", "legs": []}],
+            [{"symbol": "AAA", "qty": 1.0}])
+        self.assertEqual(a.positions_without_stops(), [])
+
+    def test_a_held_leg_counts_because_status_open_hides_it(self):
+        # A bracket's legs sit `held` until the parent fills. They are real
+        # and they will execute; a flat status=open listing does not show them.
+        a = self._stub(
+            [{"id": "1", "symbol": "AAA", "type": "limit",
+              "order_class": "bracket", "status": "filled", "legs": [
+                  {"id": "2", "type": "limit", "status": "held"},
+                  {"id": "3", "type": "stop", "status": "held"}]}],
+            [{"symbol": "AAA", "qty": 1.0}])
+        self.assertEqual(a.positions_without_stops(), [])
+
+    def test_a_cancelled_stop_is_not_protection(self):
+        a = self._stub(
+            [{"id": "1", "symbol": "AAA", "type": "limit",
+              "order_class": "bracket", "status": "filled", "legs": [
+                  {"id": "2", "type": "limit", "status": "new"},
+                  {"id": "3", "type": "stop", "status": "canceled"}]}],
+            [{"symbol": "AAA", "qty": 1.0}])
+        self.assertEqual(a.positions_without_stops(), ["AAA"])
+
+    def test_a_stop_on_a_different_symbol_does_not_protect_this_one(self):
+        a = self._stub(
+            [{"id": "1", "symbol": "BBB", "type": "stop",
+              "order_class": "bracket", "status": "new", "legs": []}],
+            [{"symbol": "AAA", "qty": 1.0}])
+        self.assertEqual(a.positions_without_stops(), ["AAA"])
