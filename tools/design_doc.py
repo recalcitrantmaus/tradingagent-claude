@@ -171,6 +171,16 @@ DECISIONS = [
   "missing stop worse, not better, for an agent that wakes on a schedule.",
   "docs/04-lessons.md 2026-09-18",
   "No code change — D-03 already covers it", "Active"),
+ ("D-25", "2026-09-18", "Testing",
+  "Anything guarding real money against an external system needs at least one "
+  "test that talks to that system",
+  "Two controls written on 2026-09-18 tested green against stubs and both "
+  "failed against the live paper broker. Both bugs were assumptions about the "
+  "broker's response shape, which is the one thing a stub cannot falsify — a "
+  "stub encodes the belief it is supposed to be testing.",
+  "docs/04-lessons.md 2026-09-18; bugs B-19 and B-20",
+  "tools/smoke_submit.py, and live probes before any execution change",
+  "Active"),
  ("D-23", "2026-09-18", "Strategy",
   "Measure which of the three diagnoses is happening before adjusting any "
   "threshold because nothing is trading",
@@ -364,6 +374,31 @@ BUGS = [
   "Discover the repo root every turn rather than caching it.",
   "2026-09-16 15:11", "2026-09-16 15:13", "2026-09-16 15:13",
   "0", "b5624ac", "Closed"),
+ ("B-19", "Execution", "Critical",
+  "cancel_unfilled_entries() cancelled nothing. It identifies an unfilled "
+  "bracket parent by the presence of its `legs`, but "
+  "GET /v2/orders?status=open omits nested legs entirely — the parent comes "
+  "back with no legs at all. The close would have carried resting entries "
+  "into the next session while reporting success.",
+  "Query with nested=true. open_orders() keeps its flat default because "
+  "positions_without_stops depends on a filled parent's live legs appearing "
+  "top-level. A type guard added so a stop can never be cancelled by this "
+  "method even if the response shape changes again.",
+  "2026-09-18 18:40", "2026-09-18 18:52", "2026-09-18 18:55",
+  "0", "4e5da64", "Closed"),
+ ("B-20", "Monitoring", "Critical",
+  "positions_without_stops() counted a TAKE-PROFIT as a stop. It marked a "
+  "symbol protected on `order_class in (bracket, oto, oco)`. Filling a "
+  "bracket live showed the take-profit leg surfacing first carrying "
+  "order_class 'bracket' while the stop leg sat `held` — and Alpaca's "
+  "status=open filter excludes held. With the stop genuinely cancelled and "
+  "the take-profit intact — exactly the state B-16 produced — this control "
+  "would still have reported the position protected, and it is the check "
+  "that decides whether the close escalates.",
+  "Requires a real order, of a stop type, in a status that can still execute, "
+  "read from a nested listing so held legs are visible. 5 tests.",
+  "2026-09-15 18:36", "2026-09-18 18:53", "2026-09-18 18:55",
+  "3", "4e5da64", "Closed"),
  ("B-18", "Permissions", "High",
   "`python3 -m tools.paper_session --submit` is refused by the permission "
   "classifier as a real-world transaction, so the live session path cannot "
