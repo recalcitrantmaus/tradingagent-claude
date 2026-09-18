@@ -1,0 +1,573 @@
+#!/usr/bin/env python3
+"""Generate docs/design-documentation.xlsx — decisions, bugs, systems.
+
+The data lives here rather than in the workbook so that it is diffable, review-
+able in a pull request, and regenerable after the container is reclaimed. The
+.xlsx is a build artifact of this file.
+
+    pip install openpyxl
+    python3 -m tools.design_doc
+
+Every row is traceable: design decisions cite the file that enforces them and
+the lessons entry that justified them; bugs cite the commit that fixed them.
+Dates are taken from `git log`, not from memory.
+"""
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "docs" / "design-documentation.xlsx"
+
+# --------------------------------------------------------------------------
+# Sheet 1 — major design decisions
+# --------------------------------------------------------------------------
+DECISIONS_COLS = ["ID", "Date", "Area", "Decision", "Rationale",
+                  "Evidence", "Enforced by", "Status"]
+DECISIONS = [
+ ("D-01", "2026-09-15", "Governance",
+  "The model decides what to trade; code decides whether it is allowed",
+  "An LLM that can reshape an order until it passes has no risk control at "
+  "all. Separating proposal from permission makes the guardrail unreachable "
+  "by reasoning.",
+  "CLAUDE.md, the founding rule",
+  "engine/risk.py RiskOfficer.evaluate", "Active"),
+ ("D-02", "2026-09-15", "Sizing",
+  "Risk per trade capped at 2% of equity; size is derived from the stop",
+  "Size follows the stop, never the ambition. The binding constraint is "
+  "reported on every rejection so the reason is legible.",
+  "docs/05-sim-report.md Result 2",
+  "engine/config.py max_risk_per_trade_pct", "Active"),
+ ("D-03", "2026-09-15", "Exits",
+  "Every entry supplies a stop before it is placed, attached atomically",
+  "A filled entry whose stop is a follow-up call is an unmanaged position for "
+  "as long as the second call takes. Brackets make it one operation.",
+  "CLAUDE.md hard constraints",
+  "adapters/alpaca.py submit(), order_class=bracket", "Active"),
+ ("D-04", "2026-09-15", "Exits",
+  "Never widen a stop; never average down; scale out, not in",
+  "Both are the standard mechanisms by which a small account converts a "
+  "survivable loss into a terminal one.",
+  "docs/04-lessons.md 2026-09-15 (two entries)",
+  "engine/risk.py, tests/test_risk.py", "Active"),
+ ("D-05", "2026-09-15", "Instruments",
+  "Options locked twice: below $1,500 equity AND until 30 closed trades at "
+  ">= +0.10R measured expectancy",
+  "Affordability is not a quality gate. Simulation found long-premium buying "
+  "negative at EVERY capital level tested ($300-$10,000), so an equity floor "
+  "alone would have unlocked a losing strategy at $1,500.",
+  "docs/05-sim-report.md Results 7 and 8",
+  "engine/config.py option_min_equity + option_requires_proven_edge", "Active"),
+ ("D-06", "2026-09-15", "Circuit breakers",
+  "-4% day halts the day, -8% week halts the week, -20% from peak flattens "
+  "and locks for a human",
+  "Escalating, monotonic, and the last one is not self-clearing. LOCKED "
+  "requires RiskOfficer.unlock(authorization) with a human note.",
+  "docs/05-sim-report.md",
+  "engine/risk.py State machine", "Active"),
+ ("D-07", "2026-09-15", "Target",
+  "5%/week is a hurdle rate, not a quota; report the gap honestly and never "
+  "close it with leverage",
+  "The strategy that most directly pursued it locked the account in 100% of "
+  "300 runs; optimizing for 'weeks hitting +5%' selects for strategies that "
+  "ruin 94% of accounts.",
+  "docs/04-lessons.md 2026-09-15, sim ablation arms",
+  "Prose + the target_chaser_CONTROL simulation arm", "Active"),
+ ("D-08", "2026-09-15", "Model routing",
+  "Rule-changing tasks require Opus at xhigh and STOP on a downgrade; "
+  "trading tasks warn and continue",
+  "A bad execution turn costs one trade; a bad rule promoted into a SKILL.md "
+  "costs every trade until someone notices. The asymmetry is the point.",
+  "docs/06-model-strategy.md",
+  "engine/model_policy.py, tools/model_check.py", "Active"),
+ ("D-09", "2026-09-16", "Governance",
+  "An empty plan is binding: it means trade nothing, and the mechanical "
+  "scanner is not consulted",
+  "`propose_from_plan(today) or propose_mechanical(...)` treated a deliberate "
+  "refusal as having no opinion, because [] is falsy. A refusal to trade must "
+  "be distinguishable from an absent opinion.",
+  "docs/04-lessons.md 2026-09-16 rehearsal, defect 1",
+  "tools/paper_session.py, `is None` not `or`", "Active"),
+ ("D-10", "2026-09-16", "Governance",
+  "The brief's posture is enforced in code, and parsing fails closed",
+  "NO_TRADE and RISK_OFF appeared only inside a comment string; the binding "
+  "posture was enforced by the model's own compliance.",
+  "docs/04-lessons.md 2026-09-16 rehearsal, defect 2",
+  "engine/posture.py limits_for()", "Active"),
+ ("D-11", "2026-09-16", "State",
+  "state/ is tracked in git; .gitignore carries only secrets",
+  "Every Routine firing gets a fresh container and clone. With state/ ignored, "
+  "a HALTED_DAY cleared itself overnight and peak_equity reset to $300, so the "
+  "drawdown lock could never trigger.",
+  "docs/04-lessons.md 2026-09-15 circuit breakers",
+  ".gitignore + a comment forbidding the lines' return", "Active"),
+ ("D-12", "2026-09-17", "Data",
+  "Reachable is not usable: a 200 carrying a bot challenge is DEGRADED, and "
+  "a DEGRADED source is unavailable",
+  "stooq, Reuters, AP, MarketWatch, CNBC and The Block all answered and none "
+  "served data. Five of six news sources were bot walls reported healthy.",
+  "docs/04-lessons.md 2026-09-17 (three entries)",
+  "tools/netcheck.py challenge markers + 403 handling", "Active"),
+ ("D-13", "2026-09-17", "Data",
+  "Prefer an outlet's RSS feed over its HTML page",
+  "All seven RSS feeds returned 10-49 parsed items where the equivalent HTML "
+  "pages returned challenges. Feeds are built for machines.",
+  "docs/04-lessons.md 2026-09-17 source replacement",
+  ".claude/skills/news-intel/SKILL.md", "Active"),
+ ("D-14", "2026-09-17", "Data",
+  "Identify the agent honestly in the User-Agent, with a contact address",
+  "A Mozilla UA string was being gated by .gov WAFs. Government sources ask "
+  "for identification and serve identified clients.",
+  "docs/04-lessons.md 2026-09-17",
+  "tools/netcheck.py user_agent(), TRADING_AGENT_CONTACT", "Active"),
+ ("D-15", "2026-09-17", "Data",
+  "A keyless fallback must never gate a trading day",
+  "Yahoo rate-limits under load. As a hard preflight dependency it could "
+  "cancel a session on which Alpaca was perfectly healthy.",
+  "docs/04-lessons.md 2026-09-17",
+  "tools/preflight_phase2.py: Alpaca gates, Yahoo cross-checks", "Active"),
+ ("D-16", "2026-09-17", "Universe",
+  "The tradeable universe is a committed artifact built by a tool, not a "
+  "hand-typed list",
+  "'No setup today' was being computed against six hardcoded tickers. That is "
+  "not a market condition, it is a six-ticker list. The screen must state its "
+  "denominator.",
+  "docs/04-lessons.md 2026-09-17",
+  "tools/screen.py + data/universe.json (150 symbols)", "Active"),
+ ("D-17", "2026-09-17", "Sizing",
+  "Whole-share sizing stands; fractional shares are not adopted",
+  "MEASURED: Alpaca rejects fractional brackets (42210000, 'fractional orders "
+  "must be simple orders'). Fractional would widen a $300 account's universe "
+  "only by giving up the atomic stop.",
+  "docs/04-lessons.md 2026-09-17 smoke test",
+  "engine/risk.py qty = float(int(qty))", "Active"),
+ ("D-18", "2026-09-18", "Reward/risk",
+  "Expected R >= 1.5 is enforced in code; no target, no grade, no trade",
+  "The rule had been in CLAUDE.md, the runbook and the trade-plan skill since "
+  "day one and existed in none of them as code. evaluate() never read "
+  "p.target. Three approved breakouts on 2026-09-12 were refused only by "
+  "prose judgement.",
+  "docs/04-lessons.md 2026-09-18",
+  "engine/config.py min_expected_r, engine/risk.py", "Active"),
+ ("D-19", "2026-09-18", "Execution",
+  "Only actual fills are written to the fill log, at the broker's price and "
+  "quantity",
+  "Recording on submission put phantom entries at the head of the FIFO queue "
+  "and accrued them toward the option-unlock gate.",
+  "docs/04-lessons.md 2026-09-18",
+  "tools/paper_session.py fill_record(), adapters await_fill()", "Active"),
+ ("D-20", "2026-09-18", "Execution",
+  "Brackets are GTC so the stop outlives the session; session-close cancels "
+  "resting ENTRIES only",
+  "MEASURED: legs inherit the parent's time_in_force. Under 'day' the stop "
+  "was cancelled at 16:00 with the position still open. cancel_all() cannot "
+  "be used for the cleanup — it would strip live legs off open positions.",
+  "docs/04-lessons.md 2026-09-18",
+  "adapters/base.py OrderTicket, cancel_unfilled_entries()", "Active"),
+ ("D-21", "2026-09-18", "Instruments",
+  "No crypto, on the existing 'no stop, no trade' rule",
+  "MEASURED: Alpaca rejects bracket and OTO for crypto (42210000); the only "
+  "accepted crypto order has zero protective legs. 24/7 trading makes a "
+  "missing stop worse, not better, for an agent that wakes on a schedule.",
+  "docs/04-lessons.md 2026-09-18",
+  "No code change — D-03 already covers it", "Active"),
+ ("D-22", "2026-09-18", "Carry",
+  "Positions are carried overnight by design, not flattened daily",
+  "Target is entry + 3*ATR, a multi-day objective, and PDT allows only 3 day "
+  "trades per 5 business days. Flattening daily is neither desirable nor "
+  "available. The close prices the 1x and 2x gap cases explicitly.",
+  "engine/config.py max_day_trades_per_5d; trading_day close",
+  "tools/trading_day.py cmd_close overnight risk block", "Active"),
+]
+
+# --------------------------------------------------------------------------
+# Sheet 2 — bugs
+# --------------------------------------------------------------------------
+# "Created" is when the defect entered the codebase (from git log), not when
+# it was noticed. The gap between Created and Discovered is the number worth
+# looking at: it is how long the system looked correct while being wrong.
+BUGS_COLS = ["ID", "Category", "Severity", "Issue", "Resolution",
+             "Created (introduced)", "Discovered", "Solved",
+             "Days latent", "Fixed in", "Status"]
+BUGS = [
+ ("B-01", "Data path", "Critical",
+  "AlpacaAdapter.bars() sent no `start`, so Alpaca defaulted it to today and "
+  "returned exactly 1 bar for any limit. propose_mechanical needs 21 bars for "
+  "an ATR, so it skipped every symbol and printed 'no proposals today' — a "
+  "data outage rendered as a market opinion.",
+  "bars() derives a window from the requested length, pages to the end, and "
+  "returns the tail. Two tests pin both failure modes.",
+  "2026-09-15 18:36", "2026-09-15 20:45", "2026-09-15 20:45",
+  "0", "39026f2", "Closed"),
+ ("B-02", "Data path", "Critical",
+  "Follow-on from B-01: Alpaca's `limit` truncates from the START of the "
+  "range. A 60-bar request over 120 days returned real, correct-length, "
+  "month-stale data. Stops and sizes would have been priced off prices that "
+  "no longer existed.",
+  "Pagination to the end of the window, then tail. Verified against the live "
+  "endpoint: SPY 757.42 vs Yahoo 757.44, inside the 50bps tolerance.",
+  "2026-09-15 20:45", "2026-09-15 20:45", "2026-09-15 20:45",
+  "0", "39026f2", "Closed"),
+ ("B-03", "State", "Critical",
+  ".gitignore excluded state/ledger.json and state/fills.jsonl. Every Routine "
+  "firing gets a fresh container and clone, and state.load() recreates EMPTY "
+  "defaults. A day or week halt cleared itself overnight and peak_equity reset "
+  "to $300, so the -20% drawdown lock could never fire.",
+  "state/ tracked in git; .gitignore reduced to secrets only, with a comment "
+  "forbidding the lines' return. state.load() warns loudly and tags the "
+  "ledger `reborn` when it is missing.",
+  "2026-09-15 11:18", "2026-09-15 20:47", "2026-09-15 20:47",
+  "0", "cd3f0b3", "Closed"),
+ ("B-04", "Governance", "Critical",
+  "`propose_from_plan(today) or propose_mechanical(...)`: an empty plan is [] "
+  "and therefore falsy, so a deliberate NO-TRADE decision silently handed "
+  "control to the 20-day-breakout scanner. Harmless on the day only because "
+  "the scanner also found nothing.",
+  "`is None` distinguishes 'no plan written' from 'plan says trade nothing'. "
+  "An empty plan returns before the scanner is reached.",
+  "2026-09-15 18:36", "2026-09-16 15:17", "2026-09-16 15:17",
+  "1", "6c70fe7", "Closed"),
+ ("B-05", "Governance", "Critical",
+  "NO_TRADE and RISK_OFF postures had no enforcement in any .py file — they "
+  "appeared once, inside a comment. The brief's posture, documented as "
+  "binding, was enforced only by the model's own compliance.",
+  "engine/posture.py parses the brief and returns hard limits; paper_session "
+  "applies them before any proposal is evaluated.",
+  "2026-09-15 18:36", "2026-09-16 15:17", "2026-09-16 15:17",
+  "1", "6c70fe7", "Closed"),
+ ("B-06", "Record integrity", "High",
+  "review.closed_trades() had no dry_run filter, so previewed tickets accrued "
+  "toward the 30 closed trades and the expectancy that unlock the option "
+  "sleeve, and a phantom dry-run entry sat at the head of the FIFO queue "
+  "waiting to corrupt the next real trade's entry price and R.",
+  "closed_trades() drops dry_run rows before pairing, with a docstring "
+  "explaining both failure modes.",
+  "2026-09-15 18:36", "2026-09-16 15:17", "2026-09-16 15:17",
+  "1", "6c70fe7", "Closed"),
+ ("B-07", "Infrastructure", "Critical",
+  "The first autonomous Routine firing failed immediately: create_trigger "
+  "carries no git source, because a fresh-session-on-fire inherits the "
+  "environment, not the repository. The container came up empty.",
+  "Firings bound to a repo-attached persistent session instead of "
+  "create_new_session_on_fire. preflight_phase2 gained a `repository` check "
+  "as its first test.",
+  "2026-09-15 20:51", "2026-09-16 15:11", "2026-09-16 15:31",
+  "1", "70f8dbd, e904c36", "Closed"),
+ ("B-08", "Monitoring", "High",
+  "netcheck treated HTTP 403 as healthy, and checked its bot-challenge "
+  "markers only against success bodies. Five of six news sources and two "
+  "primary sources were serving walls and reporting green.",
+  "403 maps to DEGRADED; challenge markers extended and checked against error "
+  "bodies too; required and primary tiers separated so a primary outage "
+  "degrades rather than halts.",
+  "2026-09-15 19:11", "2026-09-17 15:32", "2026-09-17 15:32",
+  "2", "02a4246", "Closed"),
+ ("B-09", "Governance", "High",
+  "The posture parser read the brief's reasoning text rather than its "
+  "decision, so a brief explaining why it was NOT going risk-off could be "
+  "parsed as RISK_OFF (or the reverse).",
+  "Parser anchored and made to fail closed: an unparseable posture is treated "
+  "as the most restrictive, not the least.",
+  "2026-09-16 15:17", "2026-09-17 15:32", "2026-09-17 15:32",
+  "1", "02a4246", "Closed"),
+ ("B-10", "Universe", "High",
+  "'No setup today' was being computed against six hardcoded tickers. Two "
+  "sessions reported a quiet market when nothing had screened a market.",
+  "tools/screen.py builds and commits a 150-symbol universe from Alpaca "
+  "assets with price, volume and exchange criteria; the skill must state the "
+  "denominator it screened.",
+  "2026-09-15 18:36", "2026-09-17 15:38", "2026-09-17 15:38",
+  "2", "81c461f", "Closed"),
+ ("B-11", "Data path", "High",
+  "The keyless Yahoo fallback was a hard preflight dependency. It rate-limits "
+  "under load, so it could cancel a trading day on which Alpaca was healthy.",
+  "preflight gates on Alpaca; Yahoo demoted to cross-check only.",
+  "2026-09-15 20:03", "2026-09-17 16:12", "2026-09-17 16:12",
+  "2", "269f363", "Closed"),
+ ("B-12", "Data access", "Medium",
+  "The outbound User-Agent claimed to be Mozilla, and .gov WAFs gated it.",
+  "Honest identification with a contact address, via "
+  "tools.netcheck.user_agent() and TRADING_AGENT_CONTACT; marketdata.py "
+  "imports it rather than keeping its own string.",
+  "2026-09-15 20:03", "2026-09-17 16:12", "2026-09-17 16:12",
+  "2", "269f363", "Closed"),
+ ("B-13", "Integration", "High",
+  "After a week of source work, no skill referenced adapters.fred, "
+  "tools.screen, the committed universe, the Alpaca news API or any RSS feed. "
+  "news-intel still named six outlets verified that morning as bot walls. "
+  "Every capability was built, verified, and called by nothing.",
+  "news-intel, premarket-brief and trade-plan rewritten to name only "
+  "verified-working sources and to call the tools that exist.",
+  "2026-09-17 17:11", "2026-09-17 17:18", "2026-09-17 17:18",
+  "0", "56796ac", "Closed"),
+ ("B-14", "Risk gate", "Critical",
+  "The 'expected R >= 1.5' rule existed only in prose. "
+  "RiskOfficer.evaluate() never read OrderProposal.target, so the gate was "
+  "unreachable by construction. The simulator could not detect it: every "
+  "strategy sets target = entry + 3*ATR against a 1.5*ATR stop, which is 2.0R "
+  "by construction and can never fail a 1.5 gate.",
+  "min_expected_r and require_target in config; the gate in risk.py after the "
+  "asset-class checks, with a 1e-9 epsilon because the config's own option "
+  "exit pair is 0.60/0.40 = 1.4999999999999998. 7 tests.",
+  "2026-09-15 18:36", "2026-09-18 18:33", "2026-09-18 18:33",
+  "3", "5ff6999", "Closed"),
+ ("B-15", "Record integrity", "Critical",
+  "paper_session --submit wrote a fill-log row for every accepted order, at "
+  "the PROPOSED price and approved quantity, with no check that anything "
+  "traded. A bracket limit can rest all day and expire unfilled and would "
+  "still have been recorded as an entry — feeding the option-unlock gate and "
+  "corrupting the next real trade in that symbol via FIFO pairing. Invisible "
+  "for two sessions because the live path had never executed.",
+  "AlpacaAdapter.order()/await_fill() poll to a terminal status; "
+  "fill_record() is a pure function that writes only real fills at the "
+  "broker's price and quantity. Unfilled orders go to ledger.working_orders. "
+  "10 tests.",
+  "2026-09-15 18:36", "2026-09-18 18:36", "2026-09-18 18:36",
+  "3", "9d0a264", "Closed"),
+ ("B-16", "Execution", "Critical",
+  "A bracket's protective legs inherit the parent's time_in_force, which "
+  "defaulted to 'day'. A position filled at 10:15 had its stop CANCELLED at "
+  "16:00 while the position stayed open, and went through the overnight gap "
+  "naked. positions_without_stops() would have reported it the next morning, "
+  "which is after the gap.",
+  "OrderTicket.time_in_force defaults to 'gtc'. trading_day close cancels "
+  "resting ENTRY orders only (identified by still carrying their `legs`) and "
+  "re-verifies stops afterwards. cancel_all() explicitly rejected for this "
+  "job: it would strip live legs off open positions. 3 tests.",
+  "2026-09-15 18:36", "2026-09-18 18:40", "2026-09-18 18:40",
+  "3", "3418309", "Closed"),
+ ("B-17", "Infrastructure", "Medium",
+  "The repository path is not stable within a scheduled session, so tools "
+  "invoked with a remembered absolute path failed on later turns.",
+  "Discover the repo root every turn rather than caching it.",
+  "2026-09-16 15:11", "2026-09-16 15:13", "2026-09-16 15:13",
+  "0", "b5624ac", "Closed"),
+ ("B-18", "Permissions", "High",
+  "`python3 -m tools.paper_session --submit` is refused by the permission "
+  "classifier as a real-world transaction, so the live session path cannot "
+  "run unattended. There is no .claude/settings.json in the repository — no "
+  "permission allowlist exists at all.",
+  "OPEN. A project-level .claude/settings.json allowlist is drafted in "
+  "docs/11-autonomous-permissions.md. Claude cannot write it: the auto-mode "
+  "classifier blocks agent edits to .claude/ as self-modification, which is "
+  "correct. A human must install it.",
+  "2026-09-15 11:18", "2026-09-18 14:01", "",
+  "3", "", "OPEN — needs human"),
+]
+
+# --------------------------------------------------------------------------
+# Sheet 3 — systems and APIs in use
+# --------------------------------------------------------------------------
+SYSTEMS_COLS = ["Name", "Kind", "Host / endpoint", "Purpose", "Auth",
+                "Tier", "Verified", "Notes"]
+SYSTEMS = [
+ ("Alpaca paper trading", "Broker API", "paper-api.alpaca.markets",
+  "Phase 2 order routing, account, positions, orders, clock",
+  "API key + secret (env)", "Required", "2026-09-18",
+  "Bracket orders confirmed with 2 attached legs. Rejects fractional "
+  "brackets and all advanced crypto order classes."),
+ ("Alpaca market data", "Market data API", "data.alpaca.markets",
+  "Bars (IEX), snapshots, most-actives screener, and the news API "
+  "(/v1beta1/news)", "API key + secret (env)", "Required", "2026-09-18",
+  "Volume is IEX, roughly 4% of consolidated — the screen's dollar-volume "
+  "floor is set in IEX units. News feed is Benzinga only, 50 of 50 items, so "
+  "it cannot corroborate itself under the two-lane rule."),
+ ("Alpaca live trading", "Broker API", "api.alpaca.markets",
+  "Phase 3 only. Never reachable from tools.paper_session, which hardcodes "
+  "live=False", "API key + secret (env)", "Required (Phase 3)", "2026-09-18",
+  "Guarded by Authorization.load() — a dated human authorization file with a "
+  "max order notional — plus confirm_live=True at the call site."),
+ ("Robinhood agentic MCP", "Broker MCP", "agent.robinhood.com/mcp/trading",
+  "Phase 3 order routing: long equities, options and crypto on a dedicated "
+  "pre-funded account", "OAuth / MCP connector", "Required (Phase 3)",
+  "2026-09-17",
+  "Leg time-in-force inheritance must be re-measured here before Phase 3 — "
+  "it is broker behaviour, not a standard (see B-16)."),
+ ("FRED", "Macro data", "fred.stlouisfed.org",
+  "Jobless claims, retail sales, 10Y, 10Y-2Y, HY spreads, CPI, unemployment, "
+  "VIX, SOFR as keyless CSV", "None", "Primary", "2026-09-17",
+  "adapters/fred.py drops '.' missing values rather than zeroing them, and "
+  "returns as_of and stale_days with every value. Carries the jobless-claims "
+  "print that www.dol.gov refuses us."),
+ ("SEC EDGAR", "Filings", "www.sec.gov", "Company filings, primary facts",
+  "None (identified UA required)", "Primary", "2026-09-17",
+  "Requires an honest User-Agent with a contact address."),
+ ("SEC company facts", "Filings API", "data.sec.gov",
+  "XBRL company concepts as JSON", "None (identified UA required)",
+  "Primary", "2026-09-17", "Probe returned 11 USD facts for Apple."),
+ ("Federal Reserve", "Macro", "www.federalreserve.gov",
+  "Statements and calendar", "None", "Primary", "2026-09-17", ""),
+ ("BLS", "Macro", "www.bls.gov", "CPI and jobs — the release, not a summary",
+  "None", "Primary", "2026-09-17", ""),
+ ("BEA", "Macro", "www.bea.gov", "GDP, PCE", "None", "Primary",
+  "2026-09-17", ""),
+ ("US Treasury", "Macro", "home.treasury.gov", "Yield curve, auctions",
+  "None", "Primary", "2026-09-17", ""),
+ ("Treasury fiscal data", "Macro API", "api.fiscaldata.treasury.gov",
+  "Fiscal data as JSON", "None", "Primary", "2026-09-17", ""),
+ ("New York Fed", "Macro", "www.newyorkfed.org",
+  "SOFR and reference rates", "None", "Primary", "2026-09-17", ""),
+ ("CFTC", "Positioning", "publicreporting.cftc.gov",
+  "Commitments of Traders", "None", "Primary", "2026-09-17", ""),
+ ("FINRA", "Rules", "www.finra.org",
+  "Day-trading and margin rules — verify before Phase 3", "None", "Primary",
+  "2026-09-17",
+  "FINRA replaced the PDT $25k regime with intraday margin standards "
+  "effective 2026-06-04, broker phase-in to 2027-10-20. The config models the "
+  "strict case until Robinhood's implementation is confirmed."),
+ ("EIA", "Commodities", "www.eia.gov", "Energy inventories", "None",
+  "Optional", "2026-09-17", ""),
+ ("Yahoo Finance", "Market data", "query1.finance.yahoo.com",
+  "Independent price cross-check", "None", "Optional", "2026-09-18",
+  "Undocumented and rate-limits under load. Must never gate a trading day "
+  "(B-11). Used by adapters.marketdata.cross_check() with a 50bps tolerance."),
+ ("CoinGecko", "Crypto prices", "api.coingecko.com",
+  "Crypto prices, free tier", "None", "Optional", "2026-09-17",
+  "Reference only. No crypto is traded (D-21)."),
+ ("CoinDesk", "News", "www.coindesk.com",
+  "Crypto coverage — the one news HTML host that serves us", "None",
+  "Optional", "2026-09-17", ""),
+ ("BBC business RSS", "News", "feeds.bbci.co.uk", "Business headlines",
+  "None", "News", "2026-09-17", "RSS; the HTML pages are bot-walled."),
+ ("NPR business RSS", "News", "feeds.npr.org", "Business headlines", "None",
+  "News", "2026-09-17", ""),
+ ("Guardian business RSS", "News", "www.theguardian.com",
+  "Business headlines", "None", "News", "2026-09-17", ""),
+ ("Fox Business RSS", "News", "moxie.foxbusiness.com", "Markets headlines",
+  "None", "News", "2026-09-17", "Carries the political spread the skill asks for."),
+ ("The Hill business RSS", "News", "thehill.com", "Business headlines",
+  "None", "News", "2026-09-17", ""),
+ ("Cointelegraph RSS", "News", "cointelegraph.com", "Crypto headlines",
+  "None", "News", "2026-09-17", ""),
+ ("Decrypt RSS", "News", "decrypt.co", "Crypto headlines", "None", "News",
+  "2026-09-17", ""),
+ ("Claude Code Remote Routines", "Scheduler", "claude-code-remote MCP",
+  "Scheduled session firings at open, midday, pre-close and close",
+  "Session-scoped", "Required", "2026-09-18",
+  "Must bind to a repo-attached persistent session: a fresh-session-on-fire "
+  "inherits the environment, not the repository (B-07)."),
+ ("GitHub", "Source control", "github.com/recalcitrantmaus/tradingagent-claude",
+  "The repository is the durable state — containers are reclaimed",
+  "MCP / session-scoped", "Required", "2026-09-18",
+  "state/ is tracked deliberately so circuit breakers survive a fresh clone "
+  "(B-03)."),
+ # --- verified dead; kept so they are not silently re-added ---
+ ("stooq.com", "Market data", "stooq.com", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 200 with a JavaScript bot challenge instead of data."),
+ ("Reuters", "News", "www.reuters.com", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 401 + bot challenge."),
+ ("MarketWatch", "News", "www.marketwatch.com", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 401 + bot challenge."),
+ ("AP News", "News", "apnews.com", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 403 + bot challenge."),
+ ("The Block", "News", "www.theblock.co", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 403 + bot challenge."),
+ ("CNBC", "News", "www.cnbc.com", "(removed)", "None", "DEAD",
+  "2026-09-17", "HTTP 403."),
+ ("US Census", "Macro API", "api.census.gov", "(removed)", "API key",
+  "DEAD", "2026-09-17",
+  "HTTP 200 carrying an HTML 'Missing Key' page. FRED serves the same "
+  "retail-sales series (RSAFS) without a key."),
+ ("US Dept of Labor", "Macro", "www.dol.gov", "(removed)", "None", "DEAD",
+  "2026-09-17", "Refuses us; FRED's ICSA carries the same print."),
+]
+
+
+def build():
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        print("openpyxl is not installed.  pip install openpyxl", file=sys.stderr)
+        return 1
+
+    HEAD_FILL = PatternFill("solid", fgColor="1F3864")
+    HEAD_FONT = Font(color="FFFFFF", bold=True, size=11)
+    OPEN_FILL = PatternFill("solid", fgColor="FFF2CC")
+    DEAD_FILL = PatternFill("solid", fgColor="F2F2F2")
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    def sheet(title, cols, rows, widths, wrap_from=0, highlight=None):
+        ws = wb.create_sheet(title)
+        ws.append(cols)
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        for c in range(1, len(cols) + 1):
+            cell = ws.cell(row=1, column=c)
+            cell.fill, cell.font = HEAD_FILL, HEAD_FONT
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+        for r in rows:
+            ws.append(list(r))
+        for row in ws.iter_rows(min_row=2):
+            for c, cell in enumerate(row):
+                cell.alignment = Alignment(
+                    vertical="top", wrap_text=(c >= wrap_from))
+            if highlight:
+                fill = highlight([c.value for c in row])
+                if fill:
+                    for cell in row:
+                        cell.fill = fill
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+        return ws
+
+    sheet("Design decisions", DECISIONS_COLS, DECISIONS,
+          [8, 12, 16, 46, 60, 34, 40, 10], wrap_from=3)
+
+    def bug_fill(vals):
+        return OPEN_FILL if vals[-1].startswith("OPEN") else None
+    sheet("Bugs", BUGS_COLS, BUGS,
+          [7, 18, 10, 72, 62, 20, 18, 18, 12, 16, 16],
+          wrap_from=3, highlight=bug_fill)
+
+    def sys_fill(vals):
+        return DEAD_FILL if vals[5] == "DEAD" else None
+    sheet("Systems & APIs", SYSTEMS_COLS, SYSTEMS,
+          [26, 16, 38, 44, 26, 18, 12, 62], wrap_from=3, highlight=sys_fill)
+
+    # A front sheet, so the workbook says what it is and how to rebuild it.
+    ws = wb.create_sheet("About", 0)
+    rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                         capture_output=True, text=True).stdout.strip() or "unknown"
+    for row in [
+        ["Trading agent — design documentation"],
+        [],
+        ["Generated from", "tools/design_doc.py at commit " + rev],
+        ["Rebuild with", "python3 -m tools.design_doc"],
+        [],
+        ["This workbook is a build artifact.", "Edit tools/design_doc.py, not "
+         "the .xlsx — edits here are overwritten on the next build."],
+        [],
+        ["Design decisions", f"{len(DECISIONS)} rows. Each cites the file that "
+         "enforces it and the evidence that justified it."],
+        ["Bugs", f"{len(BUGS)} rows. 'Created' is when the defect entered the "
+         "codebase per git log, not when it was noticed; 'Days latent' is the "
+         "gap, i.e. how long the system looked correct while being wrong."],
+        ["Systems & APIs", f"{len(SYSTEMS)} rows, including sources verified "
+         "DEAD, kept so they are not silently re-added."],
+        [],
+        ["Open items", f"{sum(1 for b in BUGS if b[-1].startswith('OPEN'))} "
+         "(highlighted on the Bugs sheet)"],
+    ]:
+        ws.append(row)
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 100
+    ws["A1"].font = Font(bold=True, size=14)
+    for r in ws.iter_rows(min_row=3):
+        r[0].font = Font(bold=True)
+        for cell in r[1:]:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(OUT)
+    print(f"wrote {OUT.relative_to(ROOT)}  "
+          f"({len(DECISIONS)} decisions, {len(BUGS)} bugs, "
+          f"{len(SYSTEMS)} systems)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(build())
