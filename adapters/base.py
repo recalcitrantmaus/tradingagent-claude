@@ -56,7 +56,14 @@ class OrderTicket:
     limit_price: float
     stop_price: float
     take_profit: Optional[float] = None
-    time_in_force: str = "day"
+    # Measured against the paper broker on 2026-09-18: a bracket's protective
+    # legs inherit the PARENT's time_in_force. Under "day" the stop leg is
+    # cancelled at 16:00 with the position still open, leaving it naked through
+    # the gap — the exact unmanaged position submit() exists to prevent, except
+    # it registers correctly first and then expires silently. The stop must
+    # outlive the session that placed it, so brackets are GTC. The cost is that
+    # an UNFILLED entry also persists, which session-close cancels explicitly.
+    time_in_force: str = "gtc"
     thesis: str = ""
 
     def human(self) -> str:

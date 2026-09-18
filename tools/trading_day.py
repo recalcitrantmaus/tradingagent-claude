@@ -222,6 +222,28 @@ def cmd_close(args) -> int:
         lines.append(f"**2x-gap loss exceeds the {DEFAULT.weekly_loss_halt_pct:.0%} "
                      "weekly halt — reduce overnight exposure now.**")
 
+    # Entries are GTC so a filled position's stop survives the close (see
+    # OrderTicket.time_in_force). The corollary is that an unfilled entry would
+    # survive too and fire tomorrow on a gap against a stale thesis, so it is
+    # cancelled here. Protective legs are deliberately left resting.
+    cancelled = []
+    if broker is not None:
+        try:
+            cancelled = broker.cancel_unfilled_entries()
+        except Exception as e:                # never let cleanup kill the report
+            notes.append(f"could not cancel resting entries: {str(e)[:120]}")
+        if cancelled:
+            notes.append(f"cancelled resting entry orders: {cancelled}")
+        # Re-check AFTER cancelling: if that call stripped a stop by mistake,
+        # the report must say so tonight, not discover it tomorrow.
+        try:
+            still = broker.positions_without_stops()
+            if still != snap["unprotected"]:
+                snap["unprotected"] = still
+                notes.append(f"unprotected AFTER cancelling entries: {still}")
+        except Exception as e:
+            notes.append(f"could not re-verify stops: {str(e)[:120]}")
+
     lines += ["", "## Open overnight"]
     if snap["positions"]:
         for p in snap["positions"]:

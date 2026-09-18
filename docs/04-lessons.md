@@ -644,3 +644,101 @@ has two halves, sending and recording, and the second one is the half that
 lies quietly. **When something is "untested", name the specific line that has
 never executed, not the feature.**
 **Status:** active.
+
+### 2026-09-18 — Crypto cannot carry an atomic stop, so crypto is already prohibited
+**Question asked:** a bitcoin miner (MARA, RIOT) appeared in the screen, and
+crypto trades 24/7 while the agent only runs during the regular session. Should
+it be trading crypto off-hours?
+
+**Evidence:** measured against the Alpaca paper broker, 2026-09-18, four
+probes at unfillable prices, all cancelled:
+
+| Order shape | Broker response |
+|---|---|
+| `order_class=bracket` (stop + target) | **422** `crypto orders not allowed for advanced order_class: otoco` |
+| `order_class=oto` (stop only) | **422** `crypto orders not allowed for advanced order_class: oto` |
+| simple limit, `time_in_force=day` | **422** `invalid crypto time_in_force` |
+| simple limit, `time_in_force=gtc` | **ACCEPTED**, `legs=0` |
+
+So the only crypto order this broker will accept is one with no protective leg
+attached. CLAUDE.md already says: *every entry supplies a stop before it is
+placed. No stop, no trade.* Crypto is therefore not a new decision to make —
+it is prohibited by a rule that has been in force since day one. The hours
+question never arises.
+
+This is the fractional-shares finding again, one instrument over. There the
+tempting move was "enable fractional to widen a $300 universe"; here it is
+"trade crypto so the account can work nights". Both are paid for with the
+atomic stop, and the atomic stop is the thing that is not for sale.
+
+Note the second-order point, because it inverts the intuition. 24/7 markets
+make a missing stop *worse*, not better: a position with no resting stop, in a
+market that trades while no session is running, can only be managed by a
+process that is awake, and this agent is awake on a Routine schedule. The
+absence of a stop and the presence of 24/7 trading are not two independent
+facts, they compound.
+
+**On the miner itself:** MARA and RIOT are equities, not crypto. Nothing in
+Friday's screen was a crypto trade. But they import crypto's overnight
+variance into an instrument that can only be exited 6.5 hours a day — the
+worst combination of the two, and a reason to treat a miner's overnight gap
+risk as larger than its ATR suggests, not smaller. `class_caps["crypto"] = 0.20`
+and `max_position_pct_crypto` stay in the config as dead settings, and should
+be read as dead until a broker attaches a stop to a crypto order.
+
+**Change:** none to the rules — the existing rule already covers it. This
+entry exists so the question is not re-opened without new broker behaviour.
+Re-measure before Phase 3: Robinhood's MCP may differ, and if it attaches a
+stop atomically to crypto, the hours question becomes live and is worth asking
+properly.
+**Status:** active.
+
+### 2026-09-18 — The stop was being cancelled at 16:00, with the position still open
+**Evidence:** the same probe session, asking what happens to a bracket's
+protective legs overnight. Submitting an equity bracket and reading the legs
+back:
+
+```
+equity bracket, TIF=day   parent TIF=day   leg stop TIF=day   leg limit TIF=day
+equity bracket, TIF=gtc   parent TIF=gtc   leg stop TIF=gtc   leg limit TIF=gtc
+```
+
+**The legs inherit the parent's time_in_force.** `OrderTicket.time_in_force`
+defaulted to `"day"` and no caller overrode it. So the sequence for any
+position carried overnight was: entry fills at 10:15, stop registers correctly,
+16:00 arrives, the day order expires, **the stop is cancelled and the position
+is not**. The account would have sat through the gap naked, and
+`positions_without_stops()` would have reported it the next morning — after
+the gap, which is the only time it matters.
+
+`submit()` carries a docstring saying a filled entry whose stop failed to
+register "is exactly the unmanaged position this system exists to prevent".
+The stop did not fail to register. It registered, and then expired quietly six
+hours later, which the docstring did not contemplate.
+
+This was not hypothetical-only-in-principle: it was live in the path enabled
+earlier the same day, and the strategy makes carrying the normal case, not the
+exception. Target is `entry + 3*ATR` — a multi-day objective — and PDT allows
+3 day trades per 5 days, so flattening daily is not available even if it were
+desirable.
+
+**Change:** `OrderTicket.time_in_force` defaults to `"gtc"`, so a stop outlives
+the session that placed it. The corollary is that an *unfilled* entry also
+persists and would fire the next morning on a gap against yesterday's thesis,
+so `trading_day close` now calls `cancel_unfilled_entries()` — which cancels
+resting bracket *parents* only, identified by the fact that they still carry
+their `legs`, and never touches a live protective leg. `cancel_all()` must not
+be used for this: once a parent fills, its stop and target become ordinary
+open orders, and cancelling all of them strips the protection off an open
+position. The close then re-reads `positions_without_stops()` *after*
+cancelling and reports any change tonight rather than tomorrow. Three tests
+pin all of it, including that a failed cancel is reported rather than
+swallowed.
+
+**Lesson for future rules:** a control can be correctly installed and still
+stop existing later, and nothing will raise an error at the moment it
+disappears. Ask of every protective mechanism not only "is it attached?" but
+"what is its lifetime, and who ends it?" **Re-measure this on Robinhood before
+Phase 3** — leg TIF inheritance is broker behaviour, not a standard, and this
+one was discovered by asking the broker rather than by reading anything.
+**Status:** active.

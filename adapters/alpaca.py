@@ -226,6 +226,32 @@ class AlpacaAdapter:
             body["take_profit"] = {"limit_price": f"{ticket.limit_price * 3:.2f}"}
         return self._request("POST", f"{self.base}/v2/orders", body)
 
+    def cancel_unfilled_entries(self) -> List[str]:
+        """Cancel resting ENTRY orders, leaving protective legs alone.
+
+        Entries are GTC so that a filled position's stop survives the close.
+        The side effect is that an entry which did not fill would also survive,
+        and fire tomorrow on a gap against a thesis written yesterday. So the
+        close cancels entries — and only entries.
+
+        cancel_all() must never be used for this: once a bracket parent fills,
+        its stop and target become ordinary open orders, and cancelling them
+        strips the protection off an open position. An unfilled bracket parent
+        is identifiable because it still carries its `legs`; a live protective
+        leg does not.
+        """
+        cancelled = []
+        for o in self.open_orders():
+            if not o.get("legs"):
+                continue                      # a live leg, or a bare order
+            oid = o.get("id")
+            try:
+                self._request("DELETE", f"{self.base}/v2/orders/{oid}")
+                cancelled.append(f"{o.get('symbol')}:{oid}")
+            except AdapterError as e:
+                cancelled.append(f"{o.get('symbol')}:{oid} FAILED {str(e)[:80]}")
+        return cancelled
+
     def cancel_all(self) -> Dict:
         return self._request("DELETE", f"{self.base}/v2/orders")
 
@@ -255,6 +281,10 @@ class DryRunAlpaca(AlpacaAdapter):
         """Nothing was sent, so nothing can fill. Resolved, with zero filled."""
         return {"status": "dry_run", "filled_qty": 0.0,
                 "filled_avg_price": None, "resolved": True, "dry_run": True}
+
+    def cancel_unfilled_entries(self) -> List[str]:
+        print("[DRY RUN] would cancel resting entry orders")
+        return []
 
     def cancel_all(self) -> Dict:
         print("[DRY RUN] would cancel all open orders")

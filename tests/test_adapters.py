@@ -412,3 +412,63 @@ class TestFredAdapter(unittest.TestCase):
             self.assertIn("jobless", snap["ICSA"]["name"])
         finally:
             fred._fetch = original
+
+
+class TestTheStopOutlivesTheSession(unittest.TestCase):
+    """Measured against the paper broker on 2026-09-18.
+
+    A bracket's protective legs inherit the parent's time_in_force. Under
+    "day" the stop leg is cancelled at 16:00 with the position still open,
+    which leaves it naked through the overnight gap. The strategy is a
+    multi-day breakout (target = entry + 3*ATR) and PDT allows only 3 day
+    trades per 5 days, so carrying overnight is not optional — it is the
+    normal case, and it has to be the protected case.
+    """
+
+    def test_brackets_default_to_gtc_so_the_stop_survives_the_close(self):
+        t = OrderTicket(symbol="F", asset_class="equity", side="buy", qty=1,
+                        limit_price=10.0, stop_price=9.4)
+        self.assertEqual(t.time_in_force, "gtc")
+
+    def test_cancelling_entries_never_touches_a_live_protective_leg(self):
+        from adapters.alpaca import AlpacaAdapter
+        deleted = []
+
+        class Stub(AlpacaAdapter):
+            def __init__(self):
+                self.base = "https://paper-api.alpaca.markets"
+            def open_orders(self):
+                return [
+                    # an unfilled bracket parent: still carries its legs
+                    {"id": "parent-1", "symbol": "AAA", "legs": [
+                        {"id": "l1", "type": "stop"}, {"id": "l2", "type": "limit"}]},
+                    # a live stop protecting a FILLED position: no legs of its own
+                    {"id": "leg-live", "symbol": "BBB", "type": "stop", "legs": []},
+                    # a live take-profit, likewise
+                    {"id": "leg-tp", "symbol": "BBB", "type": "limit"},
+                ]
+            def _request(self, method, url, body=None):
+                deleted.append((method, url.rsplit("/", 1)[-1]))
+                return {}
+
+        out = Stub().cancel_unfilled_entries()
+        self.assertEqual(deleted, [("DELETE", "parent-1")])
+        self.assertEqual(out, ["AAA:parent-1"])
+        # The two BBB legs are still resting. cancel_all() would have taken
+        # them and left an open position with no stop.
+
+    def test_a_failed_cancel_is_reported_not_swallowed(self):
+        from adapters.alpaca import AlpacaAdapter
+        from adapters.base import AdapterError
+
+        class Stub(AlpacaAdapter):
+            def __init__(self):
+                self.base = "https://paper-api.alpaca.markets"
+            def open_orders(self):
+                return [{"id": "p1", "symbol": "AAA", "legs": [{"id": "l1"}]}]
+            def _request(self, method, url, body=None):
+                raise AdapterError("HTTP 422: order is no longer cancelable")
+
+        out = Stub().cancel_unfilled_entries()
+        self.assertEqual(len(out), 1)
+        self.assertIn("FAILED", out[0])
