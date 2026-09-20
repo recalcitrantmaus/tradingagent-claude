@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine.model_policy import POLICY, check, current_model, current_effort
+from engine.model_policy import (POLICY, check, model_and_source,
+                                 current_effort)
 
 
 def main() -> int:
@@ -22,7 +23,12 @@ def main() -> int:
     a = ap.parse_args()
 
     if not a.task:
-        print(f"running model : {current_model() or 'UNKNOWN'}")
+        m, src = model_and_source()
+        print(f"running model : {m or 'UNKNOWN'}  (source: {src})")
+        if src == "environment":
+            print("                ^ an environment default, the same for every "
+                  "session here.\n                  Blocking tasks require "
+                  "--model after checking the session record.")
         print(f"running effort: {current_effort() or 'UNKNOWN'}\n")
         print(f"{'task':22} {'min tier':10} {'min effort':11} {'blocking':9}")
         for p in POLICY.values():

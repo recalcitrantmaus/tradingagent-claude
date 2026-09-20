@@ -97,14 +97,31 @@ def tier_of(model_id: Optional[str]) -> Optional[Tier]:
     return None
 
 
-def current_model() -> Optional[str]:
-    """Best-effort read of the model this session is running.
+def model_and_source() -> tuple[Optional[str], str]:
+    """The model this session appears to run, AND where that claim came from.
 
-    Set TRADING_AGENT_MODEL / TRADING_AGENT_EFFORT in the Routine that
-    launches the agent. If neither is set the check cannot run, and an
-    unverifiable model is treated as a failure for blocking tasks.
+    This matters more than the value. `TRADING_AGENT_MODEL` is set at the
+    ENVIRONMENT level, so every session launched in an environment reports the
+    same model no matter what it is actually running. Measured 2026-09-18: a
+    session verified as claude-opus-5 from its own session record read
+    `claude-sonnet-5` here, because that is what the environment says.
+
+    Claude Code exports no model variable, so there is no better source
+    available to a Python process. The fix is therefore not a better guess, it
+    is honesty about provenance: an environment default is a DEFAULT, not a
+    measurement, and a caller that has verified its own model must say so.
+
+    Returns (model, source) where source is "explicit" when the caller passed
+    it, "environment" when it came from a variable, or "unknown".
     """
-    return os.environ.get("TRADING_AGENT_MODEL") or os.environ.get("ANTHROPIC_MODEL")
+    m = os.environ.get("TRADING_AGENT_MODEL") or os.environ.get("ANTHROPIC_MODEL")
+    return (m, "environment") if m else (None, "unknown")
+
+
+def current_model() -> Optional[str]:
+    """Back-compatible accessor. Prefer model_and_source() — the source is the
+    part that decides whether a blocking task may trust this value."""
+    return model_and_source()[0]
 
 
 def current_effort() -> Optional[str]:
@@ -118,14 +135,40 @@ def check(task: str, model: Optional[str] = None,
     if p is None:
         return True, [f"no model policy for '{task}'; proceeding"]
 
-    model = model or current_model()
+    if model:
+        source = "explicit"
+    else:
+        model, source = model_and_source()
     effort = effort or current_effort()
     msgs: List[str] = []
 
+    # A blocking task decides what the agent BECOMES. Clearing one on an
+    # environment default means clearing it on a value that cannot vary with
+    # the thing being checked — and the failure is silent and one config edit
+    # away: set TRADING_AGENT_MODEL to an opus id and EVERY session in the
+    # environment would clear, whatever it actually runs. So an unverified
+    # model is not good enough for a blocking task, even when it looks good
+    # enough. Pass --model after reading the session record.
+    if p.blocking and source != "explicit":
+        where = ("TRADING_AGENT_MODEL, an ENVIRONMENT-level default"
+                 if source == "environment" else "nowhere")
+        return False, [
+            f"'{task}' is blocking and the running model is UNVERIFIED: the "
+            f"value {model!r} came from {where}, which is the same for every "
+            f"session in this environment and cannot be trusted to describe "
+            f"this one.",
+            "Read the real model from the session record (get_session with "
+            "session_id omitted; session_context.model and "
+            "external_metadata.last_served_model), then re-run with "
+            f"--model <that model>. Refusing rather than guessing."]
+    if source == "environment":
+        msgs.append(f"model {model!r} read from TRADING_AGENT_MODEL (an "
+                    "environment default, not a measurement of this session)")
+
     tier = tier_of(model)
     if tier is None:
-        msg = (f"cannot verify the running model "
-               f"(TRADING_AGENT_MODEL={model!r}); '{task}' requires at least "
+        msg = (f"cannot verify the running model (value {model!r} from "
+               f"{source}); '{task}' requires at least "
                f"{p.min_tier.value} at {p.min_effort}")
         return (not p.blocking), [msg]
 

@@ -29,6 +29,14 @@ EMPTY: Dict[str, Any] = {
     "day_trades": [],
     "human_authorization": None,
     "last_reconciled": None,
+    # The cash invariant's anchor. `cash` above was written once at birth and
+    # never again, so reconcile() had nothing to compare against and a broker
+    # cash change with no position change passed silently (2026-09-18).
+    # These are re-anchored at every open and close.
+    "broker_cash": None,
+    "broker_equity": None,
+    "broker_cash_at": None,
+    "reconcile_drift": [],
 }
 
 

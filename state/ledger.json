@@ -1,5 +1,8 @@
 {
-  "cash": 300.0,
+  "broker_cash": 299.99,
+  "broker_cash_at": "2026-09-20T19:25:32.076254+00:00",
+  "broker_equity": 299.99,
+  "cash": 299.99,
   "day_start_equity": 299.99,
   "day_trades": [],
   "days": [
@@ -52,12 +55,19 @@
   ],
   "halts": [],
   "human_authorization": null,
-  "last_reconciled": "2026-09-18",
+  "last_reconciled": "2026-09-20",
   "mode": "paper",
   "peak_equity": 300.0,
   "phase": "phase2",
   "positions": {},
   "realized_pnl": 0.0,
+  "reconcile_drift": [
+    {
+      "at": "2026-09-20T19:25:32.076254+00:00",
+      "broker_cash": 299.99,
+      "drift": 0.0
+    }
+  ],
   "risk_state": "NORMAL",
   "starting_equity": 300.0,
   "week_start_equity": 300.0

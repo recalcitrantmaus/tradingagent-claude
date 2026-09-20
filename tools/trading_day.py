@@ -45,15 +45,56 @@ def get_broker(offline: bool):
     return AlpacaAdapter(live=False)
 
 
+# Detection is tight; response is proportionate. An unexplained cent and an
+# unexplained dollar have the same causes — an unrecorded fill, a fee, a
+# position opened and closed between two firings, a bug in the submit path —
+# so both are reported. Only the larger one stops the day.
+DRIFT_NOTE = 0.005
+DRIFT_HALT_ABS = 1.00
+DRIFT_HALT_PCT = 0.005
+
+
+def cash_effect(f: Dict) -> float:
+    """What a recorded fill did to cash. Buys consume it, sells return it."""
+    gross = f.get("qty", 0.0) * f.get("price", 0.0) * f.get("multiplier", 1)
+    fees = f.get("fees", 0.0) or 0.0
+    return -(gross + fees) if f.get("side") == "buy" else (gross - fees)
+
+
+def expected_cash(ledger: Dict, fills: List[Dict]) -> Tuple[Optional[float], int]:
+    """Broker cash we should see, from the last anchor plus fills since it.
+
+    Returns (expected, n_fills_counted), or (None, 0) when no anchor exists —
+    the first run after this check was added, which is not a failure.
+    """
+    anchor = ledger.get("broker_cash")
+    if anchor is None:
+        return None, 0
+    since = ledger.get("broker_cash_at") or ""
+    counted = [f for f in fills
+               if not f.get("dry_run") and str(f.get("ts", "")) > since]
+    return anchor + sum(cash_effect(f) for f in counted), len(counted)
+
+
 def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
     """Compare the broker's truth against ours. Returns (ok, notes, snapshot)."""
     notes: List[str] = []
     if broker is None:
         curve = ledger.get("equity_curve") or []
         eq = curve[-1][1] if curve else ledger.get("cash", DEFAULT.starting_equity)
-        return True, ["OFFLINE: using the stored ledger, not the broker"], {
-            "equity": eq, "cash": ledger["cash"], "positions": [],
-            "unprotected": [], "daytrades": len(ledger.get("day_trades", []))}
+        # Do not present a stored number as current. ledger["cash"] was write-
+        # once dead data until 2026-09-20 and would have read $300.00 forever;
+        # say what was last OBSERVED and when, so a stale figure looks stale.
+        seen = ledger.get("broker_cash")
+        when = ledger.get("broker_cash_at") or "never"
+        notes.append(
+            "OFFLINE: using the stored ledger, not the broker. Last broker "
+            f"cash observed: {('$%.2f' % seen) if seen is not None else 'never'} "
+            f"at {when}")
+        return True, notes, {
+            "equity": eq, "cash": seen if seen is not None else ledger.get("cash"),
+            "positions": [], "unprotected": [],
+            "daytrades": len(ledger.get("day_trades", []))}
 
     acct = broker.account()
     positions = broker.positions()
@@ -61,6 +102,25 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
 
     if acct["trading_blocked"]:
         notes.append("BROKER REPORTS trading_blocked — stop")
+
+    # --- cash drift ---------------------------------------------------
+    # Equity moves every second for legitimate reasons, so comparing it needs
+    # a tolerance wide enough to catch nothing. Cash only moves when something
+    # HAPPENED. That makes it the invariant worth checking, and it is the one
+    # that caught nothing on 2026-09-18 when $300.00 became $299.99 with every
+    # control reporting clean.
+    drift = None
+    exp, n_fills = expected_cash(ledger, state.read_fills())
+    if exp is None:
+        notes.append("no cash anchor yet; recording one (first run of this check)")
+    else:
+        drift = acct["cash"] - exp
+        if abs(drift) > DRIFT_NOTE:
+            notes.append(
+                f"CASH DRIFT {drift:+.4f}: broker ${acct['cash']:.2f} vs "
+                f"${exp:.2f} expected (anchor ${ledger.get('broker_cash'):.2f} "
+                f"+ {n_fills} recorded fill(s) since "
+                f"{ledger.get('broker_cash_at')}). Unexplained by the fill log.")
     ledger_syms = set(ledger.get("positions", {}))
     broker_syms = {p["symbol"] for p in positions}
     if ledger_syms != broker_syms:
@@ -73,10 +133,42 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
     if unprotected:
         notes.append(f"positions with NO resting stop: {unprotected}")
 
-    ok = not acct["trading_blocked"] and ledger_syms == broker_syms
+    halt_at = max(DRIFT_HALT_ABS, DRIFT_HALT_PCT * (acct["equity"] or 0.0))
+    drift_halts = drift is not None and abs(drift) > halt_at
+    if drift_halts:
+        notes.append(f"drift {abs(drift):.2f} exceeds {halt_at:.2f} — "
+                     "the ledger and the broker disagree materially. "
+                     "DO NOT TRADE until this is explained.")
+
+    ok = (not acct["trading_blocked"] and ledger_syms == broker_syms
+          and not drift_halts)
     return ok, notes, {"equity": acct["equity"], "cash": acct["cash"],
                        "positions": positions, "unprotected": unprotected,
-                       "daytrades": acct["daytrade_count"]}
+                       "daytrades": acct["daytrade_count"],
+                       "cash_drift": drift}
+
+
+
+def anchor_cash(ledger: Dict, snap: Dict, when: str = "") -> None:
+    """Re-anchor the cash invariant to what the broker just said.
+
+    Called at BOTH open and close. Without this the check has no baseline on
+    the next run, which is exactly how ledger["cash"] came to sit at its
+    initial 300.0 while the broker moved: written once at birth and never
+    again.
+    """
+    if snap.get("cash") is None:
+        return
+    ledger["broker_cash"] = snap["cash"]
+    ledger["broker_equity"] = snap.get("equity")
+    ledger["broker_cash_at"] = when or dt.datetime.now(dt.timezone.utc).isoformat()
+    ledger["cash"] = snap["cash"]          # keep the legacy field honest too
+    if snap.get("cash_drift") is not None:
+        hist = ledger.setdefault("reconcile_drift", [])
+        hist.append({"at": ledger["broker_cash_at"],
+                     "drift": round(snap["cash_drift"], 4),
+                     "broker_cash": snap["cash"]})
+        del hist[:-60]                      # keep it bounded; 60 marks is ample
 
 
 def build_engine(snapshot: Dict, ledger: Dict, today: dt.date
@@ -157,6 +249,7 @@ def cmd_open(args) -> int:
     ledger["peak_equity"] = pf.peak_equity
     ledger["last_reconciled"] = today.isoformat()
     ledger["positions"] = {p["symbol"]: p for p in snap["positions"]}
+    anchor_cash(ledger, snap)
     if ro.journal:
         ledger.setdefault("halts", []).extend(
             [{"date": today.isoformat(), "event": j} for j in ro.journal])
@@ -282,6 +375,7 @@ def cmd_close(args) -> int:
         ledger["peak_equity"] = max(ledger.get("peak_equity", eq), eq)
         ledger["risk_state"] = st.value
         ledger["last_reconciled"] = today.isoformat()
+        anchor_cash(ledger, snap)
         ledger.setdefault("days", []).append(
             {"date": today.isoformat(), "equity": eq, "day_pnl": round(day_pnl, 5),
              "risk_state": st.value, "escalations": escalations})

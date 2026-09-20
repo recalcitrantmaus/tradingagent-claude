@@ -976,12 +976,27 @@ a stop, found the same afternoon, and as netcheck reading 403 as healthy. The
 control runs, returns a confident verdict, and the verdict rests on evidence
 that does not establish the claim.
 
-**Change:** none yet — recorded, not fixed. The fix is for a session cleared to
-make it, and it needs a test: `current_model()` should read the live session
-record (the `get_session` fields above) and treat a value it cannot verify
-*per session* as unverified, which the policy already treats as failure for
-blocking tasks. The environment variable is acceptable only as a fallback, and
-should be reported as a fallback when it is used.
+**Change (landed 2026-09-20):** the fix is not a better guess — Claude Code
+exports no model variable, so there is no better source available to a Python
+process. It is honesty about provenance. `model_and_source()` returns the
+value *and where it came from*, and `check()` now **refuses any blocking task
+whose model came from the environment**, in either direction:
+
+```
+$ python3 -m tools.model_check weekly-review
+  !! 'weekly-review' is blocking and the running model is UNVERIFIED: the
+     value 'claude-sonnet-5' came from TRADING_AGENT_MODEL, an
+     ENVIRONMENT-level default ... Refusing rather than guessing.
+$ python3 -m tools.model_check weekly-review --model claude-opus-5
+  ok: 'weekly-review' cleared on claude-opus-5 at effort xhigh
+```
+
+Refusing even when the environment value *would* pass is the point: accepting
+it in the passing direction is what makes the failing direction reachable by a
+single config edit. Non-blocking tasks proceed and name the provenance in
+their output. Ten tests in `tests/test_model_policy.py`, including one pinning
+that the rule-changing tasks are the blocking ones — making `rule-promotion`
+non-blocking is the single change that would quietly undo this whole gate.
 
 **Lesson for future rules:** ask what *scope* a control's evidence has, not
 just whether the evidence is present. An environment variable cannot describe a
@@ -1079,4 +1094,60 @@ conditioned on a selection, do not reason about which way it cuts. Re-run it
 without the selection, and if that is impossible, say the result is
 conditional rather than predicting the correction.** The number to distrust
 most is the only one that came back significant.
+**Status:** active.
+
+### 2026-09-20 — The ledger's cash was write-once, so drift could not be seen
+**Evidence:** on 2026-09-18 a one-share probe moved the broker from $300.00 to
+$299.99. Every control reported clean: `trading_day open` printed `$299.99`
+and `0 closed trades` in the same breath, the close reported "Escalate to the
+human today? — nothing", and `tools.review` said "no closed trades".
+
+The 15:30 session found why `reconcile()` could not see it — it compares
+position symbols and `trading_blocked`, then adopts `acct["equity"]` wholesale
+without ever asking whether that number is what the ledger expects. Reading
+further turned up something worse: **`ledger["cash"]` was never written after
+initialisation.** Nothing in `trading_day.py` or `paper_session.py` assigned
+it; it sat at `300.0` from `state.EMPTY` forever, and `reconcile()` only read
+it in the offline branch — which would therefore have reported $300.00
+indefinitely, no matter what had happened.
+
+So it was not a tracked value that drifted. It was a field that looked like a
+tracked value and never was.
+
+**Change:** check **cash**, not equity. Equity moves every second for
+legitimate reasons, so comparing it needs a tolerance wide enough to catch
+nothing; cash only moves when something *happened*, which makes it the
+invariant worth holding:
+
+```
+expected_cash = ledger["broker_cash"]                      # last observation
+              + sum(cash_effect(f) for f in fills since that observation)
+```
+
+Response is tiered, detection is not. Anything over half a cent is reported;
+only drift over `max($1, 0.5% of equity)` returns `ok=False` and stops the
+day. An unexplained cent and an unexplained dollar have identical causes — an
+unrecorded fill, a fee, a position opened and closed between two firings, a
+bug in the submit path — so both get said out loud, and the size decides only
+whether trading continues.
+
+Carried day to day by `anchor_cash()`, called at **both** open and close: it
+writes `broker_cash`, `broker_equity`, `broker_cash_at`, appends to a bounded
+`reconcile_drift` history, and keeps the legacy `cash` field honest. The
+offline branch now reports the last *observed* broker figure with its
+timestamp instead of a stored guess, so a stale number looks stale.
+
+Verified live against the paper broker, non-destructively, on a copy of the
+ledger: Friday's exact cent is caught and noted with the day continuing; a
+$40 disagreement returns `ok=False` with "DO NOT TRADE". Thirteen tests,
+including the one-cent case, a fill that explains the drift, a fill recorded
+before the anchor, dry-run rows excluded, and the threshold scaling with
+equity.
+
+**Lesson for future rules:** a field that is initialised and never assigned
+reads exactly like a field that is maintained — same name, same type, a
+plausible value. `ledger["cash"] == 300.0` was *correct* on day one, which is
+what made it invisible on day four. **For any value a control compares
+against, find the line that writes it. If there is only one and it runs at
+birth, the control is comparing against a constant.**
 **Status:** active.
