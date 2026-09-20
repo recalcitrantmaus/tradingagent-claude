@@ -6,7 +6,16 @@ claude.ai UI is lost the moment someone edits it.
 
 A Routine created in the web UI **cannot be edited by an agent**
 (`update_trigger` refuses: "Agents can only update routines they created").
-So these are pasted in by hand at `https://claude.ai/code/routines/<trigger_id>`.
+So these are pasted in by hand at
+`https://claude.ai/code/routines/` + the trigger id.
+
+**Never put `<angle brackets>` inside a prompt body.** The Routines editor
+strips them as HTML tags, silently. On 2026-09-20 that turned
+`model_check <task> --model <verified model>` into
+`model_check  --model` in two live Routines — a command that exits on an
+argparse error. Use `CAPITALISED_PLACEHOLDERS` instead. The editor also drops
+leading list markers (`1.`, `-`) and inserts blank lines; that is cosmetic and
+does not need fixing, but the angle brackets do.
 
 ## The day
 
@@ -67,7 +76,8 @@ read session_context.model and external_metadata.last_served_model). The
 environment variable says claude-sonnet-5 and is wrong for this firing; as of
 2026-09-20 model_check refuses blocking tasks on an unverified model. Pass
 your verified model when you need one:
-  python3 -m tools.model_check <task> --model <verified model>
+  python3 -m tools.model_check TASK_NAME --model THE_MODEL_YOU_VERIFIED
+e.g.  python3 -m tools.model_check execution --model claude-opus-5
 
 python3 -m tools.preflight_phase2     # non-zero means DO NOT TRADE
 
@@ -314,7 +324,9 @@ off-plan — it got paid for a mistake and teaches the wrong lesson.
 
 5. DO NOT run the weekly review and do not promote, change or delete any
 trading rule. Check first:
-  python3 -m tools.model_check weekly-review --model <verified from the session record>
+  python3 -m tools.model_check weekly-review --model THE_MODEL_YOU_VERIFIED
+(substitute the model you read from the session record, e.g.
+ claude-opus-5 — do NOT leave --model empty, argparse will error)
 and respect the result. Write up what a reviewer should look at and leave the
 judgement to a cleared session.
 
