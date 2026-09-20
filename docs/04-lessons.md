@@ -1200,3 +1200,44 @@ requirement instead of the code against the comment. **Read the line, not the
 line above it.** And when a function is called from more than one place, ask
 what it assumes about being called once.
 **Status:** active.
+
+### 2026-09-20 — A per-reading threshold cannot see a day that leaks
+**Evidence:** the cash-drift check landed earlier the same day reports the
+displacement since the last anchor, then re-anchors. That is correct per
+reading, and `trading_day open` runs at every management firing — open,
+midday, pre-close. So three separate 60-cent surprises are three correct,
+individually sub-threshold notes, while $1.80 of a $300 account has moved
+with no recorded cause and nothing says so.
+
+Each reading was reported, so nothing was hidden. But the *day* was never
+stated, and the halt acted on increments rather than on the total, which is
+the number that matters.
+
+**Change:** `drift_today()` sums the readings already recorded today from
+`reconcile_drift` (today's only — Friday's $9 is not Monday's problem). The
+day's total is reported when there is more than one reading, and **the halt
+now fires on the cumulative figure as well as the individual one**. The close
+report states the figure unconditionally, including when it is zero:
+
+```
+## Cash reconciliation
+- unexplained cash drift today: **$+0.0000** across 2 reconciliation(s)  — clean
+```
+
+Reporting it only when non-zero teaches the reader that silence means "not
+checked", which is how a $300.00 that should have read $299.99 went unremarked
+for a day.
+
+**The test got the arithmetic wrong before the code did.** The first version
+used three 40-cent drifts and asserted a halt; it failed, because the
+threshold is `max($1.00, 0.5% of equity)` = **$1.50** at this account size, not
+the $1.00 floor. The percentage term passes the floor above $200 of equity, so
+the floor is never binding for this account. Pinned in a test now, because it
+is counter-intuitive at $300 and I got it wrong while writing the thing.
+
+**Lesson for future rules:** a threshold applied per reading is not a
+threshold on the quantity, it is a threshold on the sampling rate. Check more
+often and the same total passes more easily — which is the opposite of what
+more checking should buy. **When a control samples repeatedly, ask what it
+does to a quantity that leaks slowly.**
+**Status:** active.

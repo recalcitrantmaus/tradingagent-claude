@@ -333,3 +333,91 @@ class TestHaltBaselinesAnchorToTheCalendar(unittest.TestCase):
             ro.start_day(_FixedDate.today(), snap["equity"])
             ro.day_start_equity = led2["day_start_equity"]
         self.assertEqual(ro.day_start_equity, 300.0)
+
+
+class TestCumulativeDrift(unittest.TestCase):
+    """Each reading is an increment since the last anchor, so a day's readings
+    sum. trading_day open runs at every management firing, so three separate
+    sub-threshold surprises are three small notes and one material total.
+    """
+
+    def led(self, *history, cash=300.0):
+        return {"positions": {}, "cash": cash, "broker_cash": cash,
+                "broker_cash_at": "2026-09-21T13:45:00+00:00",
+                "reconcile_drift": list(history)}
+
+    def hist(self, drift, at="2026-09-21T16:00:00+00:00"):
+        return {"at": at, "drift": drift, "broker_cash": 300.0}
+
+    def test_todays_readings_sum_and_yesterdays_do_not(self):
+        led = self.led(self.hist(-0.40),
+                       self.hist(-0.40, at="2026-09-21T19:30:00+00:00"),
+                       self.hist(-9.00, at="2026-09-18T20:00:00+00:00"))
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            _, notes, snap = reconcile(FakeBroker(cash=299.60), led)
+        # -0.40 now, -0.80 already today; Friday's -9.00 is not today's problem
+        self.assertAlmostEqual(snap["cash_drift"], -0.40)
+        self.assertAlmostEqual(snap["cash_drift_today"], -1.20)
+        self.assertEqual(snap["drift_readings_today"], 3)
+        self.assertTrue(any("CUMULATIVE DRIFT TODAY" in n for n in notes))
+
+    def test_three_small_drifts_halt_the_day_together(self):
+        """None of these exceeds the threshold alone; together they do.
+
+        The threshold at this account size is max($1.00, 0.5% of equity) =
+        $1.50, NOT the $1.00 floor — the percentage term dominates above $200
+        of equity. An earlier version of this test used three 40c drifts,
+        totalling $1.20, and failed because the code was right.
+        """
+        led = self.led(self.hist(-0.60),
+                       self.hist(-0.60, at="2026-09-21T19:30:00+00:00"))
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            ok, notes, snap = reconcile(FakeBroker(cash=299.40), led)
+        self.assertAlmostEqual(snap["cash_drift"], -0.60)      # each is small
+        self.assertAlmostEqual(snap["cash_drift_today"], -1.80)  # together, not
+        self.assertFalse(ok)
+        self.assertTrue(any("cumulative drift" in n and "DO NOT TRADE" in n
+                            for n in notes))
+
+    def test_a_cumulative_total_just_under_the_threshold_does_not_halt(self):
+        # the boundary matters: $1.20 against a $1.497 threshold stays open,
+        # reported but not halting. Detection is tight, response is tiered.
+        led = self.led(self.hist(-0.40),
+                       self.hist(-0.40, at="2026-09-21T19:30:00+00:00"))
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            ok, notes, snap = reconcile(FakeBroker(cash=299.60), led)
+        self.assertTrue(ok)
+        self.assertAlmostEqual(snap["cash_drift_today"], -1.20)
+        self.assertTrue(any("CUMULATIVE DRIFT TODAY" in n for n in notes))
+
+    def test_the_halt_threshold_is_the_percentage_not_the_floor_at_this_size(self):
+        # Pinned because it is counter-intuitive at $300 and I got it wrong
+        # writing these tests: 0.5% of equity passes $1.00 at $200 of equity,
+        # so the floor is never the binding term for this account.
+        self.assertGreater(td.DRIFT_HALT_PCT * 300.0, td.DRIFT_HALT_ABS)
+
+    def test_a_single_clean_reading_after_a_clean_day_stays_clean(self):
+        led = self.led(self.hist(0.0))
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            ok, notes, snap = reconcile(FakeBroker(cash=300.0), led)
+        self.assertTrue(ok)
+        self.assertAlmostEqual(snap["cash_drift_today"], 0.0)
+        self.assertFalse(any("CUMULATIVE" in n for n in notes))
+
+    def test_offsetting_drifts_do_not_hide_each_other_from_the_reader(self):
+        # +1.00 then -1.00 nets zero, which is the honest CUMULATIVE answer,
+        # but each reading was reported when it happened and both sit in the
+        # history. The net is what the halt acts on; the notes carry the rest.
+        led = self.led(self.hist(+1.00))
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            ok, notes, snap = reconcile(FakeBroker(cash=299.00), led)
+        self.assertAlmostEqual(snap["cash_drift"], -1.00)
+        self.assertAlmostEqual(snap["cash_drift_today"], 0.0)
+        self.assertTrue(any("CASH DRIFT -1.0000" in n for n in notes))
+
+    def test_the_first_reading_of_the_day_reports_itself_as_the_total(self):
+        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+            _, notes, snap = reconcile(FakeBroker(cash=299.99), self.led())
+        self.assertAlmostEqual(snap["cash_drift_today"], -0.01)
+        self.assertEqual(snap["drift_readings_today"], 1)
+        self.assertFalse(any("CUMULATIVE" in n for n in notes))

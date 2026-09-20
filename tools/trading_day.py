@@ -54,6 +54,25 @@ DRIFT_HALT_ABS = 1.00
 DRIFT_HALT_PCT = 0.005
 
 
+
+def drift_today(ledger: Dict, today: Optional[dt.date] = None) -> Tuple[float, int]:
+    """Drift already recorded today, and how many readings produced it.
+
+    Each reconciliation reports the displacement since the LAST anchor, then
+    re-anchors — so a day's readings are increments, not repeats, and summing
+    them gives total displacement from the day's first observation.
+
+    That matters because `trading_day open` runs at every management firing.
+    Three separate 40-cent surprises are each below the halt threshold and
+    each correctly reported, while $1.20 of the account has gone somewhere
+    nobody can explain. Reporting only the last one understates the day.
+    """
+    key = (today or dt.date.today()).isoformat()
+    rows = [r for r in (ledger.get("reconcile_drift") or [])
+            if str(r.get("at", "")).startswith(key)]
+    return sum(r.get("drift", 0.0) for r in rows), len(rows)
+
+
 def cash_effect(f: Dict) -> float:
     """What a recorded fill did to cash. Buys consume it, sells return it."""
     gross = f.get("qty", 0.0) * f.get("price", 0.0) * f.get("multiplier", 1)
@@ -121,6 +140,17 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
                 f"${exp:.2f} expected (anchor ${ledger.get('broker_cash'):.2f} "
                 f"+ {n_fills} recorded fill(s) since "
                 f"{ledger.get('broker_cash_at')}). Unexplained by the fill log.")
+
+    # Each reading is an increment since the last anchor, so the day's total
+    # is their sum. Without this, three sub-threshold surprises read as three
+    # small notes instead of one material one.
+    prior, n_prior = drift_today(ledger)
+    cum = (drift or 0.0) + prior
+    if n_prior and abs(cum) > DRIFT_NOTE:
+        notes.append(
+            f"CUMULATIVE DRIFT TODAY {cum:+.4f} across {n_prior + 1} "
+            f"reconciliation(s). Individually small, collectively this is how "
+            f"much of the account has moved with no recorded cause.")
     ledger_syms = set(ledger.get("positions", {}))
     broker_syms = {p["symbol"] for p in positions}
     if ledger_syms != broker_syms:
@@ -134,9 +164,13 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
         notes.append(f"positions with NO resting stop: {unprotected}")
 
     halt_at = max(DRIFT_HALT_ABS, DRIFT_HALT_PCT * (acct["equity"] or 0.0))
-    drift_halts = drift is not None and abs(drift) > halt_at
+    single_halts = drift is not None and abs(drift) > halt_at
+    cum_halts = bool(n_prior) and abs(cum) > halt_at
+    drift_halts = single_halts or cum_halts
     if drift_halts:
-        notes.append(f"drift {abs(drift):.2f} exceeds {halt_at:.2f} — "
+        which = (f"drift {abs(drift):.2f}" if single_halts
+                 else f"cumulative drift {abs(cum):.2f} across the day")
+        notes.append(f"{which} exceeds {halt_at:.2f} — "
                      "the ledger and the broker disagree materially. "
                      "DO NOT TRADE until this is explained.")
 
@@ -145,7 +179,9 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
     return ok, notes, {"equity": acct["equity"], "cash": acct["cash"],
                        "positions": positions, "unprotected": unprotected,
                        "daytrades": acct["daytrade_count"],
-                       "cash_drift": drift}
+                       "cash_drift": drift,
+                       "cash_drift_today": cum if n_prior else drift,
+                       "drift_readings_today": n_prior + 1}
 
 
 
@@ -365,6 +401,21 @@ def cmd_close(args) -> int:
                          f"P&L {p['unrealized_pl']:+.2f}{flag}")
     else:
         lines.append("- none (flat)")
+
+    # State the cash figure unconditionally, including when it is zero. A
+    # report that mentions drift only when there is some teaches the reader
+    # that silence means "not checked" — which is exactly how a $300.00 that
+    # should have read $299.99 went unremarked for a day.
+    cum = snap.get("cash_drift_today")
+    reads = snap.get("drift_readings_today") or 0
+    lines += ["", "## Cash reconciliation"]
+    if cum is None:
+        lines.append("- no anchor yet; one was recorded today")
+    else:
+        lines.append(
+            f"- unexplained cash drift today: **${cum:+.4f}** across {reads} "
+            f"reconciliation(s)" + ("  — clean" if abs(cum) <= DRIFT_NOTE else
+            "  — **unexplained by the fill log**"))
 
     if notes:
         lines += ["", "## Reconciliation notes"] + [f"- {n}" for n in notes]
