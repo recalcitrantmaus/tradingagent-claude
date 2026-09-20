@@ -222,11 +222,31 @@ def cmd_open(args) -> int:
     prices = prices_of(snap)
 
     # A new week resets the weekly anchor; a new day resets the daily one.
-    if today.weekday() == 0 or not ledger.get("week_start_equity"):
+    #
+    # These must fire ONCE PER DAY and ONCE PER WEEK, not once per invocation.
+    # The line below used to read `ledger["day_start_equity"] = snap["equity"]`
+    # unconditionally, and `trading_day open` runs at every management firing
+    # — midday and pre-close as well as the open. So a day that was -3% by
+    # noon re-anchored at noon, and a further -3% read as -3%: the -4% daily
+    # halt measured from a baseline that walked downhill with the losses and
+    # could not fire. The weekly anchor was worse, because `weekday() == 0`
+    # made Monday re-anchor on EVERY run, and a holiday Monday meant the week
+    # never re-anchored at all.
+    #
+    # Anchors are therefore keyed to the calendar, not to the call.
+    week_key = "%d-W%02d" % today.isocalendar()[:2]
+    if ledger.get("week_start_key") != week_key or not ledger.get("week_start_equity"):
         ledger["week_start_equity"] = snap["equity"]
+        ledger["week_start_key"] = week_key
     ro.week_start_equity = ledger["week_start_equity"]
+
     ro.start_day(today, snap["equity"])
-    ledger["day_start_equity"] = snap["equity"]
+    if ledger.get("day_start_key") != today.isoformat():
+        ledger["day_start_equity"] = snap["equity"]
+        ledger["day_start_key"] = today.isoformat()
+    # start_day() seeded the officer from today's equity; re-point it at the
+    # real anchor so the breaker measures the whole day, not this firing.
+    ro.day_start_equity = ledger["day_start_equity"]
 
     st = ro.update(today, pf, prices)
     wk = (snap["equity"] / ledger["week_start_equity"] - 1) if ledger["week_start_equity"] else 0.0

@@ -1151,3 +1151,52 @@ what made it invisible on day four. **For any value a control compares
 against, find the line that writes it. If there is only one and it runs at
 birth, the control is comparing against a constant.**
 **Status:** active.
+
+### 2026-09-20 — The circuit-breaker baselines reset on every management firing
+**Evidence:** pre-flighting Monday, I read `cmd_open` and found this, directly
+under a comment describing what it was supposed to do:
+
+```python
+# A new week resets the weekly anchor; a new day resets the daily one.
+if today.weekday() == 0 or not ledger.get("week_start_equity"):
+    ledger["week_start_equity"] = snap["equity"]
+ro.start_day(today, snap["equity"])
+ledger["day_start_equity"] = snap["equity"]          # every invocation
+```
+
+The comment states the intent. The code re-anchors on every **call**, and
+`trading_day open` is called at every management firing — midday and
+pre-close as well as the open, because that is how it reconciles.
+
+So on a losing day: −3% by noon, noon re-anchors, a further −3% reads as −3%.
+**The −4% daily halt measured from a baseline that walked downhill with the
+losses and could never fire.** The weekly anchor was worse in two ways:
+`weekday() == 0` made Monday re-anchor on every run, and a week whose Monday
+never ran kept the *previous* week's anchor, so the −8% breaker measured the
+wrong week entirely.
+
+This was live, and I had just written `trading_day open` into both the midday
+and pre-close prompts for Monday — the first day the account may actually
+hold a position. Three firings, three resets.
+
+**Change:** anchors are keyed to the calendar, not to the call —
+`day_start_key` against today's date, `week_start_key` against the ISO week,
+which also fixes the holiday-Monday hole. `ro.day_start_equity` is re-pointed
+at the stored anchor after `start_day()`, or the fix would have been cosmetic:
+the breaker reads the officer, not the ledger. Five tests.
+
+**A second finding, in the test.** The first version of the test helper moved
+equity and cash together, and `cmd_open` returned early on the new cash-drift
+check before ever reaching the anchor logic — so the test asserted the right
+value for entirely the wrong reason, and passed. A losing day with an open
+position moves *equity* through unrealized P&L and leaves cash alone; the
+helper now models that, and asserts `cmd_open` returned 0 so it cannot pass by
+exiting early again.
+
+**Lesson for future rules:** a comment that states the intent is evidence the
+intent was understood, not evidence it was implemented — and it actively
+suppresses review, because the reader checks the comment against the
+requirement instead of the code against the comment. **Read the line, not the
+line above it.** And when a function is called from more than one place, ask
+what it assumes about being called once.
+**Status:** active.

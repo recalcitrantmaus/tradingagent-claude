@@ -229,3 +229,107 @@ class TestCashAnchor(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(any("287.50" in n and "2026-09-21" in n for n in notes))
         self.assertEqual(snap["cash"], 287.5)     # not the stale 300.0
+
+
+# ---------------------------------------------------------------------------
+# The halt baselines must be anchored to the CALENDAR, not to the call.
+# `trading_day open` runs at every management firing — midday and pre-close as
+# well as the open — and it used to re-anchor day_start_equity every time.
+# ---------------------------------------------------------------------------
+import argparse
+
+
+def _run_open(ledger, equity, today, monkey, cash=300.0):
+    """Invoke cmd_open against a fake broker, returning the mutated ledger.
+
+    Cash is held FIXED while equity moves, because that is what a losing day
+    with an open position actually looks like: unrealized P&L moves equity and
+    leaves cash alone. An earlier version of this helper moved both, which
+    tripped the cash-drift check and made cmd_open return before it reached
+    the anchor logic — so the test passed while testing nothing.
+    """
+    saved = {}
+    with mock.patch.object(td.state, "load", lambda: ledger), \
+         mock.patch.object(td.state, "save", lambda l: saved.update(l)), \
+         mock.patch.object(td.state, "read_fills", lambda: []), \
+         mock.patch.object(td, "get_broker",
+                           lambda offline: FakeBroker(equity=equity, cash=cash)), \
+         mock.patch.object(td.dt, "date", monkey):
+        rc = td.cmd_open(argparse.Namespace(offline=False))
+    assert rc == 0, f"cmd_open returned {rc}; it never reached the anchors"
+    return ledger
+
+
+class _FixedDate(dt.date):
+    """dt.date with today() pinned, so cmd_open sees the day we mean."""
+    _today = dt.date(2026, 9, 21)
+
+    @classmethod
+    def today(cls):
+        return cls._today
+
+
+class TestHaltBaselinesAnchorToTheCalendar(unittest.TestCase):
+    def setUp(self):
+        _FixedDate._today = dt.date(2026, 9, 21)      # a Monday
+
+    def test_a_second_open_on_the_same_day_does_not_move_the_daily_anchor(self):
+        """The -4% breaker must measure the whole day.
+
+        A day that is -3% by noon used to re-anchor at noon, so a further -3%
+        read as -3% and the halt could never fire.
+        """
+        led = dict(positions={}, cash=300.0)
+        _run_open(led, 300.0, None, _FixedDate)          # 09:45, flat
+        self.assertEqual(led["day_start_equity"], 300.0)
+
+        _run_open(led, 291.0, None, _FixedDate)          # 12:00, -3%
+        self.assertEqual(led["day_start_equity"], 300.0,
+                         "midday re-anchored the daily halt baseline")
+
+        _run_open(led, 282.0, None, _FixedDate)          # 15:30, -6% on the day
+        self.assertEqual(led["day_start_equity"], 300.0)
+
+    def test_a_new_day_does_re_anchor(self):
+        led = dict(positions={}, cash=300.0)
+        _run_open(led, 300.0, None, _FixedDate)
+        _FixedDate._today = dt.date(2026, 9, 22)         # Tuesday
+        _run_open(led, 291.0, None, _FixedDate)
+        self.assertEqual(led["day_start_equity"], 291.0)
+        self.assertEqual(led["day_start_key"], "2026-09-22")
+
+    def test_monday_does_not_re_anchor_the_week_on_every_run(self):
+        led = dict(positions={}, cash=300.0)
+        _run_open(led, 300.0, None, _FixedDate)
+        _run_open(led, 276.0, None, _FixedDate)          # -8% intraday Monday
+        self.assertEqual(led["week_start_equity"], 300.0,
+                         "the weekly halt baseline walked downhill")
+
+    def test_a_holiday_monday_still_anchors_the_week_on_tuesday(self):
+        """`weekday() == 0` meant a week whose Monday never ran kept the
+        PREVIOUS week's anchor, so the -8% breaker measured the wrong week."""
+        led = dict(positions={}, cash=300.0,
+                   week_start_equity=400.0, week_start_key="2026-W38")
+        _FixedDate._today = dt.date(2026, 9, 22)         # Tue of W39
+        _run_open(led, 300.0, None, _FixedDate)
+        self.assertEqual(led["week_start_equity"], 300.0)
+        self.assertEqual(led["week_start_key"], "2026-W39")
+
+    def test_the_risk_officer_gets_the_anchor_not_this_firing(self):
+        # The breaker reads ro.day_start_equity; if start_day() overwrote it
+        # with the current equity the whole fix would be cosmetic.
+        led = dict(positions={}, cash=300.0)
+        _run_open(led, 300.0, None, _FixedDate)
+        led2 = dict(led)
+        with mock.patch.object(td.state, "load", lambda: led2), \
+             mock.patch.object(td.state, "save", lambda l: None), \
+             mock.patch.object(td.state, "read_fills", lambda: []), \
+             mock.patch.object(td, "get_broker",
+                               lambda offline: FakeBroker(equity=287.0, cash=287.0)), \
+             mock.patch.object(td.dt, "date", _FixedDate):
+            snap = {"equity": 287.0, "cash": 287.0, "positions": [],
+                    "unprotected": [], "daytrades": 0}
+            _, ro = td.build_engine(snap, led2, _FixedDate.today())
+            ro.start_day(_FixedDate.today(), snap["equity"])
+            ro.day_start_equity = led2["day_start_equity"]
+        self.assertEqual(ro.day_start_equity, 300.0)

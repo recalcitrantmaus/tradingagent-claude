@@ -37,6 +37,10 @@ EMPTY: Dict[str, Any] = {
     "broker_equity": None,
     "broker_cash_at": None,
     "reconcile_drift": [],
+    # Calendar keys for the halt baselines. Without them the anchors reset on
+    # every `trading_day open`, and open runs at every management firing.
+    "day_start_key": None,
+    "week_start_key": None,
 }
 
 

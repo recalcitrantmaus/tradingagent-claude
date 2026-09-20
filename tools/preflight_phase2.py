@@ -97,12 +97,28 @@ def _keys():
 
 
 @check("model routing",
-       "Set TRADING_AGENT_MODEL and TRADING_AGENT_EFFORT in the environment "
-       "(new session required). Without them, blocking tasks refuse to run.")
+       "Set TRADING_AGENT_EFFORT in the environment. The MODEL cannot be read "
+       "from the environment reliably — see below.")
 def _model():
-    m, e = os.environ.get("TRADING_AGENT_MODEL"), os.environ.get("TRADING_AGENT_EFFORT")
+    """Report the model AND that it is only an environment default.
+
+    This line used to read `[ok] model routing  claude-sonnet-5 at effort
+    xhigh`, which is a confident statement about the session that the
+    environment cannot actually make: TRADING_AGENT_MODEL is set once per
+    ENVIRONMENT and is identical for every session launched in it. Printing it
+    bare, at the top of the day, is how a session on Opus reads "sonnet" and
+    believes it.
+    """
+    from engine.model_policy import model_and_source
+    m, src = model_and_source()
+    e = os.environ.get("TRADING_AGENT_EFFORT")
     if not m:
-        return False, "TRADING_AGENT_MODEL unset — cannot verify the running model"
+        return False, "no model value at all — blocking tasks will refuse"
+    if src == "environment":
+        return True, (f"effort {e or 'unset'}; model reads {m} from an "
+                      "ENVIRONMENT default, which is NOT this session — "
+                      "verify from the session record and pass --model for "
+                      "any blocking task")
     return True, f"{m} at effort {e or 'unset'}"
 
 
