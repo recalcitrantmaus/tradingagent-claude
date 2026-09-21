@@ -1,0 +1,26 @@
+[
+  {
+    "symbol": "ETHA",
+    "asset_class": "etf",
+    "side": "buy",
+    "price": 20.20,
+    "stop": 19.30,
+    "target": 22.92,
+    "multiplier": 1,
+    "qty": null,
+    "thesis": "20-day breakout over 20.11 on spot ETH ETF, entered only on a retest of the level at 20.20 rather than chased at 20.61. Stop 19.30 sits below the breakout level with ~1 ATR buffer and is tighter than the 19.03 policy cap. Target 22.92 is the 2026-01-28 pivot, the first genuine overhead supply. Expected R 3.02. Counter-case: the move is a $648M short-liquidation squeeze into an 8-month high, and a single-source report puts October Fed hike odds above 50%; the retest entry is the answer, since a squeeze that never gives the level back simply does not fill.",
+    "meta": {
+      "plan_date": "2026-09-21",
+      "breakout_level": 20.11,
+      "atr14": 0.78,
+      "entry_condition": "limit 20.20 GTC-day, retest of the 20.11 breakout level; do not fill above 20.20",
+      "invalidation": "close back below 20.11",
+      "expected_r": 3.02,
+      "denominator": "136 names in data/universe.json built 2026-09-21",
+      "sources": [
+        "https://decrypt.co/378729/bitcoin-tops-85k-as-648m-in-crypto-shorts-liquidated",
+        "https://cointelegraph.com/markets/btc-price-nears-eight-month-high-above-85k"
+      ]
+    }
+  }
+]
