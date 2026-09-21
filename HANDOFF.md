@@ -70,6 +70,18 @@ assumption — re-run anything you doubt.
    Opus-tier tasks rather than permitting them), but a binding control that
    cannot verify its own input is the weakest link in the routing policy.
 
+   > **Correction, 2026-09-21 close: the effort half is no longer true.**
+   > `engine/model_policy.py:127` reads `TRADING_AGENT_EFFORT`, not
+   > `CLAUDE_EFFORT`, and nothing in the repository reads `CLAUDE_EFFORT` at
+   > all. On 2026-09-21 they disagreed — `TRADING_AGENT_EFFORT=xhigh` while the
+   > harness reported `CLAUDE_EFFORT=high` — so `model_check` and
+   > `preflight_phase2` both cleared "at effort xhigh" on an unverified
+   > declaration. **Both inputs to the routing gate are now operator
+   > declarations, and both fail in the over-claiming direction.** Do not read
+   > the sentence above as licence to trust the effort line either. Finding and
+   > proposed fix: `state/reviews/2026-09-21-eod-queue.md` item 17. Not fixed —
+   > it needs a test and a session cleared to touch `engine/`.
+
 ## How the first week runs
 
 **Wednesday 2026-09-16 traded nothing.** The 09:45 firing came up in an empty
