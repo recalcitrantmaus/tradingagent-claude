@@ -1,9 +1,10 @@
 {
   "broker_cash": 299.99,
-  "broker_cash_at": "2026-09-20T20:59:44.180177+00:00",
+  "broker_cash_at": "2026-09-21T13:51:54.815597+00:00",
   "broker_equity": 299.99,
   "cash": 299.99,
   "day_start_equity": 299.99,
+  "day_start_key": "2026-09-21",
   "day_trades": [],
   "days": [
     {
@@ -66,7 +67,7 @@
   ],
   "halts": [],
   "human_authorization": null,
-  "last_reconciled": "2026-09-20",
+  "last_reconciled": "2026-09-21",
   "mode": "paper",
   "peak_equity": 300.0,
   "phase": "phase2",
@@ -82,9 +83,23 @@
       "at": "2026-09-20T20:59:44.180177+00:00",
       "broker_cash": 299.99,
       "drift": 0.0
+    },
+    {
+      "at": "2026-09-21T13:51:54.815597+00:00",
+      "broker_cash": 299.99,
+      "drift": 0.0
     }
   ],
   "risk_state": "NORMAL",
   "starting_equity": 300.0,
-  "week_start_equity": 300.0
+  "week_start_equity": 299.99,
+  "week_start_key": "2026-W39",
+  "working_orders": [
+    {
+      "order_id": "fed501dd-724b-407d-8119-640721b508ad",
+      "status": "new",
+      "symbol": "ETHA",
+      "unfilled_qty": 3.0
+    }
+  ]
 }
