@@ -1,9 +1,10 @@
 {
   "broker_cash": 299.99,
-  "broker_cash_at": "2026-09-20T20:59:44.180177+00:00",
+  "broker_cash_at": "2026-09-21T16:01:49.434984+00:00",
   "broker_equity": 299.99,
   "cash": 299.99,
   "day_start_equity": 299.99,
+  "day_start_key": "2026-09-21",
   "day_trades": [],
   "days": [
     {
@@ -66,7 +67,7 @@
   ],
   "halts": [],
   "human_authorization": null,
-  "last_reconciled": "2026-09-20",
+  "last_reconciled": "2026-09-21",
   "mode": "paper",
   "peak_equity": 300.0,
   "phase": "phase2",
@@ -82,9 +83,47 @@
       "at": "2026-09-20T20:59:44.180177+00:00",
       "broker_cash": 299.99,
       "drift": 0.0
+    },
+    {
+      "at": "2026-09-21T16:01:49.434984+00:00",
+      "broker_cash": 299.99,
+      "drift": 0.0
     }
   ],
   "risk_state": "NORMAL",
   "starting_equity": 300.0,
-  "week_start_equity": 300.0
+  "week_start_equity": 299.99,
+  "week_start_key": "2026-W39",
+  "working_orders": [
+    {
+      "legs": [
+        {
+          "limit_price": 22.92,
+          "side": "sell",
+          "status": "held",
+          "stop_price": null,
+          "time_in_force": "gtc",
+          "type": "limit"
+        },
+        {
+          "limit_price": null,
+          "side": "sell",
+          "status": "held",
+          "stop_price": 19.3,
+          "time_in_force": "gtc",
+          "type": "stop"
+        }
+      ],
+      "limit_price": 20.2,
+      "order_class": "bracket",
+      "order_id": "fed501dd-724b-407d-8119-640721b508ad",
+      "recorded_by": "midday-management 2026-09-21T16:05Z, from broker",
+      "status": "new",
+      "submitted_at": "2026-09-21T13:57:24.638492185Z",
+      "symbol": "ETHA",
+      "time_in_force": "gtc",
+      "type": "limit",
+      "unfilled_qty": 3.0
+    }
+  ]
 }
