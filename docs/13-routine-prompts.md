@@ -71,6 +71,17 @@ If that fails you have NO REPOSITORY (bug B-07, which cost us Wednesday
 
 git pull origin claude/trading-agent-robinhood-cb9xo7
 
+PUSH TO THE WORKING BRANCH BY NAME. This Routine creates a fresh session per
+firing and carries no outcome_branch, so the harness gives it a branch of its
+own and a bare `git push` lands where nobody looks. On 2026-09-21 the 09:45
+and 12:00 firings both did exactly this; the 12:00 session could not see the
+09:45 session's record and rebuilt it from the broker. Every push in this
+firing must name the branch:
+
+  git push origin HEAD:claude/trading-agent-robinhood-cb9xo7
+
+Afterwards confirm the commit is on that branch, and say so in your report.
+
 MODEL: verify from the session record (get_session with session_id omitted —
 read session_context.model and external_metadata.last_served_model). The
 environment variable says claude-sonnet-5 and is wrong for this firing; as of
@@ -177,6 +188,17 @@ REPO="$(git rev-parse --show-toplevel 2>/dev/null)"; echo "$REPO"; cd "$REPO"
 If that fails, STOP and report — you have no repository.
 
 git pull origin claude/trading-agent-robinhood-cb9xo7
+
+PUSH TO THE WORKING BRANCH BY NAME. This Routine creates a fresh session per
+firing and carries no outcome_branch, so the harness gives it a branch of its
+own and a bare `git push` lands where nobody looks. On 2026-09-21 the 09:45
+and 12:00 firings both did exactly this; the 12:00 session could not see the
+09:45 session's record and rebuilt it from the broker. Every push in this
+firing must name the branch:
+
+  git push origin HEAD:claude/trading-agent-robinhood-cb9xo7
+
+Afterwards confirm the commit is on that branch, and say so in your report.
 If state/ledger.json is missing or tagged "reborn", STOP and report. That is
 the finding of the day.
 
@@ -246,6 +268,17 @@ risk.
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)"; echo "$REPO"; cd "$REPO"
 git pull origin claude/trading-agent-robinhood-cb9xo7
 
+PUSH TO THE WORKING BRANCH BY NAME. This Routine creates a fresh session per
+firing and carries no outcome_branch, so the harness gives it a branch of its
+own and a bare `git push` lands where nobody looks. On 2026-09-21 the 09:45
+and 12:00 firings both did exactly this; the 12:00 session could not see the
+09:45 session's record and rebuilt it from the broker. Every push in this
+firing must name the branch:
+
+  git push origin HEAD:claude/trading-agent-robinhood-cb9xo7
+
+Afterwards confirm the commit is on that branch, and say so in your report.
+
 1. RECONCILE AND VERIFY PROTECTION.
 
   python3 -m tools.trading_day open
@@ -293,6 +326,17 @@ Session close, Monday 2026-09-21, 16:05 ET. The market has just closed.
 
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)"; echo "$REPO"; cd "$REPO"
 git pull origin claude/trading-agent-robinhood-cb9xo7
+
+PUSH TO THE WORKING BRANCH BY NAME. This Routine creates a fresh session per
+firing and carries no outcome_branch, so the harness gives it a branch of its
+own and a bare `git push` lands where nobody looks. On 2026-09-21 the 09:45
+and 12:00 firings both did exactly this; the 12:00 session could not see the
+09:45 session's record and rebuilt it from the broker. Every push in this
+firing must name the branch:
+
+  git push origin HEAD:claude/trading-agent-robinhood-cb9xo7
+
+Afterwards confirm the commit is on that branch, and say so in your report.
 
 1. python3 -m tools.trading_day close
 
