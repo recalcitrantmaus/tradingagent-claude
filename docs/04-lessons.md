@@ -377,6 +377,8 @@ discovered unattended. `tools/smoke_submit.py` placed one bracket order priced
 | Whole-share bracket | **ACCEPTED**, `order_class=bracket`, **2 legs**: stop 10.95 and target 13.98 |
 | Fractional 0.5, bracket | **REJECTED** — `42210000: fractional orders must be simple orders` |
 
+> **Caveat added 2026-09-21.** This rejection is no longer reproducible as stated: once brackets became GTC (2026-09-18) the same probe returns `fractional orders must be DAY orders`, rejecting on time_in_force before the order_class is ever checked. See the 2026-09-21 entry.
+
 Nothing filled, nothing was left resting, no position was taken, and
 `state/fills.jsonl` still does not exist. The account reads $300.00 flat.
 
@@ -1240,4 +1242,51 @@ threshold on the quantity, it is a threshold on the sampling rate. Check more
 often and the same total passes more easily — which is the opposite of what
 more checking should buy. **When a control samples repeatedly, ask what it
 does to a quantity that leaks slowly.**
+**Status:** active.
+
+### 2026-09-21 — A passing probe stopped testing what it said it tested
+**Evidence:** Monday's smoke test, the first since the GTC change. The
+whole-share bracket was ACCEPTED with two legs and, read back from the broker,
+`TIF=gtc` on the parent and on **both** legs — bug B-16's fix confirmed live,
+which is what the firing was for.
+
+The fractional probe is where it got interesting. It was REJECTED, as always,
+with code `42210000`, as always — and the smoke test printed its usual
+conclusion, "Fractional cannot carry a bracket, the ~$75 ceiling stands".
+
+But the message had changed:
+
+```
+2026-09-17   42210000: fractional orders must be simple orders
+2026-09-21   42210000: fractional orders must be DAY orders
+```
+
+The first is about `order_class`. **The second is about `time_in_force`** —
+and it is our own doing: brackets became GTC on 2026-09-18, so the broker now
+rejects the fractional probe on TIF and never reaches the order-class check.
+
+Nothing failed. The probe still returned REJECTED, the same error code, and a
+conclusion that reads identically. **But D-17 — whole-share sizing stands,
+because a fractional order cannot carry an atomic stop — now rests on evidence
+this run did not produce.** For all Monday's smoke test shows, a fractional
+*day* bracket might be accepted, which would re-open the $75 ceiling and the
+universe argument built on it.
+
+**Change:** the probe is split in two, because one probe cannot test two
+constraints when either alone is sufficient to reject. `fractional + gtc`
+tests the TIF constraint; `fractional + day` tests the order_class constraint,
+and that second one is what D-17 actually rests on. If a fractional day
+bracket is ever ACCEPTED the test now says so loudly instead of printing the
+old conclusion. The 2026-09-17 entry is caveated rather than rewritten. **D-17
+is unverified until the next smoke run**, and I did not re-probe today: this
+firing's instructions said place no other order, and working around my own
+stated constraint because I wanted the answer is the exact habit the risk
+engine exists to prevent.
+
+**Lesson for future rules:** a test that asserts only `REJECTED` cannot notice
+that it is being rejected for a new reason, and the reason is the thing the
+decision rests on. This one drifted because *we* changed the request, so the
+broker's first objection changed — no external event, no failing test, no
+alarm. **Assert on the reason, not the outcome. And when you change a request,
+re-check every test that depends on how that request is refused.**
 **Status:** active.

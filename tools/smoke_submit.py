@@ -97,10 +97,28 @@ def main() -> int:
         # the whole market to a $300 account, but only if the stop can still be
         # attached atomically. An entry that cannot carry its stop is not worth
         # the wider universe.
+        #
+        # TWO probes, because one stopped being enough. On 2026-09-17 a
+        # fractional bracket was rejected with "fractional orders must be
+        # simple orders" — the order_class was the problem, which is what
+        # D-17 rests on. After brackets became GTC on 2026-09-18 the SAME
+        # probe came back "fractional orders must be DAY orders": the broker
+        # now rejects on time_in_force first and never reaches the class
+        # check. The test kept printing the same conclusion from evidence
+        # that no longer supported it. So probe the TIF constraint and the
+        # order-class constraint separately.
+        results["fractional_gtc"] = attempt(a, OrderTicket(
+            symbol=a_.symbol, asset_class="equity", side="buy", qty=0.5,
+            limit_price=limit, stop_price=stop, take_profit=target,
+            thesis="SMOKE TEST — fractional + gtc probe"),
+            "fractional 0.5, bracket, gtc (expect: TIF rejection)")
+
         results["fractional"] = attempt(a, OrderTicket(
             symbol=a_.symbol, asset_class="equity", side="buy", qty=0.5,
             limit_price=limit, stop_price=stop, take_profit=target,
-            thesis="SMOKE TEST — fractional bracket probe"), "fractional 0.5, bracket")
+            time_in_force="day",
+            thesis="SMOKE TEST — fractional bracket probe"),
+            "fractional 0.5, bracket, day (expect: order_class rejection)")
     finally:
         print("\n--- cleanup ---")
         try:
@@ -118,16 +136,24 @@ def main() -> int:
 
     print("\n--- verdict ---")
     w, f = results.get("whole", {}), results.get("fractional", {})
+    g = results.get("fractional_gtc", {})
     legs_note = f", {w.get('legs')} legs" if w.get("accepted") else ""
     verdict_w = "ACCEPTED" if w.get("accepted") else "REJECTED"
     print(f"  whole-share bracket : {verdict_w}{legs_note}")
-    print(f"  fractional bracket  : {'ACCEPTED' if f.get('accepted') else 'REJECTED'}")
+    print(f"  fractional + gtc    : {'ACCEPTED' if g.get('accepted') else 'REJECTED'}"
+          f"   (tests time_in_force)")
+    print(f"  fractional + day    : {'ACCEPTED' if f.get('accepted') else 'REJECTED'}"
+          f"   (tests order_class — this is the one D-17 rests on)")
     if w.get("accepted") and w.get("legs", 0) >= 1:
         print("  The submit path works and the stop attaches atomically.")
     if not f.get("accepted"):
         print("  Fractional cannot carry a bracket -> the ~$75 ceiling stands,")
         print("  and widening the universe by dropping whole-share sizing would")
         print("  mean giving up the atomic stop. Not a trade worth making.")
+    else:
+        print("  !! A FRACTIONAL DAY BRACKET WAS ACCEPTED. D-17 assumed this")
+        print("     was impossible and the $75 single-position ceiling was")
+        print("     argued from it. Re-open that decision before trusting it.")
     print("\n  Nothing was recorded: state/fills.jsonl and the ledger untouched.")
     return 0
 
