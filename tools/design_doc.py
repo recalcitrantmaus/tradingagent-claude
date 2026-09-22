@@ -210,6 +210,47 @@ DECISIONS = [
   "available. The close prices the 1x and 2x gap cases explicitly.",
   "engine/config.py max_day_trades_per_5d; trading_day close",
   "tools/trading_day.py cmd_close overnight risk block", "Active"),
+ ("D-26", "2026-09-22", "Data",
+  "Levels and volatility come from the CONSOLIDATED tape; the live price "
+  "comes from a real-time venue feed. Never one source for both.",
+  "A single-venue feed carries a median 3.8% of consolidated volume. That "
+  "leaves means correct — prices agree to the cent — and EXTREMA wrong, in "
+  "one direction, arithmetically: a subset of prints cannot contain a higher "
+  "high or a lower low than the whole. Highs, lows and ATR are the only "
+  "statistics the bar series is used for, so the error was total and could "
+  "never average out. But consolidated data is 15 minutes delayed here, so it "
+  "cannot price an entry. The two requirements are irreconcilable in one "
+  "source, so the code takes each from where it is right.",
+  "docs/04-lessons.md 2026-09-22; bug B-21. ATR smaller in 59 of 59 names, "
+  "20d high understated in 43/59, 1 phantom breakout in 59.",
+  "adapters/alpaca.py bars(feed='sip') and last_trade(); "
+  "tools/screen.py breakout_now() takes level and price separately",
+  "Active"),
+ ("D-27", "2026-09-22", "Data",
+  "The universe is built only from COMPLETED sessions",
+  "A partial bar makes a liquidity floor a function of the time of day: at "
+  "09:50 a $1.5M threshold behaved like ~$30M/day. It also made the build "
+  "irreproducible — the scan walks ~11,800 assets over minutes, so the floor "
+  "moved mid-build and a name excluded at the start passed at the end. A "
+  "screen that vetoes trades has to mean the same thing when someone re-reads "
+  "the decision next week.",
+  "docs/04-lessons.md 2026-09-22; bug B-22. Two consecutive builds now give "
+  "identical symbols, volumes and session label.",
+  "tools/screen.py build_universe() reads prevDailyBar", "Active"),
+ ("D-28", "2026-09-22", "Governance",
+  "A blocking task requires a recorded human authorization, and the system "
+  "states plainly that this is ATTRIBUTABLE, not enforceable",
+  "Nothing in-process can establish that a human is present: any check the "
+  "process can read, the process can satisfy. Two attempts to detect one "
+  "failed — an environment-wide flag that never bound, then a session-id "
+  "binding that the same session disproved by being unattended at 14:20Z and "
+  "attended at 15:45Z. Attendance is a property of the TURN, and env vars are "
+  "snapshotted at session start. So the claim is recorded instead of tested, "
+  "and what IS enforced is narrow and honest: no trivial string, and no "
+  "verbatim reuse, so it cannot be baked into a Routine and fired on a "
+  "schedule.",
+  "docs/04-lessons.md 2026-09-22; bug B-23; state/authorizations.jsonl",
+  "engine/model_policy.py authorization_ok() and check()", "Active"),
 ]
 
 # --------------------------------------------------------------------------
@@ -399,6 +440,87 @@ BUGS = [
   "read from a nested listing so held legs are visible. 5 tests.",
   "2026-09-15 18:36", "2026-09-18 18:53", "2026-09-18 18:55",
   "3", "4e5da64", "Closed"),
+ ("B-21", "Data path", "Critical",
+  "AlpacaAdapter.bars() pinned feed=iex because the free plan was BELIEVED to "
+  "serve nothing else. It serves sip. IEX is one venue carrying a median 3.8% "
+  "of consolidated volume, and a 3.8% sample does not misprice a mean — "
+  "prices agree to the cent — it misprices an EXTREMUM, which is the only "
+  "statistic this series is used for. Across 59 universe names: ATR(14) "
+  "IEX/SIP median 0.976, worst 0.571, SMALLER IN 59 OF 59; the 20-day high "
+  "understated in 43/59 (worst -0.913%); the 20-day low overstated in 41/59. "
+  "One-directional every time, arithmetically rather than statistically: a "
+  "subset of prints cannot contain a higher high or a lower low than the "
+  "whole, so it could never average out with more data. Consequences: phantom "
+  "breakouts (1 in 59; RKLB fired at 70.76 against a true 71.21 level), every "
+  "stop too tight in 59/59 names, and every support level too high. Dollar "
+  "risk at the stop survives because size follows the stop — the share count "
+  "does not, so gap exposure scales with the error.",
+  "Not a blanket feed swap: SIP is 15 MINUTES DELAYED on this plan and "
+  "/v2/stocks/snapshots rejects feed=sip, while paper_session was reading "
+  "bars[-1].close as the entry price. So completed sessions come from SIP "
+  "(where a delay cannot matter), the price now comes from a new real-time "
+  "last_trade() that returns None rather than a guess, and breakout_now() "
+  "takes the level and the price from different sources by construction. "
+  "8 tests including one pinning the RKLB phantom against both tapes.",
+  "2026-09-15 18:36", "2026-09-22 13:50", "2026-09-22 16:20",
+  "7", "7c0c97e", "Closed"),
+ ("B-22", "Data path", "High",
+  "build_universe() read snapshot `dailyBar`, which during the session is a "
+  "PARTIAL bar. Building at 09:50 ET measured twenty minutes of volume "
+  "against a full-day floor, so a $1.5M threshold behaved like ~$30M/day and "
+  "dropped MARA, CMCSA, MNST, ZTS, TFC and KR — all plainly liquid. Measured "
+  "at 11:58 the same day, today's dollar volume ran 0.25x to 1.46x of the "
+  "prior completed session across ten names. Worse than wrong, it was not "
+  "REPRODUCIBLE: the scan walks ~11,800 assets over several minutes, so the "
+  "effective floor moved during a single build — KR was excluded while the "
+  "build ran and passed minutes later.",
+  "prevDailyBar, a completed session, identical at 09:31 and 15:59. Universe "
+  "110 -> 150 (the size cap binding again rather than the floor), all six "
+  "names back. Two consecutive builds now produce identical symbol lists, "
+  "identical dollar volumes and an identical session label. The IEX "
+  "calibration is untouched and still correct — snapshots cannot serve SIP.",
+  "2026-09-15 18:36", "2026-09-22 13:45", "2026-09-22 16:20",
+  "7", "7c0c97e", "Closed"),
+ ("B-23", "Controls", "High",
+  "The M-22 attendance gate never bound, once, ever. is_attended() read "
+  "CLAUDE_CODE_SESSION_ATTENDED, which is set ENVIRONMENT-WIDE, so it read "
+  "'1' in every session including unattended scheduled firings. Demonstrated "
+  "end to end: an unattended relay ran model_check --model claude-opus-5 "
+  "rule-promotion and got exit 0. It shipped in the SAME COMMIT as the fix "
+  "for two other instances of this exact pattern, one function below a "
+  "comment warning that a blocking task must not clear on a value that cannot "
+  "vary with the thing being checked.",
+  "The first proposed fix — require the variable to equal "
+  "CLAUDE_CODE_SESSION_ID — was also wrong: a scheduled relay fired into "
+  "session 38d73c9c unattended at 14:20Z and a human typed into it at 15:45Z, "
+  "same id and environment throughout. ATTENDANCE IS A PROPERTY OF THE TURN, "
+  "and env vars are snapshotted at session start, so no variable of any scope "
+  "can track it. The gate no longer detects: a blocking task requires "
+  "--authorization '<why, in the human's words>', appended to "
+  "state/authorizations.jsonl. Trivial strings refused; verbatim reuse "
+  "refused, so it cannot be baked into a Routine prompt and fired on a "
+  "schedule. Attributable, not enforceable, and documented in those words.",
+  "2026-09-21 21:40", "2026-09-22 14:30", "2026-09-22 15:50",
+  "1", "37f86a1", "Closed"),
+ ("B-24", "Reporting", "Low",
+  "The universe build report printed 'min $2M dollar volume' for a $1.5M "
+  "floor — .0f applied to 1.5. Anyone auditing the universe would have "
+  "recorded a threshold the code does not use.",
+  "Formatted to 2dp and the liquidity session named alongside it.",
+  "2026-09-15 18:36", "2026-09-22 16:10", "2026-09-22 16:15",
+  "7", "7c0c97e", "Closed"),
+ ("B-25", "Reporting", "Medium",
+  "A provenance field added during the B-22 fix was wrong within the hour. "
+  "`liquidity_session` took whichever symbol the API returned first, and a "
+  "name that had not traded in a week carries a week-old prevDailyBar — so "
+  "two builds selecting IDENTICAL universes labelled themselves 2026-09-14 "
+  "and 2026-09-21. Caught only by the reproducibility check written for B-22. "
+  "A provenance field that is wrong is worse than none, because it is "
+  "believed; and it was written while fixing two bugs of exactly its kind.",
+  "The mode across the names that actually made the universe, with any other "
+  "sessions listed explicitly in other_sessions_present. Test pins it.",
+  "2026-09-22 16:05", "2026-09-22 16:12", "2026-09-22 16:18",
+  "0", "7c0c97e", "Closed"),
  ("B-18", "Permissions", "High",
   "`python3 -m tools.paper_session --submit` is refused by the permission "
   "classifier as a real-world transaction, so the live session path cannot "
@@ -424,11 +546,19 @@ SYSTEMS = [
   "Bracket orders confirmed with 2 attached legs. Rejects fractional "
   "brackets and all advanced crypto order classes."),
  ("Alpaca market data", "Market data API", "data.alpaca.markets",
-  "Bars (IEX), snapshots, most-actives screener, and the news API "
-  "(/v1beta1/news)", "API key + secret (env)", "Required", "2026-09-18",
-  "Volume is IEX, roughly 4% of consolidated — the screen's dollar-volume "
-  "floor is set in IEX units. News feed is Benzinga only, 50 of 50 items, so "
-  "it cannot corroborate itself under the two-lane rule."),
+  "Bars (SIP for completed sessions, IEX for the live price), snapshots, "
+  "most-actives screener, and the news API (/v1beta1/news)",
+  "API key + secret (env)", "Required", "2026-09-22",
+  "THIS PLAN SERVES feed=sip, which was not known until 2026-09-22 and cost "
+  "bug B-21. SIP is CONSOLIDATED but 15 MINUTES DELAYED (measured: IEX last "
+  "minute-bar 16:03Z, SIP 15:49Z). IEX is real-time but a single venue at a "
+  "median 3.8% of consolidated volume, which leaves means right and EXTREMA "
+  "wrong — 20-day highs understated, lows overstated, ATR smaller in 59 of 59 "
+  "names. So: completed sessions from SIP, the price now from IEX via "
+  "last_trade(). /v2/stocks/snapshots REJECTS feed=sip, so the universe's "
+  "dollar-volume floor stays in IEX units and its ~4% calibration stands "
+  "(measured 3.8%). News feed is Benzinga only, 50 of 50 items, so it cannot "
+  "corroborate itself under the two-lane rule."),
  ("Alpaca live trading", "Broker API", "api.alpaca.markets",
   "Phase 3 only. Never reachable from tools.paper_session, which hardcodes "
   "live=False", "API key + secret (env)", "Required (Phase 3)", "2026-09-18",
