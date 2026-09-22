@@ -268,3 +268,31 @@ mistaken for fixed.
   provenance, which fires first. The `--authorization` path was deliberately
   not exercised: supplying either flag from an unattended session is the thing
   it exists to prevent.
+
+### The three refusals, checked against the close (consolidated daily bars)
+
+```
+ONON  O 30.40  H 31.16  L 29.37  C 29.39
+VKTX  O 37.00  H 41.73  L 36.34  C 40.85
+RKLB  O 71.64  H 72.50  L 70.10  C 71.98
+```
+
+- **ONON — refusal correct, and the counter-case is what happened.** The gap
+  faded almost completely, to 29.39. The 31.16 high was already printed by the
+  10:00 plan, so a 30.30 retest would have filled on the way *down*, never seen
+  its target after the fill, and closed at 29.39 — **about −0.96R, open, with
+  the stop missed by two cents** and carried overnight. Daily bars cannot prove
+  the intraday order; that the high came first is inferred from the plan's own
+  10:00 reading.
+- **VKTX — refusal correct, and it cost almost nothing.** From a 40.50 entry,
+  the close at 40.85 is **+0.11R** on a $3.24 stop; the 41.73 high cleared the
+  41.21 target, **+0.22R** — the figure the plan named as the reason to refuse.
+  One share: 35 to 71 cents forgone.
+- **RKLB — the refusal was right at 10:00, and RKLB broke out anyway.** It
+  closed **71.98, above the consolidated 71.21**, high 72.50. So M-30's "the
+  signal does not exist" is a statement about **10:00**, when the screen said
+  "breakout" off a 20-day high 65 cents too low. It is **not** a claim that RKLB
+  had no setup. The artifact finding stands in full — the screen was wrong for
+  the reason given — but the name made a real breakout later in the session,
+  and on correct data it would screen tomorrow. Recorded so M-30 is not read as
+  vindicated by the outcome: it was right about the data, not about the stock.
