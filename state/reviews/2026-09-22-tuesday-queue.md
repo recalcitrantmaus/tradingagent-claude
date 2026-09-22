@@ -142,3 +142,129 @@ Zero fills, ever. B-15 (fills.jsonl carries the broker's price), B-16 / M-20
 (a bracket leg promoted from `held` to `new` by a parent fill, with its TIF)
 and M-16 (`trading_day preclose` live) all remain untested, and no amount of
 refusing trades will test them.
+
+---
+
+## Appended 16:10 ET by the session-close firing
+
+**A note on IDs, so nobody hunts for a collision that is not there.** The
+unattended 09:35 and 09:45 firings wrote their findings as **M-26 through
+M-31** in `state/reviews/2026-09-22-queue.md`, continuing Monday's namespace,
+before this T-n file existed. They are left as written and **not renumbered**.
+Everything below is new and takes the next free T-n.
+
+### Close, read directly
+
+```
+trading_day close   exit 0, no escalations
+equity $299.99   day +0.00%   week +0.00%   drawdown 0.00%   risk NORMAL
+cash drift: 4 readings dated 2026-09-22, every one +0.0000, cumulative +0.0000
+  02:32:52Z   13:48:34Z   16:18:00Z   20:05:59Z
+positions_without_stops()  []        open orders  []
+```
+
+**`cancel_unfilled_entries()` found nothing.** The close report is silent on
+cancellations, so I checked what that silence means rather than assuming it:
+`tools/trading_day.py:379-386` notes an exception and notes a non-empty
+result, and prints nothing only when the call ran and returned `[]`. The
+re-check after it added no "unprotected AFTER" note, so no leg was stripped —
+**vacuously**, since there was no position and therefore no leg.
+
+**Every order created at the broker today, any status — two, both traced:**
+
+```
+13:39:51Z  buy 1 F bracket gtc  canceled  filled 0  2f550a06  -> 09:35 smoke test (this session)
+16:18:12Z  buy 1 F bracket gtc  canceled  filled 0  fa350284  -> attended session's smoke_submit
+```
+
+The second was not placed by this session. Its legs (limit 13.36, stop 10.46)
+match the attended session's "What PASSED" entry above exactly, and the
+16:18:00Z drift reading is that session's second `trading_day open`, twelve
+seconds earlier. **No order went out outside a plan or a sanctioned test.**
+Parent and both legs read `gtc` on both orders — B-16 confirmed at submit
+twice more, still unverified on a fill.
+
+## T-8 — Three of five Phase 2 exit criteria print `[ok]` on an account that has done nothing. MEDIUM.
+
+`trading_day week` tonight:
+
+```
+[XX] 30+ closed trades          0/30
+[XX] positive expectancy        n/a
+[ok] zero guardrail breaches    0 escalations
+[ok] costs below gains          $0.00 vs $0.00
+[ok] never LOCKED
+```
+
+`tools/trading_day.py:560` passes "costs below gains" with an explicit
+`if trades else True`, and the other two pass by `all()` over nothing. Each is
+a defensible vacuous truth. Together they make a zero-activity account read
+**three-fifths of the way to Phase 2 exit**, which is exactly the kind of
+figure that gets repeated in a summary without its denominator.
+
+Same pattern as Monday's "no protective leg was stripped — vacuous, not
+verified", now in a published scorecard rather than a session note.
+
+**Proposed:** a third state, `[--] not yet measurable`, for any criterion whose
+input is empty. Recorded, not changed — this session does not edit a
+reporting path it is being judged by.
+
+## T-9 — "today's" drift window is the UTC date, not the trading day. LOW.
+
+`drift_today()` keys on `dt.date.today()` against UTC timestamps. The container
+runs UTC, so the "day" runs from **20:00 ET the previous evening**. Tonight's
+four readings include **02:32:52Z — Monday, 22:32 ET**, the overnight
+re-anchor.
+
+Harmless at +0.0000. Not harmless the first time drift is real: the cumulative
+figure feeds the halt check (`drift_halts` uses `cum`), so Monday-evening
+drift would count toward Tuesday's halt and against Monday's none — and crypto,
+which the plan permits, fills around the clock. It also depends on the
+machine's timezone: the same code on an ET host buckets differently, which is
+M-28's shape (a check decided by where it runs).
+
+**To decide:** key the drift day on the exchange calendar (the same fix M-8 /
+M-18 want), or on an explicit ET date.
+
+## T-10 — `CLAUDE_EFFORT` changes within a session; the gate checks it once. MEDIUM.
+
+Read in this same session:
+
+```
+13:39Z  CLAUDE_EFFORT=high
+20:07Z  CLAUDE_EFFORT=medium
+```
+
+CLAUDE.md says environment variables are snapshotted at session start. **That
+is not true of `CLAUDE_EFFORT`** — it tracks the current turn. For M-17 that is
+good news: the value M-17 chose as the measurement really does measure.
+
+The problem is what it implies for the gate. `model_check` is run once, at the
+start of a task, and nothing re-checks. A blocking task — a weekly review, a
+rule promotion — that clears at `xhigh` can continue at `medium` with no signal
+at all, and the non-blocking tasks already did tonight: `session-close` ran two
+notches below its floor. A point-in-time check on a per-turn value certifies
+the turn it was taken in, not the task.
+
+**To decide:** whether blocking tasks re-check effort at each durable write
+(the promotion itself, the `SKILL.md` edit), which is where a downgrade would
+cost something. Recorded in `state/journal/2026-09-22.md` as CLAUDE.md requires.
+
+## M-18 recurred — `trading_day week` counted 5 sessions on day 2 of W39
+
+`sessions 5` tonight. `cmd_week` still takes `ledger["days"][-5:]`
+(`tools/trading_day.py:524`): 09-17, 09-18, **09-20 (Sunday)**, 09-21, 09-22 —
+three rows from W38, one from a day the market was closed, two from this week.
+The return beside it is anchored to `week_start_key 2026-W39`. Still harmless
+only because every row is $299.99. Not a new finding; recorded so it is not
+mistaken for fixed.
+
+### Guardrails that did NOT run today, so a quiet day does not read as success
+
+- **Any fill.** Zero, ever. B-15, B-16 / M-20 remain unverified.
+- **`trading_day preclose` (M-16).** The midday and pre-close routines were
+  disabled at 15:45Z; it did not run live. Unverified.
+- **The new authorization gate's second half.** It refused tonight on model
+  provenance, which fires first. The `--authorization` path was deliberately
+  not exercised: supplying either flag from an unattended session is the thing
+  it exists to prevent.
