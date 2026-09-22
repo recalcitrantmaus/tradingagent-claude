@@ -57,13 +57,23 @@ class TestBlockingTasksRefuseAnUnverifiedModel(unittest.TestCase):
         self.assertIn("--model", blob)
         self.assertIn("session record", blob)
 
+    # These two are about the MODEL half of the gate, so the effort and
+    # attendance halves are pinned rather than inherited. `env()` patches with
+    # clear=False, so an unpinned value falls through to the ambient
+    # environment — and on 2026-09-22 that made this class a test OF the
+    # environment: it was green overnight on CLAUDE_EFFORT=xhigh and red at
+    # 09:35 on CLAUDE_EFFORT=high, with no code change in between. A test that
+    # asserts something about the gate must not be decided by the machine it
+    # runs on.
     def test_an_explicit_model_clears_a_blocking_task(self):
-        with env(TRADING_AGENT_MODEL="claude-sonnet-5", TRADING_AGENT_EFFORT="xhigh"):
+        with env(TRADING_AGENT_MODEL="claude-sonnet-5", TRADING_AGENT_EFFORT="xhigh",
+                 CLAUDE_EFFORT="xhigh", CLAUDE_CODE_SESSION_ATTENDED="1"):
             ok, msgs = check("weekly-review", model="claude-opus-5")
         self.assertTrue(ok)
 
     def test_an_explicit_model_that_is_too_weak_still_fails(self):
-        with env(TRADING_AGENT_EFFORT="xhigh"):
+        with env(TRADING_AGENT_EFFORT="xhigh", CLAUDE_EFFORT="xhigh",
+                 CLAUDE_CODE_SESSION_ATTENDED="1"):
             ok, msgs = check("weekly-review", model="claude-haiku-4-5-20251001")
         self.assertFalse(ok)
         self.assertTrue(any("requires" in m for m in msgs))

@@ -1426,3 +1426,52 @@ past is suspect for that reason alone, and 2022 being the worst year is if
 anything understated.
 
 **Status:** active. No `engine/` change; two queue items opened.
+
+## 2026-09-22 — D-17 reproduced; a test that was measuring the machine (M-4, M-26, M-27, M-28)
+
+**D-17 is settled, and the split probe is why.** On 2026-09-17 a fractional
+bracket was rejected with `fractional orders must be simple orders` — an
+`order_class` refusal, which is the whole evidentiary basis for whole-share
+sizing and the ~$75 single-position ceiling. When brackets became GTC on
+2026-09-18 the identical probe came back `fractional orders must be DAY
+orders`: the broker now refuses on `time_in_force` and **never reaches the
+class check**. The tool went on printing D-17's conclusion for four days from
+evidence that had stopped supporting it. Split into two probes overnight, both
+answered this morning, HTTP 422 both times:
+
+```
+fractional + gtc  -> {"code":42210000,"message":"fractional orders must be DAY orders"}
+fractional + day  -> {"code":42210000,"message":"fractional orders must be simple orders"}
+```
+
+The ceiling stands on reproduced evidence. **The general form is worth more
+than the result:** a probe's conclusion can be invalidated by a change
+somewhere else entirely, and it fails by continuing to print the right answer
+for the wrong reason. Our own GTC fix broke this test's meaning without
+breaking the test. Anything that asserts a broker constraint should probe one
+constraint at a time, or it cannot tell which one it measured.
+
+**The same failure, one layer up, on the same morning.** `preflight_phase2`
+exited 1 on a suite that was green overnight with no code change between. The
+gate tests patch the environment with `clear=False`, so a variable a test does
+not pin falls through to the real one — and M-17's fix had just made
+`CLAUDE_EFFORT` the value that decides. `xhigh` overnight, `high` at 09:35,
+same assertion, different answer. **A test about the environment was being
+decided by the environment.** Fixed by pinning, verified under three ambient
+environments; no production code touched.
+
+**And the same failure again, in the control adopted the night before.**
+`is_attended()` returns `True` in this unattended scheduled firing, because
+`CLAUDE_CODE_SESSION_ATTENDED` is set at the *environment* level — one
+constant answering a per-session question, exactly like `TRADING_AGENT_MODEL`
+before it. M-22 was adopted to stop a session self-certifying, and as
+implemented it does not bind. Recorded as M-26, not fixed here: an unattended
+session tightening the control that decides whether it is trusted is the wrong
+hand on that lever.
+
+Three instances in one morning of a single pattern: **a check whose input
+cannot vary with the thing it claims to measure.** Every one of them failed
+permissive, and every one of them printed `ok` while doing it.
+
+**Status:** no `engine/` change, no rule changed. D-17 confirmed. M-26, M-27
+and M-28 opened in `state/reviews/2026-09-22-queue.md`; M-28 fixed there.
