@@ -61,6 +61,16 @@ python3 -m tools.trading_day close    # report, overnight risk, escalations
   0.45–0.83 including a space name and a broad-market ETF, so a long-only
   breakout book has no uncorrelated pair to spread into. Limit the total; do
   not expect picking different names to do it.
+- **Size tapers across concurrent positions**: the first gets the full 2%,
+  each additional one half the previous (2.00%, 1.00%, 0.50%, 0.25%). This is
+  "conservative on most, let one run" expressed as size rather than as
+  targets — a target controls upside while size and the stop control loss, so
+  trimming targets on the also-rans would forfeit their winners and keep their
+  full downside. It needs no correlation input because there is no
+  uncorrelated pair to find. Swept at 3000 seeds on two strategies: median
+  +1.65, p05 +10.00, worst drawdown 20.9% → 17.8%, locked accounts 15/3000 →
+  0. Note the side effect at this account size: whole-share rounding means the
+  tapered 2nd and 3rd budgets can only afford low-volatility names.
 - Every entry supplies a stop before it is placed. No stop, no trade.
 - Never widen a stop. Never average down. Scale out, not in.
 - Options are locked twice over: below $1,500 equity (you cannot size one

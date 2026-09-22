@@ -389,18 +389,25 @@ class TestAggregateOpenRiskIsCapped(unittest.TestCase):
                          self.cfg.daily_loss_halt_pct)
 
     def test_a_third_full_size_position_is_refused_on_the_book_cap(self):
+        # Isolates the CAP, so the size taper is disabled here. With the taper
+        # on (the shipped default) the taper binds first — 2% + 1% = 3% still
+        # fits under 4% — and the cap becomes a backstop rather than the usual
+        # binding constraint. Both are wanted: the taper shapes the book, the
+        # cap guarantees its ceiling if concurrency is ever raised.
+        cfg = replace(DEFAULT, correlated_risk_decay=1.0)
+        ro = RiskOfficer(cfg)
         pf = Portfolio(300.0)
         prices = {}
         for i in range(2):                       # 2 x 2% = the whole budget
             p = self._prop(f"SYM{i}")
             prices[p.symbol] = p.price
-            d = self.ro.evaluate(p, pf, prices, self.today)
-            self.assertTrue(d.approved, f"SYM{i} should fit")
+            d = ro.evaluate(p, pf, prices, self.today)
+            self.assertTrue(d.approved, f"SYM{i} should fit: {d.reasons}")
             pf.buy(self.today, p.symbol, "equity", d.qty, p.price, 0.0)
             pf.positions[p.symbol].stop = p.stop
         third = self._prop("SYM2")
         prices["SYM2"] = third.price
-        d = self.ro.evaluate(third, pf, prices, self.today)
+        d = ro.evaluate(third, pf, prices, self.today)
         self.assertFalse(d.approved)
         self.assertTrue(any("open-risk cap" in r for r in d.reasons),
                         f"wrong binding constraint: {d.reasons}")
@@ -425,3 +432,106 @@ class TestAggregateOpenRiskIsCapped(unittest.TestCase):
         pf.buy(self.today, "NAKED", "equity", 2.0, 50.0, 0.0)
         pf.positions["NAKED"].stop = None
         self.assertAlmostEqual(pf.open_risk({"NAKED": 50.0}), 100.0)
+
+
+class TestSizeTaperAcrossConcurrentPositions(unittest.TestCase):
+    """The size-based form of "conservative on most, let one run".
+
+    The target is the wrong lever for that intent: a target controls upside
+    while size and the stop control loss, so cutting targets on the also-rans
+    would forfeit their winners while keeping their full downside — exactly
+    backwards. Cutting SIZE gives the first and strongest position full
+    weight and makes every subsequent correlated add cheaper to be wrong
+    about.
+
+    It takes no correlation input, and that is a measurement not a shortcut:
+    on 2026-09-22 the minimum pairwise 60-day correlation across the day's
+    own signals was 0.45, including a space company against a semiconductor.
+    There is no uncorrelated pair to detect, so treating every addition as
+    correlated is the honest default and keeps the engine deterministic.
+
+    Swept at 3000 seeds on two strategies: median +1.65, p05 +10.00, worst
+    drawdown 20.9% -> 17.8%, locked accounts 15/3000 -> 0 (z = -3.88).
+    """
+
+    def setUp(self):
+        self.cfg = DEFAULT
+        self.ro = RiskOfficer(self.cfg)
+        self.today = dt.date(2026, 9, 22)
+
+    # $6 of risk per share on a $10 name at R=3.0. Sized so the RISK BUDGET
+    # is the binding constraint: at $30k equity the 25% position cap allows
+    # 750 shares and the budget allows 100, so the taper is what is measured.
+    # The first draft used a $20 name at $30k, where the position cap bound
+    # first, and a target giving R=0.50, which died on expected-R before
+    # sizing ran at all — the tests passed judgement on the wrong gate.
+    def _prop(self, sym, price=10.0, stop=4.0):
+        return OrderProposal(symbol=sym, asset_class="equity", side="buy",
+                             price=price, stop=stop, target=price + 18.0,
+                             thesis="taper test")
+
+    def test_the_first_position_gets_the_full_budget(self):
+        pf = Portfolio(30000.0)         # large enough that rounding never bites
+        p = self._prop("A")
+        d = self.ro.evaluate(p, pf, {"A": 10.0}, self.today)
+        self.assertAlmostEqual(d.qty * (p.price - p.stop),
+                               30000.0 * self.cfg.max_risk_per_trade_pct,
+                               delta=6.0)
+
+    def test_each_additional_position_is_halved(self):
+        pf = Portfolio(30000.0)
+        prices, risks = {}, []
+        for i in range(3):
+            p = self._prop(f"S{i}")
+            prices[p.symbol] = p.price
+            d = self.ro.evaluate(p, pf, prices, self.today)
+            self.assertTrue(d.approved, f"S{i}: {d.reasons}")
+            risks.append(d.qty * (p.price - p.stop))
+            pf.buy(self.today, p.symbol, "equity", d.qty, p.price, 0.0)
+            pf.positions[p.symbol].stop = p.stop
+        self.assertAlmostEqual(risks[1] / risks[0], 0.5, delta=0.05)
+        self.assertAlmostEqual(risks[2] / risks[0], 0.25, delta=0.05)
+
+    def test_the_taper_keeps_the_book_inside_the_portfolio_cap(self):
+        # 2.0 + 1.0 + 0.5 + 0.25 = 3.75% < 4%. The two rules are not
+        # redundant: the taper shapes the book, the cap guarantees its
+        # ceiling even if max_concurrent_positions is ever raised.
+        total = sum(self.cfg.max_risk_per_trade_pct
+                    * self.cfg.correlated_risk_decay ** n
+                    for n in range(self.cfg.max_concurrent_positions))
+        self.assertLess(total, self.cfg.max_portfolio_risk_pct)
+
+    def test_the_refusal_names_the_taper_so_it_is_not_mistaken_for_a_bug(self):
+        # At $300 with whole shares the taper bites hard and that is the point
+        # to be explicit about: the 2nd position's budget is $3.00 against $6
+        # of risk per share, so it rounds to zero. The refusal must SAY the
+        # taper caused it, or a live session reads it as a bug and reshapes
+        # the trade — the one behaviour this system exists to prevent.
+        pf = Portfolio(300.0)
+        first = self._prop("S0", price=60.0, stop=54.0)
+        prices = {"S0": 60.0}
+        d = self.ro.evaluate(first, pf, prices, self.today)
+        self.assertTrue(d.approved, d.reasons)
+        pf.buy(self.today, "S0", "equity", d.qty, 60.0, 0.0)
+        pf.positions["S0"].stop = 54.0
+
+        second = self._prop("S1", price=60.0, stop=54.0)
+        prices["S1"] = 60.0
+        d = self.ro.evaluate(second, pf, prices, self.today)
+        self.assertFalse(d.approved)
+        self.assertTrue(any("taper" in r for r in d.reasons),
+                        f"the refusal must name the taper: {d.reasons}")
+
+    def test_a_decay_of_one_restores_flat_sizing(self):
+        cfg = replace(DEFAULT, correlated_risk_decay=1.0)
+        ro = RiskOfficer(cfg)
+        pf = Portfolio(3000.0)
+        prices, risks = {}, []
+        for i in range(2):
+            p = self._prop(f"F{i}")
+            prices[p.symbol] = p.price
+            d = ro.evaluate(p, pf, prices, self.today)
+            risks.append(d.qty * (p.price - p.stop))
+            pf.buy(self.today, p.symbol, "equity", d.qty, p.price, 0.0)
+            pf.positions[p.symbol].stop = p.stop
+        self.assertAlmostEqual(risks[0], risks[1], delta=1.0)

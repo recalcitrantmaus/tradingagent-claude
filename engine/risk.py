@@ -218,7 +218,12 @@ class RiskOfficer:
         if risk_per_unit <= 0:
             return d.reject("non-positive risk per unit")
 
-        risk_budget = eq * c.max_risk_per_trade_pct
+        # The first position gets the full per-trade budget; each additional
+        # concurrent one gets a decaying share of it. "Conservative on most,
+        # one allowed to run", expressed as size rather than as targets.
+        n_open = len(portfolio.positions)
+        taper = c.correlated_risk_decay ** n_open
+        risk_budget = eq * c.max_risk_per_trade_pct * taper
         qty_by_risk = risk_budget / risk_per_unit
 
         pos_cap_pct = {
@@ -257,7 +262,10 @@ class RiskOfficer:
 
         if qty <= 0:
             binding = min(
-                (qty_by_risk, "2% risk budget"),
+                (qty_by_risk,
+                 f"per-trade risk budget"
+                 + (f" tapered to {c.max_risk_per_trade_pct * taper:.2%} as "
+                    f"position {n_open + 1}" if taper < 1.0 else "")),
                 (qty_by_position, "single-position cap"),
                 (qty_by_class, f"{p.asset_class} class cap"),
                 (qty_by_cash, "settled cash after reserve"),

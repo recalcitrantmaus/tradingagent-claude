@@ -1819,3 +1819,99 @@ Cost is a real input to that: this is not free, and the schedule should be
 revisited once the data checks are code.
 
 **Status:** active.
+
+---
+
+## 2026-09-22 — the size taper: "let one run" as size, not as targets
+
+Authorized by recalcitrantmaus. The second half of T-2, and unlike everything else
+today it is a clean win rather than a priced trade-off.
+
+### Why size and not targets
+
+The instinct was conservative targets on most positions with one allowed to
+run. Targets are the wrong lever for that intent. **A target controls upside;
+size and the stop control loss.** Trimming targets on the also-rans would give
+up exactly their winners while keeping their full downside — the opposite of
+the intended effect. Cutting SIZE gives the first and strongest position full
+weight and makes every subsequent add cheaper to be wrong about, which is what
+"conservative on most" actually means in a loss sense.
+
+`correlated_risk_decay = 0.5`: the nth concurrent position gets
+`2% x 0.5^(n-1)` — 2.00%, 1.00%, 0.50%, 0.25%.
+
+**It takes no correlation input, and that is a measurement rather than a
+convenience.** The minimum pairwise 60-day correlation across the day's own
+signals was 0.45, including a space company against a semiconductor. There is
+no uncorrelated pair to detect, so treating every addition as correlated is
+both the honest default and the conservative one — and it keeps the risk
+engine deterministic, with no live data or network call inside `evaluate`.
+
+### The sweep
+
+2000 seeds first, then confirmed at 3000 on two strategies:
+
+```
+momentum_breakout, 3000 seeds
+ decay   median     p05   maxDD  worstDD   LOCKED  trades
+  1.00   302.27  264.35    8.9%    20.9%    0.50%    44.0
+  0.50   303.92  274.35    6.4%    17.8%    0.00%    40.9
+        median +1.65   locks 15 -> 0   z = -3.88
+
+trend_pullback, 3000 seeds
+  1.00   301.91  281.25    4.8%    13.8%    0.00%    15.5
+  0.50   302.19  284.15    3.9%    11.3%    0.00%    14.0
+```
+
+**Better median, better p05, lower drawdown and fewer locks, all at once.**
+That is a Pareto improvement, unlike the portfolio cap earlier today which
+bought safety by giving up 1% of median — and it is worth being clear that
+the two are different kinds of result rather than presenting both as wins.
+
+The mechanism is visible in one column: **worst drawdown 20.9% -> 17.8%.** The
+lock threshold is -20%. The taper pulls the worst case under it, which is
+exactly why 15 locked accounts become 0.
+
+A suspicion worth having had: at $300 with whole-share sizing, a tapered 3rd
+or 4th budget might round to zero and simply DELETE positions rather than
+shrink them — a different rule than the one intended. Trade count says mostly
+not, at this decay: 44.0 -> 40.9, about -7%.
+
+### Measured on the day's own signals
+
+```
+before (neither rule)   4 pos  ASX STM DRAM RKLB   risk 4.53%   deployed 78%
+cap only (4%)           4 pos  ASX STM DRAM JEPQ   risk 3.17%   deployed 75%
+cap + taper             3 pos  ASX STM JEPQ        risk 1.96%   deployed 53%
+```
+
+4.53% — above the daily breaker — down to 1.96%.
+
+### The side effect nobody asked for, recorded because it is real
+
+Look at which names survive. RKLB (ATR 3.36, ~$5.04 of risk per share) drops
+out; JEPQ (ATR 0.64, ~$0.96 per share) stays. At $300 with whole shares, a
+tapered budget of $1.50 cannot buy one share of anything risking $5, but can
+buy one risking $1. **The taper therefore biases the 2nd and 3rd slots toward
+LOW-VOLATILITY names.** That is defensible — smaller slots holding quieter
+instruments is coherent — but it is a selection effect introduced by a sizing
+rule, it was not asked for, and it will disappear as equity grows and rounding
+stops binding. Logged as T-7 so nobody rediscovers it as a mystery.
+
+### How the two rules relate
+
+They are not redundant. 2.00 + 1.00 + 0.50 + 0.25 = 3.75%, inside the 4% cap,
+so **the taper usually binds first and the cap is a backstop.** The cap is the
+guarantee — it holds if `max_concurrent_positions` is ever raised, or if a
+future strategy sizes differently. The taper is the shaping. One test exists
+purely to pin that arithmetic, and the cap's own test now disables the taper
+so it still isolates what it claims to.
+
+**Verified:** 189 tests (5 new). Four of them failed first and were wrong, not
+the code — at $30k the position cap bound before the risk budget, and one
+fixture had R=0.50 so it died on expected-R before sizing ran at all. The
+tests were passing judgement on the wrong gate, which is the same failure this
+file keeps recording. Sim suite green, 0.0% ruin.
+
+**Status:** active. T-2 now fully answered: no sector rule (not implementable
+on this universe), an aggregate cap, and a size taper.

@@ -8,7 +8,7 @@ M-29 and M-30 were fixed and pushed. Six end-to-end scenarios run live.
 
 ---
 
-## T-1 — No aggregate open-risk cap. HIGH.
+## T-1 — No aggregate open-risk cap. HIGH. **FIXED 2026-09-22** (4% cap, b02c785).
 
 Per-trade risk is capped at 2%. Concurrency is capped at 4. **Nothing caps
 the sum**, so the book can carry 8% of equity at risk simultaneously.
@@ -44,7 +44,7 @@ post-hoc marker rather than a limit. If it is not, the cap belongs in
 `engine/config.py` with a test, and the sim should be re-run for ruin rate
 before and after.
 
-## T-2 — No sector or correlation constraint, and the screen selects FOR correlation. HIGH.
+## T-2 — No sector or correlation constraint. HIGH. **ANSWERED 2026-09-22** — no sector rule is implementable (min pairwise correlation 0.45); addressed by the 4% cap plus a 0.5 size taper.
 
 Today's six breakout signals, names from `/v2/assets`:
 
@@ -71,6 +71,19 @@ and the 8% ceiling in T-1 is therefore 8% on a single factor, not 8% spread.
 The strategy's own history says the same thing: 2022 chase was -0.168R at
 t=-4.9 (`docs/16-entry-study.md`), i.e. this strategy loses when its factor is
 out of favour. A correlated book is exactly how that year hurts.
+
+## T-7 — The size taper biases the 2nd/3rd slots toward low-volatility names. LOW.
+
+Introduced by the fix for T-1/T-2, recorded the same day. At $300 with
+whole-share sizing a tapered budget of ~$1.50 cannot buy one share of anything
+risking $5/share, but can buy one risking $1. Measured on today's signals:
+RKLB (ATR 3.36, ~$5.04 risk/share) drops out of the book while JEPQ (ATR 0.64,
+~$0.96/share) stays.
+
+Defensible — smaller slots holding quieter instruments is coherent — but it is
+a selection effect produced by a SIZING rule, it was not asked for, and it
+should disappear as equity grows and whole-share rounding stops binding.
+Watch it; do not "fix" it without evidence that it costs anything.
 
 ## T-3 — The universe price ceiling is enforced against a stale close. LOW.
 

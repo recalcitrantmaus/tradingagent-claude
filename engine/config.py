@@ -35,6 +35,31 @@ class RiskConfig:
     # ETF — a long-only breakout book has no uncorrelated pair to spread
     # into, so limiting the TOTAL is the lever, not choosing names.
     max_portfolio_risk_pct: float = 0.04
+    # Each ADDITIONAL concurrent position gets this fraction of the previous
+    # one's risk budget: 1st 2.00%, 2nd 2.00*d, 3rd 2.00*d^2, ...
+    #
+    # This is the size-based form of "conservative on most, let one run". The
+    # target is the wrong lever for that: a target controls upside, while size
+    # and the stop control loss. Cutting targets on the also-rans would give
+    # up their winners while keeping their full downside — precisely backwards.
+    # Cutting SIZE gives the strongest conviction full weight and makes every
+    # subsequent correlated add cheaper to be wrong about.
+    #
+    # It needs no correlation input, and that is a measurement rather than a
+    # convenience: on 2026-09-22 the minimum pairwise 60-day correlation
+    # across the day's own signals was 0.45, including a space company against
+    # a semiconductor. There is no uncorrelated pair to detect, so treating
+    # every addition as correlated is the conservative and honest default, and
+    # it keeps the engine deterministic with no live data inside it.
+    #
+    # 0.5 chosen by sweep, 3000 seeds, two strategies. Unlike the portfolio
+    # cap above — which bought safety by giving up median — this is a genuine
+    # Pareto improvement: on momentum_breakout it moved median +1.65, p05
+    # +10.00, mean max drawdown 8.9%->6.4%, WORST drawdown 20.9%->17.8% and
+    # locked accounts 15/3000 -> 0 (z = -3.88). The mechanism is visible in
+    # that worst-drawdown figure: the lock threshold is -20%, and the taper
+    # pulls the worst case under it. 1.0 disables it. docs/04-lessons.md.
+    correlated_risk_decay: float = 0.5
 
     # --- asset-class caps (fraction of equity, aggregate) ---
     class_caps: Dict[str, float] = field(default_factory=lambda: {
