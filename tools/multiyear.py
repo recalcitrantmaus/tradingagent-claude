@@ -104,6 +104,47 @@ def main() -> int:
               f"{s['t']:>7.1f}{s['total_R']:>9.1f}{s['win_rate']:>7.0%}"
               f"{s['avg_win']:>7.2f}{s['avg_loss']:>7.2f}")
 
+    # ---- the honest t. Pooling every trade pretends 13,912 trades are
+    # 13,912 independent draws. They are not: trades inside one year share
+    # the same market, so the pooled SE is far too small and its t far too
+    # flattering. Treating each YEAR as one observation is the conservative
+    # statistic, and it is the one to quote.
+    print("\n=== year-level test (each year = 1 observation) ===")
+    print(f"{'arm':<9}{'yrs':>5}{'mean':>9}{'sd':>8}{'se':>8}{'t':>7}  per-year")
+    for arm in ("chase", "retest", "missed"):
+        xs = [per_year[y][arm]["expectancy"] for y in per_year
+              if arm in per_year[y]]
+        if len(xs) < 2:
+            continue
+        sd = statistics.stdev(xs)
+        se = sd / len(xs) ** 0.5
+        print(f"{arm:<9}{len(xs):>5}{statistics.mean(xs):>9.3f}{sd:>8.3f}"
+              f"{se:>8.3f}{statistics.mean(xs) / se if se else 0:>7.1f}"
+              f"  {' '.join(f'{x:+.3f}' for x in xs)}")
+
+    # ---- decomposition. retest's fills and chase's non-missed trades are the
+    # SAME signals, so the two arms can be compared on identical ground and
+    # the gap attributed exactly.
+    if "chase" in pool and "missed" in pool and "retest" in pool:
+        n_sh = pool["chase"]["n"] - pool["missed"]["n"]
+        r_sh = pool["chase"]["total_R"] - pool["missed"]["total_R"]
+        if n_sh > 0:
+            print("\n=== decomposition: what the two arms actually differ on ===")
+            print(f"signals that later pulled back, CHASED : {n_sh:>6} trades"
+                  f"  {r_sh / n_sh:+.3f}R  ({r_sh:+.1f}R)")
+            print(f"the same signals, entered on the RETEST: "
+                  f"{pool['retest']['n']:>6} trades  "
+                  f"{pool['retest']['expectancy']:+.3f}R  "
+                  f"({pool['retest']['total_R']:+.1f}R)")
+            print(f"  -> waiting is worth "
+                  f"{pool['retest']['expectancy'] - r_sh / n_sh:+.3f}R "
+                  f"on the signals it fills")
+            print(f"signals that never pulled back, forfeited by retest: "
+                  f"{pool['missed']['n']:>6} trades  "
+                  f"{pool['missed']['expectancy']:+.3f}R  "
+                  f"({pool['missed']['total_R']:+.1f}R)")
+            print("  -> that forfeit is the whole of retest's shortfall")
+
     # ---- consistency: does the same arm win every year?
     yrs = [y for y in per_year if "chase" in per_year[y] and "retest" in per_year[y]]
     if yrs:
