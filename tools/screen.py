@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import statistics
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -97,19 +98,64 @@ def build_universe(adapter, criteria: Dict = None) -> Dict:
             print(f"  snapshot batch {i//batch} failed: {str(e)[:70]}")
             continue
         for sym, s in (snaps or {}).items():
-            bar = (s or {}).get("dailyBar") or {}
+            # prevDailyBar, NOT dailyBar (M-29, fixed 2026-09-22).
+            #
+            # `dailyBar` is TODAY, and during the session it is a PARTIAL bar.
+            # Building the universe at 09:50 ET therefore measured twenty
+            # minutes of volume against a full-day floor, so a $1.5M threshold
+            # behaved like roughly $30M/day and excluded names that are
+            # plainly liquid: MARA, CMCSA, MNST, ZTS and TFC were all dropped
+            # on 2026-09-22 for not having printed $1.5M *yet*. Measured again
+            # at 11:58 ET the same day, today's dollar volume ran 0.25x to
+            # 1.46x of the prior completed session across ten names — so the
+            # threshold was not a threshold, it was a function of the clock.
+            #
+            # Worse than being wrong, it was not REPRODUCIBLE: the scan walks
+            # ~11,800 assets over several minutes, so the effective floor
+            # moved *during a single build*. KR was excluded while the build
+            # ran and passed minutes later. The docstring at the top of this
+            # file promises a universe that "must mean the same thing when
+            # someone re-reads the decision next week"; with a partial bar it
+            # did not mean the same thing an hour later.
+            #
+            # prevDailyBar is a completed session. It is identical at 09:31
+            # and at 15:59, which is what makes the build auditable. It is
+            # still IEX volume, so the ~4% calibration documented in CRITERIA
+            # remains exactly right — measured at 3.8% median on 2026-09-22.
+            bar = (s or {}).get("prevDailyBar") or {}
             px, vol = bar.get("c"), bar.get("v")
             if not px or not vol:
                 continue
             dv = px * vol
             if c["min_price"] <= px <= c["max_price"] and dv >= c["min_dollar_volume"]:
                 rows.append({"symbol": sym, "price": round(px, 2),
-                             "dollar_volume": round(dv)})
+                             "dollar_volume": round(dv),
+                             "session": (bar.get("t") or "")[:10]})
         print(f"  priced {i + len(chunk)}/{len(syms)}: {len(rows)} pass so far")
 
     rows.sort(key=lambda r: -r["dollar_volume"])
     rows = rows[:c["size"]]
+
+    # Which session the liquidity figures describe — taken from the names that
+    # actually MADE the universe, as the most common value among them.
+    #
+    # The first version of this line read the first symbol the API happened to
+    # return, and two consecutive builds reported 2026-09-14 and 2026-09-21
+    # while selecting identical universes: a name that had not traded in a
+    # week carries a week-old prevDailyBar, and it was labelling the whole
+    # file. Caught by the reproducibility check written for M-29, which is the
+    # only reason it is not still there. A provenance field that is wrong is
+    # worse than no provenance field, because it is believed.
+    sessions = Counter(r["session"] for r in rows if r["session"])
+    dominant = sessions.most_common(1)[0][0] if sessions else "unknown"
+    stale = sorted({s for s in sessions if s != dominant})
+
     return {"built": dt.date.today().isoformat(), "criteria": c,
+            "liquidity_session": dominant,
+            # Not every name trades every session. Naming the exceptions beats
+            # implying a uniformity that is not there.
+            "other_sessions_present": stale,
+            "volume_feed": "iex (prevDailyBar, completed session)",
             "count": len(rows), "symbols": rows}
 
 
@@ -120,17 +166,49 @@ def load_universe() -> Dict:
     return json.loads(UNIVERSE_FILE.read_text())
 
 
+def completed(bars: List[Bar], today: Optional[dt.date] = None) -> List[Bar]:
+    """Drop the current session's bar.
+
+    Needed since bars moved to SIP (M-30): today's bar is both incomplete and
+    15 minutes stale, so it is not a price and not a session. Levels and ATR
+    come from here; the price comes from `adapter.last_trade()`.
+    """
+    today = today or dt.date.today()
+    return [b for b in bars if b.date < today]
+
+
 def breakout_at(bars: List[Bar], i: int, lookback: int = LOOKBACK) -> Optional[Dict]:
-    """Did bar i close above the prior `lookback` sessions' high?"""
+    """Did bar i close above the prior `lookback` sessions' high?
+
+    For HISTORY — base rates and replays, where bar i is a completed session
+    and its close is the real close. For a live decision use `breakout_now`,
+    which takes the price from a real-time source instead of from a bar.
+    """
     if i < lookback or i >= len(bars):
         return None
-    prior = bars[i - lookback:i]
-    ph = max(b.high for b in prior)
-    a = atr(bars[:i + 1], ATR_PERIOD)
-    if not a or bars[i].close <= ph:
+    return breakout_now(bars[:i + 1], bars[i].close, lookback, _self=True)
+
+
+def breakout_now(hist: List[Bar], price: float,
+                 lookback: int = LOOKBACK, _self: bool = False) -> Optional[Dict]:
+    """Is `price` above the prior `lookback` COMPLETED sessions' high?
+
+    The level and the price come from different places on purpose. The level
+    is an extremum over completed sessions and must be consolidated (SIP), or
+    it is understated and the breakout is a phantom — M-30, measured at 1 in
+    59 names. The price must be real-time, because SIP is 15 minutes delayed
+    and a stale price is a stale entry.
+    """
+    window = hist[:-1] if _self else hist
+    if len(window) < lookback:
         return None
-    return {"close": bars[i].close, "prior_high": ph, "atr": a,
-            "pct_over": (bars[i].close / ph - 1) * 100}
+    prior = window[-lookback:]
+    ph = max(b.high for b in prior)
+    a = atr(hist, ATR_PERIOD)
+    if not a or price <= ph:
+        return None
+    return {"close": price, "prior_high": ph, "atr": a,
+            "pct_over": (price / ph - 1) * 100}
 
 
 def screen(adapter, symbols: List[str], limit: int = 90) -> Dict:
@@ -141,11 +219,19 @@ def screen(adapter, symbols: List[str], limit: int = 90) -> Dict:
         except AdapterError:
             nodata.append(sym)
             continue
-        if len(bars) < LOOKBACK + ATR_PERIOD:
+        hist = completed(bars)
+        if len(hist) < LOOKBACK + ATR_PERIOD:
+            nodata.append(sym)
+            continue
+        # The price NOW, not the last bar's close: bars are SIP and a quarter
+        # of an hour old. A missing price stands the symbol down rather than
+        # falling back to the stale series.
+        px = adapter.last_trade(sym)
+        if px is None:
             nodata.append(sym)
             continue
         scanned += 1
-        b = breakout_at(bars, len(bars) - 1)
+        b = breakout_now(hist, px)
         if b:
             hits.append(dict(symbol=sym, **b))
     return {"scanned": scanned, "no_data": nodata, "hits": hits}
@@ -297,7 +383,11 @@ def main() -> int:
         UNIVERSE_FILE.write_text(json.dumps(u, indent=2))
         print(f"\nwrote {UNIVERSE_FILE}: {u['count']} symbols, "
               f"${u['criteria']['min_price']:.0f}-${u['criteria']['max_price']:.0f}, "
-              f"min ${u['criteria']['min_dollar_volume']/1e6:.0f}M dollar volume")
+              # .0f rounded the real $1.5M floor to "$2M" in every printed
+              # report. A universe audited against the wrong threshold is the
+              # same class of error as the partial bar it sits next to.
+              f"min ${u['criteria']['min_dollar_volume']/1e6:.2f}M IEX dollar "
+              f"volume from the {u.get('liquidity_session', '?')} session")
         return 0
 
     u = load_universe()

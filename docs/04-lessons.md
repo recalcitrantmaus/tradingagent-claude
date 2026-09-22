@@ -1551,3 +1551,116 @@ and never touches the trading path. `execution` still requires no
 authorization, by an explicit test — execution must never wait on a human.
 
 **Status:** active. M-22 and M-26 closed.
+
+---
+
+## 2026-09-22 — the feed was never a detail (M-30, M-29)
+
+Authorized by recalcitrantmaus. Two bugs the open session found this morning, both of the
+same family — data that means something other than what it appears to mean —
+and the first one turned out to be much larger than reported.
+
+### M-30: `feed=iex` was a guess that was never re-tested
+
+`AlpacaAdapter.bars()` pinned `feed=iex` because the free plan was believed to
+serve nothing else. **It serves `sip`.** Nobody had checked since; the belief
+was load-bearing and untested, and one `curl` settled it.
+
+IEX is a single venue carrying a **median 3.8% of consolidated volume** (the
+calibration comment in `CRITERIA` said ~4% and was right). The thing to see is
+that a 3.8% sample does not misprice a *mean* — prices agree to a cent, AAPL
+342.30 IEX against 342.29 SIP. It misprices an **extremum**, and an extremum
+is the only statistic this series is used for. Measured across 59 universe
+names on completed sessions:
+
+```
+ATR(14) IEX/SIP : median 0.976, mean 0.936, worst 0.571
+                  SMALLER IN 59 OF 59 NAMES
+20-day high     : understated in 43/59, worst -0.913%
+20-day low      : OVERstated  in 41/59, worst +0.487%
+phantom breakout: 1 of 59 names on the day measured
+```
+
+Every one of those is one-directional, for a reason that is arithmetic rather
+than statistical: **a subset of prints cannot contain a higher high or a lower
+low than the whole.** So the error could never average out with more data, and
+no amount of live trading would have surfaced it as noise.
+
+Three consequences, and the one that was reported is the smallest:
+
+1. **Phantom breakouts.** RKLB at 13:50Z: IEX said the 20-day high was 70.56
+   and the price 70.76, so the screen fired. Consolidated said 71.21 — the
+   price was 45c *below* resistance. (By 16:07Z RKLB had traded to 71.39 and
+   was a genuine breakout on both feeds. The fix would have refused it in the
+   morning and allowed it in the afternoon, correctly both times. It did not
+   "save" a trade, and saying so would be the wrong lesson.)
+2. **Every stop too tight**, in 59 of 59 names, by a median 2.4% of ATR and up
+   to 43%. This was not in the original report and matters more.
+3. **Support levels too high**, symmetrically, for the same reason.
+
+On (2), be precise about what does and does not break. Dollar risk at the stop
+is *unaffected*: size follows the stop, so a tighter stop buys more shares for
+the same 2%. What changes is that the share count rises, so **gap exposure
+scales up with the error**, and a stop set inside the noise band gets taken out
+by noise. It is an expectancy leak and a gap-risk amplifier, not a breach of
+the 2% rule.
+
+**The fix is not a blanket feed swap**, because SIP on this plan is **15
+minutes delayed** (measured: IEX last minute-bar 16:03Z, SIP 15:49Z) and
+`/v2/stocks/snapshots` rejects `feed=sip` outright. `paper_session` was reading
+`bars[-1].close` as the entry price, so switching the feed naively would have
+priced entries, stops and targets off a quarter-hour-old number. So:
+
+- **completed sessions → SIP.** They do not change, so the delay is irrelevant,
+  and levels and ATR are finally consolidated.
+- **the price now → `AlpacaAdapter.last_trade()`**, new, real-time, IEX.
+  Returns `None` rather than a guess; a missing price stands the symbol down.
+- `breakout_now(hist, price)` takes the level and the price from different
+  places by construction, so the two can never be silently re-coupled.
+  `breakout_at` remains for history, where a completed bar's own close is the
+  right thing.
+
+### M-29: a threshold that was a function of the clock
+
+`build_universe` read `dailyBar`, which during the session is a **partial**
+bar. Building at 09:50 ET measured twenty minutes of volume against a full-day
+floor: a $1.5M threshold behaved like roughly $30M/day and dropped MARA,
+CMCSA, MNST, ZTS, TFC and KR — all plainly liquid. Measured at 11:58 the same
+day, today's dollar volume ran **0.25x to 1.46x** of the prior completed
+session across ten names.
+
+Worse than wrong, it was not **reproducible**. The scan walks ~11,800 assets
+over several minutes, so the effective floor moved *during a single build* —
+KR was excluded while the build ran and passed minutes later. The docstring at
+the top of `screen.py` promises a universe that "must mean the same thing when
+someone re-reads the decision next week", and with a partial bar it did not
+mean the same thing an hour later.
+
+Now `prevDailyBar`: a completed session, identical at 09:31 and 15:59. The
+universe went 110 -> 150 names (the `size: 150` cap binding again rather than
+the floor) and all six named names returned. Two consecutive builds now
+produce **identical symbol lists, identical dollar volumes and an identical
+session label.** The IEX calibration is untouched and still correct, because
+snapshots cannot serve SIP anyway.
+
+### Two smaller things found while fixing these
+
+- The build report printed **"min $2M dollar volume" for a $1.5M floor** —
+  `.0f` on 1.5. Anyone auditing the universe would have recorded the wrong
+  threshold. Same disease as the rest of this entry: the report did not say
+  what the code did.
+- **A provenance field I introduced, wrong within the hour.**
+  `liquidity_session` took whichever symbol the API returned first, and a name
+  that had not traded in a week carried a week-old `prevDailyBar`. Two builds
+  selecting *identical* universes labelled themselves 2026-09-14 and
+  2026-09-21. It was caught only by the reproducibility check written for
+  M-29, and it is now the mode across the names that actually made the cut,
+  with any others listed. **A provenance field that is wrong is worse than no
+  provenance field, because it is believed.** I wrote this one while fixing two
+  bugs of exactly its kind.
+
+**Verified:** 179 tests (8 new), including one that pins the RKLB phantom
+against both tapes and one that pins the stale-name relabelling. Monte Carlo
+unchanged at 300 seeds, 0.0% ruin across all arms.
+
+**Status:** active. M-29 and M-30 closed.

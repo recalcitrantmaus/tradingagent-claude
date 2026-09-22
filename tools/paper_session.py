@@ -92,13 +92,22 @@ def propose_mechanical(adapter, symbols: List[str]) -> List[OrderProposal]:
         except AdapterError as e:
             print(f"  {sym}: data unavailable — {str(e)[:100]}")
             continue
+        # Completed sessions only for the level and the ATR, and the price
+        # from a real-time source. bars() is SIP since M-30 and its current
+        # bar is both partial and 15 minutes stale; reading it as `px` would
+        # have priced the entry, the stop AND the target off a quarter-hour-
+        # old number.
+        bars = [b for b in bars if b.date < dt.date.today()]
         if len(bars) < 21:
             continue
         a = atr(bars, 14)
         if not a:
             continue
-        px = bars[-1].close
-        prior_high = max(b.high for b in bars[-21:-1])
+        px = adapter.last_trade(sym)
+        if px is None:
+            print(f"  {sym}: no live price — standing down")
+            continue
+        prior_high = max(b.high for b in bars[-20:])
         if px > prior_high:
             out.append(OrderProposal(
                 symbol=sym, asset_class="equity", side="buy", price=px,

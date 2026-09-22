@@ -147,12 +147,39 @@ class AlpacaAdapter:
         o["resolved"] = (o.get("status") or "").lower() in self.TERMINAL_STATUSES
         return o
 
-    def bars(self, symbol: str, limit: int = 250, timeframe: str = "1Day") -> List[Dict]:
+    def bars(self, symbol: str, limit: int = 250, timeframe: str = "1Day",
+             feed: str = "sip") -> List[Dict]:
         """The most recent `limit` bars, oldest first.
 
-        Two Alpaca behaviours make the naive request silently wrong, and both
-        are dangerous here because every stop and every size is computed from
-        this series:
+        THE FEED IS NOT A DETAIL (M-30, fixed 2026-09-22). This defaulted to
+        `iex` because the free plan was believed to serve nothing else. It
+        serves `sip`. IEX is one venue carrying a median 3.8% of consolidated
+        volume, and a 3.8% sample does not misprice a mean — it misprices an
+        EXTREMUM, which is the only statistic this series is used for.
+        Measured across 59 universe names on 2026-09-22, completed sessions:
+
+            ATR(14) IEX/SIP  : median 0.976, mean 0.936, worst 0.571
+                               SMALLER IN 59 OF 59 NAMES
+            20-day high      : understated in 43/59, worst -0.913%
+            20-day low       : OVERstated  in 41/59, worst +0.487%
+
+        One-directional, every one of them, for the arithmetic reason that a
+        subset of prints cannot contain a higher high or a lower low than the
+        whole. So the old default manufactured breakouts (1 of 59 names on the
+        day measured), and set every stop too tight. Dollar risk at the stop
+        survives that, because size follows the stop — but the share count
+        does not, so gap exposure scales up with the error, and a stop placed
+        inside the noise band is hit by noise.
+
+        SIP is 15 minutes delayed on this plan; IEX is real-time. That is fine
+        here and only here: these are COMPLETED sessions, which do not change.
+        For anything that needs the price NOW — an entry, a cross-check — use
+        `last_trade()`, which is real-time. Do not read `bars()[-1].close` as
+        the current price; on this feed it is a quarter of an hour old.
+
+        Two Alpaca behaviours also make the naive request silently wrong, and
+        both are dangerous here because every stop and every size is computed
+        from this series:
 
         1. `start` defaults to the beginning of the current day when omitted,
            so a request carrying only `limit` returns a single bar. Any
@@ -174,7 +201,7 @@ class AlpacaAdapter:
         token = None
         for _ in range(20):                      # bounded; never spin on a token
             params = {"timeframe": timeframe, "limit": 10000,
-                      "adjustment": "split", "feed": "iex", "start": start}
+                      "adjustment": "split", "feed": feed, "start": start}
             if token:
                 params["page_token"] = token
             d = self._request(
@@ -188,6 +215,28 @@ class AlpacaAdapter:
         return [{"date": b["t"][:10], "open": b["o"], "high": b["h"],
                  "low": b["l"], "close": b["c"], "volume": b["v"]}
                 for b in rows[-limit:]]
+
+    def last_trade(self, symbol: str) -> Optional[float]:
+        """The most recent trade price, REAL TIME.
+
+        `bars()` is SIP and therefore 15 minutes stale by design (see there).
+        Everything that acts on the price now — an entry, a stop distance
+        measured from the live price, `cross_check` — has to come from here
+        instead. Falls back to the snapshot's own daily bar close, which is
+        also IEX and also real-time.
+
+        Returns None rather than a guess: a missing price must stand down the
+        symbol, never be filled in from a stale series.
+        """
+        try:
+            d = (self._request(
+                "GET", f"{DATA}/v2/stocks/snapshots?symbols={symbol}"
+            ).get(symbol) or {})
+        except AdapterError:
+            return None
+        px = ((d.get("latestTrade") or {}).get("p")
+              or (d.get("dailyBar") or {}).get("c"))
+        return float(px) if px else None
 
     # An order in one of these states can still execute. `held` matters most:
     # a bracket's legs sit held until the parent fills, and Alpaca's
