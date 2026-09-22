@@ -42,8 +42,8 @@ FEATURES = {
 }
 
 
-def run(year: int, wait: int, top: int, horizon: int) -> List[Dict]:
-    blob = json.load(gzip.open(CACHE, "rt"))
+def run(year: int, wait: int, top: int, horizon: int, blob=None) -> List[Dict]:
+    blob = blob if blob is not None else json.load(gzip.open(CACHE, "rt"))
     names, raw = blob["names"], blob["bars"]
     member = liquidity_ranked_membership(raw, names, "plain", year, top) if top else None
     out: List[Dict] = []

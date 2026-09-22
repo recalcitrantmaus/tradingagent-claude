@@ -32,6 +32,7 @@ import gzip
 import json
 import statistics
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Dict, List
@@ -55,7 +56,12 @@ LEVERAGED = ("2X", "3X", "-1X", "ULTRA", "ULTRASHORT", "LEVERAGED",
 INVERSE_HINTS = ("INVERSE", "SHORT ", "BEAR")
 MIN_PX, MAX_PX = 3.0, 75.0
 MIN_DV = 1_500_000.0          # IEX dollar volume, ~4% of consolidated
-START = "2025-03-01"          # 200d MA needs history before 2026-01-02
+# The IEX feed on this plan begins 2020-07-27; asking for anything earlier
+# just returns that. Taking all of it gives 2021-2026 as study years once the
+# 200-day MA lookback is paid, which is the only way to get an out-of-sample
+# test: every result so far is a single year at t between 1.1 and 1.7.
+START = "2020-07-01"
+PRUNE_FROM = 2021             # keep a symbol if it qualified in ANY study year
 
 
 def asset_list(a: AlpacaAdapter) -> Dict[str, str]:
@@ -81,35 +87,62 @@ def fetch_all(batch: int = 200) -> None:
     syms = sorted(names)
     print(f"{len(syms)} tradable symbols; fetching daily bars from {START}")
     kept: Dict[str, List] = {}
+    failed: List[int] = []
     for n in range(0, len(syms), batch):
         chunk = syms[n:n + batch]
         got: Dict[str, List] = {}
         token = None
-        for _ in range(40):
+        complete = False
+        # A page failure used to `break` and cache whatever had arrived, which
+        # over 31 pages per batch means one hiccup silently truncates 200
+        # symbols' history into something that still parses as a valid series.
+        # Retry the page; if it will not come, drop the whole batch loudly
+        # rather than cache a shortened one.
+        for _ in range(200):
             q = {"symbols": ",".join(chunk), "timeframe": "1Day",
                  "start": START, "limit": 10000, "adjustment": "split",
                  "feed": "iex"}
             if token:
                 q["page_token"] = token
-            try:
-                d = a._request("GET", f"{DATA}/v2/stocks/bars?"
-                                      f"{urllib.parse.urlencode(q)}")
-            except AdapterError as e:
-                print(f"  batch {n} failed: {str(e)[:100]}")
+            for attempt in range(4):
+                try:
+                    d = a._request("GET", f"{DATA}/v2/stocks/bars?"
+                                          f"{urllib.parse.urlencode(q)}")
+                    break
+                except AdapterError as e:
+                    err = str(e)[:120]
+                    time.sleep(2 ** attempt)
+            else:
+                print(f"  batch {n} DROPPED after 4 retries: {err}")
+                failed.append(n)
                 break
             for s, rows in (d.get("bars") or {}).items():
                 got.setdefault(s, []).extend(rows)
             token = d.get("next_page_token")
             if not token:
+                complete = True
                 break
+        if not complete:
+            if n not in failed:
+                print(f"  batch {n} DROPPED: page cap hit, history truncated")
+                failed.append(n)
+            continue
         # Prune during the fetch: a symbol is worth caching only if it was
         # ever plausibly tradable by this account. Keeps the cache ~50MB
         # instead of ~400MB.
         for s, rows in got.items():
-            elig = sum(1 for b in rows
-                       if MIN_PX <= b["c"] <= MAX_PX and b["c"] * b["v"] >= MIN_DV
-                       and b["t"][:4] >= "2026")
-            if elig >= 20:
+            # Per YEAR, not over the whole window: a name that was liquid for
+            # one month in 2021 and dead since should not be cached, but a
+            # name that qualified in any single study year should be. The
+            # 2026-only test this replaces would have silently deleted every
+            # symbol that mattered in 2022 and was gone by now.
+            per_year: Dict[int, int] = {}
+            for b in rows:
+                if MIN_PX <= b["c"] <= MAX_PX and b["c"] * b["v"] >= MIN_DV:
+                    y = int(b["t"][:4])
+                    if y >= PRUNE_FROM:
+                        per_year[y] = per_year.get(y, 0) + 1
+            if per_year and max(per_year.values()) >= 20:
                 kept[s] = [[b["t"][:10], b["o"], b["h"], b["l"], b["c"], b["v"]]
                            for b in rows]
         print(f"  {n + len(chunk):>6}/{len(syms)}  kept {len(kept)}")
@@ -119,6 +152,9 @@ def fetch_all(batch: int = 200) -> None:
                    "bars": kept}, fh)
     print(f"cached {len(kept)} symbols -> {CACHE} "
           f"({CACHE.stat().st_size / 1e6:.0f} MB)")
+    if failed:
+        print(f"WARNING: {len(failed)} batches dropped at offsets {failed} — "
+              f"those symbols are absent, not truncated. Re-run --fetch.")
 
 
 def eligible(bars: List[Bar], i: int) -> bool:
@@ -159,9 +195,11 @@ def liquidity_ranked_membership(raw, names, want, year, top: int):
             for d, v in per_date.items()}
 
 
-def run(year: int, horizon: int, min_r: float, want: str, top: int = 0) -> Dict:
-    with gzip.open(CACHE, "rt") as fh:
-        blob = json.load(fh)
+def run(year: int, horizon: int, min_r: float, want: str, top: int = 0,
+        blob=None) -> Dict:
+    if blob is None:
+        with gzip.open(CACHE, "rt") as fh:
+            blob = json.load(fh)
     names, raw = blob["names"], blob["bars"]
     member = (liquidity_ranked_membership(raw, names, want, year, top)
               if top else None)

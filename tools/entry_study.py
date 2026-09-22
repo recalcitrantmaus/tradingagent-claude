@@ -41,8 +41,8 @@ from tools.pit_study import (CACHE, MA_PERIOD, classify, eligible,
 from tools.target_study import resolve, summarise
 
 
-def run(year: int, horizon: int, wait: int, top: int) -> Dict:
-    blob = json.load(gzip.open(CACHE, "rt"))
+def run(year: int, horizon: int, wait: int, top: int, blob=None) -> Dict:
+    blob = blob if blob is not None else json.load(gzip.open(CACHE, "rt"))
     names, raw = blob["names"], blob["bars"]
     member = liquidity_ranked_membership(raw, names, "plain", year, top) if top else None
 
