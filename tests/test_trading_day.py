@@ -421,3 +421,61 @@ class TestCumulativeDrift(unittest.TestCase):
         self.assertAlmostEqual(snap["cash_drift_today"], -0.01)
         self.assertEqual(snap["drift_readings_today"], 1)
         self.assertFalse(any("CUMULATIVE" in n for n in notes))
+
+
+class TestPrecloseClosesTheEntryBookBeforeTheBell(unittest.TestCase):
+    """M-16. cancel_unfilled_entries() lived only in `close`, which runs after
+    16:00 — after the closing cross, the largest print of the day and the
+    event most likely to fill a resting limit.
+    """
+
+    def run_preclose(self, broker, ledger):
+        with mock.patch.object(td.state, "load", lambda: ledger), \
+             mock.patch.object(td.state, "save", lambda l: None), \
+             mock.patch.object(td.state, "read_fills", lambda: []), \
+             mock.patch.object(td, "get_broker", lambda offline: broker), \
+             mock.patch.object(td.dt, "date", _FixedDate):
+            return td.cmd_preclose(argparse.Namespace(offline=False))
+
+    def test_it_cancels_resting_entries(self):
+        cancelled = []
+
+        class B(FakeBroker):
+            def cancel_unfilled_entries(self):
+                cancelled.append(True)
+                return ["ETHA:abc123"]
+
+        rc = self.run_preclose(B(), {"positions": {}, "cash": 300.0})
+        self.assertEqual(rc, 0)
+        self.assertTrue(cancelled, "preclose did not cancel the entry book")
+
+    def test_it_FAILS_if_cancelling_left_a_position_unprotected(self):
+        # The whole point of re-reading after the cancel: if that call took a
+        # stop off an open position, find out while the market is still open.
+        class B(FakeBroker):
+            def cancel_unfilled_entries(self):
+                return ["AAA:parent"]
+            def positions_without_stops(self):
+                return ["AAA"]
+
+        rc = self.run_preclose(B(positions=[pos("AAA")]),
+                               {"positions": {"AAA": {}}, "cash": 300.0})
+        self.assertEqual(rc, 1, "an unprotected position must stop the session")
+
+    def test_it_clears_working_orders_once_the_book_is_empty(self):
+        led = {"positions": {}, "cash": 300.0,
+               "working_orders": [{"symbol": "ETHA", "order_id": "abc"}]}
+
+        class B(FakeBroker):
+            def cancel_unfilled_entries(self):
+                return ["ETHA:abc"]
+
+        self.run_preclose(B(), led)
+        self.assertEqual(led["working_orders"], [])
+
+    def test_a_broker_error_stops_the_session_rather_than_passing_quietly(self):
+        class B(FakeBroker):
+            def cancel_unfilled_entries(self):
+                raise RuntimeError("broker unreachable")
+
+        self.assertEqual(self.run_preclose(B(), {"positions": {}, "cash": 300.0}), 1)

@@ -1290,3 +1290,48 @@ broker's first objection changed — no external event, no failing test, no
 alarm. **Assert on the reason, not the outcome. And when you change a request,
 re-check every test that depends on how that request is refused.**
 **Status:** active.
+
+### 2026-09-22 — Three gates that trusted a declaration, and one that ran too late
+**Evidence and changes**, from Monday's live session (`state/reviews/2026-09-21-eod-queue.md`):
+
+**M-17, the effort gate.** `model_policy` read `TRADING_AGENT_EFFORT`, an
+operator declaration set once per environment. The harness exports
+**`CLAUDE_EFFORT`** and nothing read it. On 2026-09-21 they disagreed in the
+close session — declared `xhigh`, running `high` — so the gate cleared an
+effort the session was not running at, permissively, using a value that was
+sitting in the environment the whole time. Now `effort_and_source()` takes the
+harness value as truth, the declaration as a labelled fallback, reports a
+mismatch loudly, and refuses a blocking task on a declared-only value.
+
+This is the strictly better half of the model finding. There the fix could
+only be honesty about provenance, because Claude Code exports no model
+variable. Here a measured value existed and was being ignored.
+
+**M-22, who may use `--model`.** The override was added on 2026-09-20 so a
+session that had verified its own model could clear a blocking gate. Nothing
+said *who* may do that. The close session worked it out unprompted and
+declined the flag: *an override is honest only from a present human, never in
+an unattended session.* That is right, and `CLAUDE_CODE_SESSION_ATTENDED` made
+it enforceable rather than merely documented — a blocking task now refuses an
+explicit `--model` from an unattended session, failing closed on a missing
+flag. Non-blocking tasks are untouched; execution must never wait for a human.
+
+**M-16, when entries are cancelled.** `cancel_unfilled_entries()` lived only
+in `close`, which runs after 16:00 — after the closing cross, the largest
+print of the day and the event most likely to fill a resting limit. Correctly
+scoped, wrongly timed. The overnight case is worse: a GTC buy limit **gaps
+through its own protection**, since an open below the limit fills at the open
+price, which can be under the stop. New `trading_day preclose` closes the
+entry book inside the management window and re-reads
+`positions_without_stops()` afterwards, failing the session if cancelling left
+anything naked — while the market is still open and something can be done.
+`close` keeps the cancellation as a backstop.
+
+**Lesson for future rules:** all three are the same shape. A control read a
+value that described the environment rather than the session, or ran at a
+moment chosen for convenience rather than for the risk. **Ask of every gate:
+what exactly is this measuring, and is it the thing I am about to bet on?**
+And note which of the three was fixable only by admitting uncertainty, and
+which two had a real measurement available all along — the difference is worth
+checking before settling for a caveat.
+**Status:** active.

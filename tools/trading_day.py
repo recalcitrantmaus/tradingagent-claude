@@ -5,6 +5,7 @@ The skills supply judgment. This supplies the things that must happen the same
 way every day regardless of what the agent thinks about the market:
 
     python3 -m tools.trading_day open     # preflight, reconcile, mark, halts
+    python3 -m tools.trading_day preclose # cancel resting entries BEFORE the bell
     python3 -m tools.trading_day close    # reconcile, stop audit, mark, report
     python3 -m tools.trading_day week     # expectancy, costs, findings
 
@@ -456,6 +457,67 @@ def cmd_close(args) -> int:
     return 1 if escalations else 0
 
 
+
+def cmd_preclose(args) -> int:
+    """Close the entry book BEFORE the bell, not after it.
+
+    `cancel_unfilled_entries()` lived only in `close`, which runs after 16:00.
+    That is correctly scoped and wrongly timed, and the pre-close session on
+    2026-09-21 found why: the closing cross is the largest print of the day
+    and the event most likely to fill a resting limit, so an entry cancelled
+    after the bell was live through the auction that would have filled it.
+
+    The overnight case is worse. A GTC buy limit **gaps through its own
+    protection**: an open below the limit fills at the open price, which can
+    be under the stop, so the bracket does not bound the loss the way it does
+    on an intraday fill.
+
+    So the cancellation moves here, into the management window, and `close`
+    keeps it as a backstop for the day this session does not run.
+    """
+    today = dt.date.today()
+    ledger = state.load()
+    broker = get_broker(args.offline)
+    ok, notes, snap = reconcile(broker, ledger)
+
+    print(f"=== PRE-CLOSE {today} ===")
+    print(f"equity        ${snap['equity']:,.2f}   cash ${snap['cash']:,.2f}")
+    for n in notes:
+        print(f"  ! {n}")
+    if not ok:
+        print("\nRECONCILIATION FAILED — resolve before the bell.")
+        return 1
+
+    cancelled: List[str] = []
+    if broker is not None:
+        try:
+            cancelled = broker.cancel_unfilled_entries()
+        except Exception as e:
+            print(f"  !! could not cancel resting entries: {str(e)[:120]}")
+            return 1
+        print(f"cancelled entries: {cancelled or 'none resting'}")
+
+        # Re-read AFTER cancelling. If that call took a protective leg off an
+        # open position, the time to find out is now, with the market open and
+        # something still doable about it.
+        try:
+            still = broker.positions_without_stops()
+        except Exception as e:
+            print(f"  !! could not re-verify stops: {str(e)[:120]}")
+            return 1
+        if still:
+            print(f"  !! UNPROTECTED AFTER CANCELLING: {still}")
+            print("     Fix or flatten before the bell. Do not carry this.")
+            return 1
+        print("protection    : every position has a live stop")
+
+    anchor_cash(ledger, snap)
+    ledger["working_orders"] = []
+    state.save(ledger)
+    print(f"\n{len(snap['positions'])} position(s) carried overnight.")
+    return 0
+
+
 def cmd_week(args) -> int:
     ledger = state.load()
     trades = closed_trades(state.read_fills())
@@ -509,11 +571,13 @@ def cmd_week(args) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", choices=["open", "close", "week"])
+    ap.add_argument("command",
+                    choices=["open", "preclose", "close", "week"])
     ap.add_argument("--offline", action="store_true",
                     help="rehearse without a broker; does not persist state")
     a = ap.parse_args()
-    return {"open": cmd_open, "close": cmd_close, "week": cmd_week}[a.command](a)
+    return {"open": cmd_open, "preclose": cmd_preclose,
+            "close": cmd_close, "week": cmd_week}[a.command](a)
 
 
 if __name__ == "__main__":

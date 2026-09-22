@@ -91,3 +91,72 @@ class TestPolicyShape(unittest.TestCase):
             self.assertTrue(POLICY[t].blocking, f"{t} must be blocking")
         for t in ("execution", "news-intel", "trade-journal"):
             self.assertFalse(POLICY[t].blocking, f"{t} must not be blocking")
+
+
+class TestEffortIsMeasuredNotDeclared(unittest.TestCase):
+    """M-17. Unlike the model, the harness DOES export the effort level
+    (CLAUDE_EFFORT). The policy read TRADING_AGENT_EFFORT — a declaration set
+    once per environment — and on 2026-09-21 they disagreed: declared xhigh,
+    actually running high. The gate cleared an effort the session was not
+    running at, permissively, on a value sitting in the environment all along.
+    """
+
+    def test_the_harness_value_wins_over_the_declaration(self):
+        with env(CLAUDE_EFFORT="high", TRADING_AGENT_EFFORT="xhigh"):
+            from engine.model_policy import effort_and_source
+            self.assertEqual(effort_and_source(), ("high", "harness"))
+
+    def test_the_declaration_is_a_fallback_and_is_labelled(self):
+        with mock.patch.dict(os.environ, {"TRADING_AGENT_EFFORT": "xhigh"},
+                             clear=True):
+            from engine.model_policy import effort_and_source
+            self.assertEqual(effort_and_source(), ("xhigh", "declared"))
+
+    def test_a_mismatch_is_reported_loudly(self):
+        with env(CLAUDE_EFFORT="high", TRADING_AGENT_EFFORT="xhigh",
+                 CLAUDE_CODE_SESSION_ATTENDED="1"):
+            ok, msgs = check("execution", model="claude-opus-5")
+        self.assertTrue(any("EFFORT MISMATCH" in m for m in msgs))
+
+    def test_a_blocking_task_refuses_a_declared_only_effort(self):
+        with mock.patch.dict(os.environ, {"TRADING_AGENT_EFFORT": "xhigh",
+                                          "CLAUDE_CODE_SESSION_ATTENDED": "1"},
+                             clear=True):
+            ok, msgs = check("weekly-review", model="claude-opus-5")
+        self.assertFalse(ok)
+        self.assertTrue(any("UNVERIFIED" in m for m in msgs))
+
+
+class TestOverrideRequiresAHuman(unittest.TestCase):
+    """M-22. --model exists so a session that has verified its own model can
+    clear a blocking gate. That is a human's act, asserted on a session record
+    a human has read. An unattended session reaching for it is overriding on
+    its own say-so, which is the thing the gate exists to prevent.
+
+    The close session on 2026-09-21 reached this unprompted and declined the
+    flag. These tests make its judgement the rule.
+    """
+
+    def test_an_unattended_session_cannot_override_a_blocking_gate(self):
+        with env(CLAUDE_EFFORT="xhigh", CLAUDE_CODE_SESSION_ATTENDED="0"):
+            ok, msgs = check("weekly-review", model="claude-opus-5")
+        self.assertFalse(ok)
+        self.assertTrue(any("UNATTENDED" in m for m in msgs))
+
+    def test_a_missing_attended_flag_is_treated_as_unattended(self):
+        # Fail closed. A blocked review costs a review; a rule promoted by an
+        # under-powered unattended session costs every trade until noticed.
+        with mock.patch.dict(os.environ, {"CLAUDE_EFFORT": "xhigh"}, clear=True):
+            ok, _ = check("weekly-review", model="claude-opus-5")
+        self.assertFalse(ok)
+
+    def test_an_attended_session_may_override(self):
+        with env(CLAUDE_EFFORT="xhigh", CLAUDE_CODE_SESSION_ATTENDED="1"):
+            ok, msgs = check("weekly-review", model="claude-opus-5")
+        self.assertTrue(ok)
+
+    def test_a_NON_blocking_task_is_unaffected_by_attendance(self):
+        # Execution must never be gated on a human being present.
+        with env(CLAUDE_EFFORT="xhigh", CLAUDE_CODE_SESSION_ATTENDED="0"):
+            ok, _ = check("execution", model="claude-sonnet-5")
+        self.assertTrue(ok)

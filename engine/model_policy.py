@@ -124,8 +124,45 @@ def current_model() -> Optional[str]:
     return model_and_source()[0]
 
 
+def effort_and_source() -> tuple[Optional[str], str]:
+    """The effort level, and whether it was MEASURED or merely declared.
+
+    Unlike the model — where Claude Code exports nothing and provenance is the
+    best available fix — the harness DOES export `CLAUDE_EFFORT`. The policy
+    read `TRADING_AGENT_EFFORT` instead, which is an operator declaration set
+    once per environment. On 2026-09-21 those disagreed in the close session:
+    declared `xhigh`, actually running `high`, so the gate cleared an effort
+    the session was not running at. Failing in the permissive direction, on a
+    value that was sitting in the environment the whole time.
+
+    So: the harness value is the truth, the declaration is a fallback, and the
+    caller is told which it got.
+    """
+    m = os.environ.get("CLAUDE_EFFORT")
+    if m:
+        return m, "harness"
+    d = os.environ.get("TRADING_AGENT_EFFORT")
+    return (d, "declared") if d else (None, "unknown")
+
+
 def current_effort() -> Optional[str]:
-    return os.environ.get("TRADING_AGENT_EFFORT")
+    """Back-compatible accessor. Prefer effort_and_source()."""
+    return effort_and_source()[0]
+
+
+def is_attended() -> bool:
+    """Is a human present in this session?
+
+    `--model` exists so a session that has verified its own model can clear a
+    blocking gate. That is a human's act. An unattended session reaching for
+    it is not overriding on evidence, it is overriding on its own say-so —
+    which is the whole thing the gate prevents.
+
+    Fail closed: anything other than an explicit affirmative is unattended.
+    A blocked review costs a review; a rule promoted by an under-powered
+    unattended session costs every trade until someone notices.
+    """
+    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED", "").strip() in ("1", "true", "True")
 
 
 def check(task: str, model: Optional[str] = None,
@@ -139,7 +176,9 @@ def check(task: str, model: Optional[str] = None,
         source = "explicit"
     else:
         model, source = model_and_source()
-    effort = effort or current_effort()
+    # NOTE: effort is resolved further down, not here. Filling it in at this
+    # point made every value look like it had been passed explicitly, which
+    # defeated the provenance check that is the whole point of M-17.
     msgs: List[str] = []
 
     # A blocking task decides what the agent BECOMES. Clearing one on an
@@ -149,6 +188,18 @@ def check(task: str, model: Optional[str] = None,
     # environment would clear, whatever it actually runs. So an unverified
     # model is not good enough for a blocking task, even when it looks good
     # enough. Pass --model after reading the session record.
+    # An explicit --model is a human's override, so it is only honest from a
+    # session a human is actually in. The close session on 2026-09-21 reached
+    # this conclusion unprompted and declined the flag; this makes its
+    # judgement the rule rather than one session's good instinct.
+    if p.blocking and source == "explicit" and not is_attended():
+        return False, [
+            f"'{task}' is blocking and --model was passed in an UNATTENDED "
+            "session. That flag is a human's override, asserted on a session "
+            "record a human has read. A session cannot assert it about itself.",
+            "Run this task in an attended session, or leave it for one. "
+            "Refusing rather than self-certifying."]
+
     if p.blocking and source != "explicit":
         where = ("TRADING_AGENT_MODEL, an ENVIRONMENT-level default"
                  if source == "environment" else "nowhere")
@@ -164,6 +215,22 @@ def check(task: str, model: Optional[str] = None,
     if source == "environment":
         msgs.append(f"model {model!r} read from TRADING_AGENT_MODEL (an "
                     "environment default, not a measurement of this session)")
+
+    # --- effort, same treatment ---
+    eff_src = "explicit" if effort else None
+    if not effort:
+        effort, eff_src = effort_and_source()
+    declared = os.environ.get("TRADING_AGENT_EFFORT")
+    if eff_src == "harness" and declared and declared != effort:
+        msgs.append(f"EFFORT MISMATCH: harness reports {effort!r}, "
+                    f"TRADING_AGENT_EFFORT declares {declared!r}. Using the "
+                    "harness value; fix the declaration.")
+    if p.blocking and eff_src == "declared":
+        return False, [
+            f"'{task}' is blocking and the effort level is UNVERIFIED: "
+            f"{effort!r} came from TRADING_AGENT_EFFORT, a declaration, and "
+            "the harness did not report CLAUDE_EFFORT.",
+            "Refusing rather than trusting a declaration about this session."]
 
     tier = tier_of(model)
     if tier is None:
