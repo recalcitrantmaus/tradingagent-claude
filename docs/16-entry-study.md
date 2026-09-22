@@ -1,5 +1,12 @@
 # Chase or wait for the retest? (D-24 / M-2)
 
+> **SUPERSEDED IN PART, 2026-09-22.** Everything below was computed on 2026
+> alone. The bar cache now runs 2021-2026 and the headline conclusion does not
+> survive: **retest beat chase in exactly one of six years, and that year was
+> 2026.** The decomposition at the end of this file is what replaced it and is
+> the part worth reading. See "Six years" below before acting on anything in
+> the middle sections.
+
 **Waiting is modestly better, not worse — but neither is significant, and the
 signals the retest never fills are the best ones in the sample.**
 
@@ -149,3 +156,153 @@ paying for the second.
 - **Untested and still open:** features not in this list — news, sector
   breadth, the market's own trend on the signal day, earnings proximity. The
   negative result covers price and volume geometry, which is the cheap half.
+
+
+---
+
+# Six years (2021-2026) — what survived, what did not
+
+```
+python3 -m tools.pit_study --fetch          # 2020-07-01 on, 2472 symbols, 51MB
+python3 -m tools.multiyear                  # entry study, every year
+python3 -m tools.multiproxy                 # the six features, every year
+```
+
+The IEX feed on this plan begins 2020-07-27. Taking all of it gives six study
+years once the 200-day lookback is paid. 0 batches dropped in the fetch.
+
+## 1. The retest result was a 2026 artifact
+
+| year | signals | chase | retest | never pulled back (chased) |
+|---|---|---|---|---|
+| 2021 | 1,454 | **+0.054** | −0.012 | +0.891 (t=7.2) |
+| 2022 | 2,110 | **−0.168** (t=−4.9) | −0.189 | +0.571 (t=6.5) |
+| 2023 | 2,872 | **+0.159** | +0.157 | +0.997 (t=12.5) |
+| 2024 | 2,805 | **+0.194** | +0.158 | +1.040 (t=11.2) |
+| 2025 | 2,796 | **+0.178** | +0.170 | +1.034 (t=10.4) |
+| 2026 | 1,875 | +0.060 | **+0.093** | +1.068 (t=9.2) |
+
+Retest won in 1/6 years. Sign test p=0.219; paired t=−1.2. The difference is
+not significant in either direction — but the *direction this file reported*
+is the wrong one out of sample.
+
+Worth recording as a process failure, not just a data update: my prior before
+the 2026 study was that chase would win. The one-year result reversed it, I
+wrote the reversal up, and six years says the original prior was right. **A
+single year did not merely fail to confirm — it actively pointed the wrong
+way, and it was confident enough to make me correct a correct instinct.**
+
+## 2. The t-statistic this file should never have quoted
+
+Pooled over all 13,912 chase trades: +0.096R at **t=5.6**. That number is
+wrong to use. Trades inside one year share the same market, so they are not
+13,912 independent draws and the pooled SE is far too small.
+
+**Each year as one observation: chase +0.079R, sd 0.135, t=+1.4.** Six years,
+2,472 symbols, daily bars — and the edge is still inside the noise. Every
+future claim here quotes the year-level figure.
+
+## 3. The decomposition — the part that is actually robust
+
+The retest arm's fills and the chase arm's non-missed trades are the *same
+10,117 signals*, so the gap attributes exactly:
+
+```
+signals that later pulled back, CHASED :  10117 trades  -0.227R  (-2299.6R)
+the same signals, entered on the RETEST:  10117 trades  +0.078R  ( +788.3R)
+   -> waiting is worth +0.305R on the signals it fills
+signals that never pulled back, forfeited: 3795 trades  +0.957R  (+3631.6R)
+   -> that forfeit is the whole of retest's shortfall
+```
+
+Both halves hold in **all six years**, 2022 included, where the no-pullback
+group returned +0.571R in the year every other arm lost money. Year-level
+t=12.1 — the only result in this study that clears significance comfortably.
+
+**So: waiting for the pullback is the better entry on the trades it gets, and
+loses anyway because it forfeits the trades that never come back.** The entry
+style was never the error. Having to choose between the two groups at signal
+time is the error, and it is structural.
+
+## 4. Can anything at signal time tell the groups apart? Still no.
+
+The 2026 negative result generalises. Test: does the Q5−Q1 spread in chase
+return keep its *sign* year after year — not whether the pooled average is
+positive.
+
+| feature | mean Q5−Q1 R | year-level t | sign held | label Q5−Q1 |
+|---|---|---|---|---|
+| atr_% | +0.185 | 1.8 | 4/6 | +0.03 |
+| breakout_% | +0.165 | 1.8 | 5/6 | **+0.40** |
+| rel_volume | +0.143 | 1.4 | 5/6 | +0.19 |
+| gap_% | +0.051 | 1.0 | 4/6 | +0.34 |
+| dist_200ma_% | +0.078 | 0.5 | 3/6 | +0.02 |
+| dist_50ma_% | +0.012 | 0.1 | 2/6 | +0.06 |
+
+**Nothing clears the year-level bar.** Best is t=1.8 at 4/6 and 5/6
+consistency, which is not evidence under the standard in CLAUDE.md.
+
+The capture test shows *why*, and it is the same cancellation as 2026. If a
+feature worked purely by selecting no-pullback signals, its return spread
+would be (label spread) × (+0.957 − −0.227) = (label spread) × 1.184:
+
+| feature | label Q5−Q1 | predicted R spread | observed | captured |
+|---|---|---|---|---|
+| breakout_% | +0.398 | +0.471 | +0.165 | **35%** |
+| gap_% | +0.339 | +0.402 | +0.051 | **13%** |
+| rel_volume | +0.191 | +0.226 | +0.143 | 63% |
+| atr_% | +0.029 | +0.035 | +0.185 | 532% |
+| dist_200ma_% | +0.018 | +0.022 | +0.078 | 364% |
+
+And the mechanism, within the no-pullback group alone:
+
+```
+breakout_%   Q1 +1.160   Q5 +0.797   spread -0.363   negative in 4/6 years
+rel_volume   Q1 +0.958   Q5 +0.887   spread -0.071   negative in 1/6 years
+atr_%        Q1 +0.734   Q5 +1.076   spread +0.342   negative in 3/6 years
+```
+
+breakout_% selects the right group and then the *worst members of it* — it
+buys the breakouts that have already made the move. Six years confirms what
+one year suggested.
+
+The two features that "capture" over 100% (atr_%, dist_200ma_%) are not
+working through this mechanism at all; their label spread is ~0. Whatever they
+do is a separate and weaker effect.
+
+### A hypothesis I had and was wrong about
+
+I expected atr_%'s spread to be an artifact of the stop floor:
+`stop = max(entry − 1.5·ATR, entry×0.92)` means that above atr_% ≈ 5.33 the
+floor binds, the stop is tighter than 1.5 ATR, and R is measured against a
+denominator the trade never chose. Checked it:
+
+```
+floor-bound across all trades: 6.6%
+  all trades         n=13912   Q1 -0.040  Q5 +0.146  spread +0.186
+  floor never bound  n=12989   Q1 -0.031  Q5 +0.187  spread +0.218
+```
+
+Removing every floor-bound trade makes the spread *larger*. Not an artifact.
+It is still only t=1.8 at 4/6, so it changes no rule — but the reason to
+reject it is weakness, not arithmetic.
+
+## 5. The finding that belongs in the risk rules, not the docs
+
+**2022 chase: −0.168R over 2,110 signals, t=−4.9, −355R total.** A long
+breakout strategy loses steadily and *significantly* in a bear year. Studying
+2026 alone hid a regime dependency larger than the edge itself — the spread
+between the worst year and the best is 0.36R, while the six-year mean is
+0.079R.
+
+This is the strongest argument yet for a regime gate that is code rather than
+posture prose, and it is queued as such. No rule changes on it today.
+
+## Standing caveat
+
+The universe is built from `/v2/assets` as it stands today, so names delisted
+before today are absent. Symbol counts rise monotonically — 1,944 names with
+bars in 2021 to 2,471 in 2026 — which is delistings and IPOs mixed and cannot
+be separated from this data. Every year is biased upward and the early years
+more. Treat an edge that *grows* into the past as suspect for that reason
+alone; 2022 being the worst year is, if anything, understated.

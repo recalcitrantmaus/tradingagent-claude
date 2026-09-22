@@ -1335,3 +1335,94 @@ And note which of the three was fixable only by admitting uncertainty, and
 which two had a real measurement available all along — the difference is worth
 checking before settling for a caveat.
 **Status:** active.
+
+---
+
+## 2026-09-22 — six years of data overturn a one-year conclusion (M-23, M-24)
+
+`python3 -m tools.pit_study --fetch` now covers 2020-07-01 onward (2,472
+symbols, 51MB, 0 batches dropped) because the feed's real start was 2020-07-27
+and nobody had asked. Six study years replaced one. Full numbers in
+`docs/16-entry-study.md`; the lessons are here.
+
+**The reversal.** The 2026-only entry study concluded that resting a limit at
+the broken level (retest) beat chasing the next open, +0.092R vs +0.054R, and
+`docs/16` recommended it. Across six years **retest won in exactly one — 2026,
+the year that was studied.** Sign test p=0.219, paired t=−1.2.
+
+The process failure is worse than the data error. My prior before that study
+was that chase would win. One year reversed it, I wrote up the reversal
+honestly as a corrected prediction, and six years says the original prior was
+right. **A single year did not merely fail to confirm a hypothesis — it
+pointed the wrong way with enough confidence to overturn a correct instinct,
+and the write-up made that reversal look like rigour.** The habit of recording
+"I predicted X and was wrong" is worth keeping, but it is not a substitute for
+asking whether the sample could have told the difference. Here it could not:
+t=+1.7 is what a coin produces about one time in eleven.
+
+**The statistic that was nearly quoted.** Pooled over all 13,912 chase trades
+the expectancy is +0.096R at **t=5.6**, which reads as decisive and is not.
+Trades inside one year share the same market and are not independent draws.
+**Year as the unit of observation: +0.079R, t=+1.4.** Six years of daily bars
+on 2,472 names and the edge is still inside the noise. `tools/multiyear.py`
+now prints both, with the pooled figure labelled as the one not to use. The
+general form: *a t-statistic is a claim about independence before it is a
+claim about significance, and pooling is where that claim gets made silently.*
+
+**M-23 — the regime dependency is larger than the edge.** 2022 chase returned
+**−0.168R over 2,110 signals, t=−4.9, −355R total.** A long breakout strategy
+loses steadily and significantly in a bear year. The spread between the worst
+year and the best is 0.36R against a six-year mean of 0.079R, so *which year
+you are in matters four times more than the strategy does.* One year of study
+hid this completely. This is the strongest evidence yet for a regime gate in
+`engine/` rather than posture prose in a skill, and it is queued — **no rule
+changes today**, because the evidence standard in CLAUDE.md asks for a
+backtest showing a better median outcome without a worse ruin rate, and that
+backtest has not been run.
+
+**M-24 — what did survive, and it is structural.** The two entry arms fill the
+same 10,117 signals, so the difference decomposes exactly:
+
+```
+pulled back, chased          10117 trades  -0.227R
+the same signals, on retest  10117 trades  +0.078R   waiting is worth +0.305R
+never pulled back, forfeited  3795 trades  +0.957R   the entire shortfall
+```
+
+Both halves hold in all six years — including 2022, where the no-pullback
+group made +0.571R while everything else lost money. Year-level t=12.1, the
+only result here that clears significance comfortably. **Waiting for the
+pullback is the better entry on the trades it gets, and loses anyway because
+it forfeits the trades that never come back.** So D-24's question was
+mis-framed: the ETHA entry style was not the error. Being forced to choose
+between the two groups at signal time is, and that is a property of the
+design, not of the day.
+
+**And still nothing separates them at signal time.** The 2026 negative result
+generalises rather than dissolving. No feature's Q5−Q1 return spread clears
+the year-level bar; best is t=1.8 at 4/6 (atr_%) and 5/6 (breakout_%)
+consistency. The mechanism is the same cancellation found in one year:
+breakout_% moves the *label* by +0.40 (11%→51% never pull back) and captures
+only **35%** of the return that implies, because within the no-pullback group
+it predicts return *negatively* (−0.363, negative in 4/6 years). It selects
+the right group and then the worst members of it — a big breakout is less
+likely to give the level back *and* has less room left to run, and you cannot
+buy the first property without paying for the second.
+
+**A hypothesis I had and checked rather than asserting.** atr_% had the
+largest spread and almost no label effect, so I suspected the stop floor:
+`max(entry − 1.5·ATR, entry×0.92)` binds above atr_% ≈ 5.33, making R a ratio
+to a denominator the trade never chose. Only 6.6% of trades are floor-bound,
+and dropping them makes the spread *larger* (+0.186 → +0.218). Wrong
+hypothesis. It changes no rule regardless — t=1.8 at 4/6 is weakness, not
+arithmetic — but the reason matters for the next person who looks at it.
+
+**Standing caveat, recorded before any early year gets believed.** The
+universe comes from `/v2/assets` as it stands today, so names delisted before
+today are absent. Symbol counts rise monotonically, 1,944 with bars in 2021 to
+2,471 in 2026 — delistings and IPOs mixed, inseparable in this data. Every
+year is biased upward and the early years most. An edge that *grows* into the
+past is suspect for that reason alone, and 2022 being the worst year is if
+anything understated.
+
+**Status:** active. No `engine/` change; two queue items opened.
