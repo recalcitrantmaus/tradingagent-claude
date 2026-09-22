@@ -77,3 +77,75 @@ because its entry on the weak ones is so much better.
    swept it.
 4. **The live account has one data point** and it agrees with the hindsight
    half: ETHA did not come back, and the day's return went uncollected.
+
+---
+
+# The signal-time proxy: answered, and the answer is no
+
+`python3 -m tools.proxy_study --year 2026 --top 150 --wait 5`
+
+The +1.054R sitting in the no-pullback group is only collectable if something
+visible on the signal bar separates it in advance. Six candidates, all
+computed from `bars[:i+1]`, against the 2026 signals:
+
+| feature | no-pullback rate, Q1 → Q5 | predicts the label? |
+|---|---|---|
+| **breakout %** (close above the prior 20-day high) | 12% → **47%** | **strongly** |
+| **gap %** (next open vs signal close) | 11% → **48%** | **strongly** |
+| relative volume | 24% → 34% | weakly |
+| distance to 50-day MA | 27% → 28% | no |
+| distance to 200-day MA | 27% → 28% | no |
+| ATR % of price | 21% → 28% | no |
+
+**Two of them predict the label very well.** A signal that clears its 20-day
+high by more than 2.5%, or gaps up more than ~1%, is roughly four times as
+likely never to come back as one that barely clears.
+
+**And it buys nothing.** The top breakout quintile returns **+0.053R** when
+chased — the baseline, to three decimals.
+
+## Why it cancels
+
+The feature that identifies "will not pull back" also identifies "and will
+not pay as much." Within the no-pullback group alone, breakout size predicts
+chase R **negatively**:
+
+| within no-pullback only | breakout % | n | chase R |
+|---|---|---|---|
+| Q1 | 0.01 – 0.67 | 96 | **+1.473** |
+| Q2 | 0.67 – 1.25 | 96 | +1.357 |
+| Q3 | 1.25 – 2.35 | 96 | +0.901 |
+| Q4 | 2.36 – 4.00 | 96 | +0.810 |
+| Q5 | 4.09 – 23.14 | 99 | **+0.736** |
+
+The arithmetic is exact:
+
+```
+chase R | never pulled back : +1.054  (n=483)
+chase R | did pull back     : -0.291  (n=1398)
+
+top breakout quintile        : 47% never pull back
+predicted by naive mixture   : +0.348
+ACTUALLY observed            : +0.053
+```
+
+A mixture argument says selecting the top quintile should nearly seven-times
+the baseline. It does not, because the two effects run against each other and
+very nearly cancel. **The label is predictable. The return is not.**
+
+That is economically sensible rather than a data artifact: a large breakout
+has already made much of the move. It is less likely to give the level back
+*and* has less room left to run. You cannot buy the first property without
+paying for the second.
+
+## What this settles
+
+- **Do not build a feature-based entry filter on these six.** It would look
+  well-motivated, backtest to baseline, and add a parameter to tune.
+- The retest entry stays, on the docs/16 result above.
+- The +508.9R remains a hindsight number. It is not a missed opportunity, it
+  is a description of a subgroup that cannot be identified in advance by
+  anything tested here.
+- **Untested and still open:** features not in this list — news, sector
+  breadth, the market's own trend on the signal day, earnings proximity. The
+  negative result covers price and volume geometry, which is the cheap half.
