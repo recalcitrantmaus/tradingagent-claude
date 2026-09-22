@@ -22,6 +22,19 @@ class RiskConfig:
     max_position_pct_option: float = 0.15    # any single option position (premium)
     max_position_pct_crypto: float = 0.15
     max_concurrent_positions: int = 4
+    # Aggregate open risk across the whole book, as a fraction of equity.
+    # T-1 (2026-09-22): 4 positions x 2% could put 8% at risk simultaneously,
+    # which is 2x daily_loss_halt_pct and exactly weekly_loss_halt_pct. Set
+    # equal to the daily halt so the invariant is simple and checkable: if
+    # every stop filled at once, the loss is exactly the day's limit and the
+    # breaker is a real ceiling rather than a marker read after the fact.
+    #
+    # This is the only diversification control that works here. Measured
+    # 2026-09-22 on the day's own signals, 60-day daily-return correlation
+    # ran 0.45 to 0.83 across every pair including a space name and a broad
+    # ETF — a long-only breakout book has no uncorrelated pair to spread
+    # into, so limiting the TOTAL is the lever, not choosing names.
+    max_portfolio_risk_pct: float = 0.04
 
     # --- asset-class caps (fraction of equity, aggregate) ---
     class_caps: Dict[str, float] = field(default_factory=lambda: {

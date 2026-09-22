@@ -341,3 +341,87 @@ class TestExpectedRGate(unittest.TestCase):
             price=close * 1.02, stop=stop, target=target), pf, {}, D)
         self.assertFalse(gapped.approved)
         self.assertIn("expected R", gapped.reasons[-1])
+
+
+class TestAggregateOpenRiskIsCapped(unittest.TestCase):
+    """T-1. Per-trade risk was capped at 2% and concurrency at 4, and nothing
+    capped the sum — so the book could carry 8% of equity at risk at once,
+    twice `daily_loss_halt_pct` and exactly `weekly_loss_halt_pct`.
+
+    The breakers could not cover that gap. The daily halt stops NEW trades
+    once -4% is realised; it cannot unwind stops already resting on the book.
+
+    Measured 2026-09-22 on the day's own signals: four positions, 4.53% of
+    equity at risk, no gate objecting. And measured on the same day's price
+    history, 60-day return correlation across those names ran 0.45 to 0.83 —
+    a long-only breakout book has no uncorrelated pair to spread into, so
+    capping the TOTAL is the only diversification control available.
+    """
+
+    def setUp(self):
+        self.cfg = DEFAULT
+        self.ro = RiskOfficer(self.cfg)
+        self.today = dt.date(2026, 9, 22)
+
+    def _prop(self, sym, price=60.0, stop=54.0):
+        # $6 of risk per share; at $300 equity that is the full 2% budget.
+        return OrderProposal(symbol=sym, asset_class="equity", side="buy",
+                             price=price, stop=stop, target=price + 18.0,
+                             thesis="full per-trade budget")
+
+    def test_the_book_cannot_exceed_the_cap(self):
+        pf = Portfolio(300.0)
+        prices, total = {}, 0.0
+        for i in range(4):
+            p = self._prop(f"SYM{i}")
+            prices[p.symbol] = p.price
+            d = self.ro.evaluate(p, pf, prices, self.today)
+            if d.approved and d.qty:
+                pf.buy(self.today, p.symbol, "equity", d.qty, p.price, 0.0)
+                pf.positions[p.symbol].stop = p.stop
+                total += d.qty * (p.price - p.stop)
+        self.assertLessEqual(total, 300.0 * self.cfg.max_portfolio_risk_pct + 1e-9)
+
+    def test_the_cap_equals_the_daily_halt_so_the_invariant_is_checkable(self):
+        # If every stop filled at once the loss is exactly the day's limit.
+        # Without this the -4% breaker is a marker read after the fact.
+        self.assertEqual(self.cfg.max_portfolio_risk_pct,
+                         self.cfg.daily_loss_halt_pct)
+
+    def test_a_third_full_size_position_is_refused_on_the_book_cap(self):
+        pf = Portfolio(300.0)
+        prices = {}
+        for i in range(2):                       # 2 x 2% = the whole budget
+            p = self._prop(f"SYM{i}")
+            prices[p.symbol] = p.price
+            d = self.ro.evaluate(p, pf, prices, self.today)
+            self.assertTrue(d.approved, f"SYM{i} should fit")
+            pf.buy(self.today, p.symbol, "equity", d.qty, p.price, 0.0)
+            pf.positions[p.symbol].stop = p.stop
+        third = self._prop("SYM2")
+        prices["SYM2"] = third.price
+        d = self.ro.evaluate(third, pf, prices, self.today)
+        self.assertFalse(d.approved)
+        self.assertTrue(any("open-risk cap" in r for r in d.reasons),
+                        f"wrong binding constraint: {d.reasons}")
+
+    def test_a_trailed_stop_returns_budget_to_the_book(self):
+        # Risk is measured FROM HERE, not from entry. A position at breakeven
+        # consumes no budget and the book should be free to use the room.
+        pf = Portfolio(300.0)
+        p = self._prop("SYM0")
+        prices = {"SYM0": 60.0}
+        d = self.ro.evaluate(p, pf, prices, self.today)
+        pf.buy(self.today, "SYM0", "equity", d.qty, 60.0, 0.0)
+        pf.positions["SYM0"].stop = 54.0
+        self.assertAlmostEqual(pf.open_risk(prices), d.qty * 6.0)
+        pf.positions["SYM0"].stop = 60.0         # trailed to breakeven
+        self.assertAlmostEqual(pf.open_risk(prices), 0.0)
+
+    def test_an_unstopped_position_counts_its_whole_notional(self):
+        # Nothing should create one. If one exists its loss is unbounded, and
+        # a risk total that ignores it is a comforting number, not a true one.
+        pf = Portfolio(300.0)
+        pf.buy(self.today, "NAKED", "equity", 2.0, 50.0, 0.0)
+        pf.positions["NAKED"].stop = None
+        self.assertAlmostEqual(pf.open_risk({"NAKED": 50.0}), 100.0)

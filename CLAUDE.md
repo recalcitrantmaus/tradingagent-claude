@@ -51,6 +51,16 @@ python3 -m tools.trading_day close    # report, overnight risk, escalations
 ## Hard constraints
 
 - Risk per trade ≤ 2% of equity. Size follows the stop; never the ambition.
+- **Aggregate open risk ≤ 4% of equity**, measured from the current price
+  across the whole book, so that if every stop filled at once the loss is
+  exactly the daily halt. Without it, 4 positions × 2% put 8% at risk — twice
+  the daily breaker and exactly the weekly one — and the breakers cannot help,
+  because they stop *new* trades and cannot unwind stops already resting.
+  This is also the only diversification control available: measured
+  2026-09-22, 60-day return correlation across the day's own signals ran
+  0.45–0.83 including a space name and a broad-market ETF, so a long-only
+  breakout book has no uncorrelated pair to spread into. Limit the total; do
+  not expect picking different names to do it.
 - Every entry supplies a stop before it is placed. No stop, no trade.
 - Never widen a stop. Never average down. Scale out, not in.
 - Options are locked twice over: below $1,500 equity (you cannot size one
@@ -84,14 +94,32 @@ python3 -m tools.model_check <task>     # exit 1 means do not proceed
 
 | Task | Floor | On a downgrade |
 |---|---|---|
-| news-intel, execution, session-close, trade-journal | Sonnet @ xhigh | warn, continue, note it in the journal |
-| premarket-brief, trade-plan | Sonnet @ xhigh | warn, continue |
+| news-intel, execution, trade-journal | Sonnet @ xhigh | warn, continue, note it in the journal |
+| **premarket-brief, trade-plan** (the open) | **Opus @ xhigh** | warn, continue |
+| **pre-close, session-close** | **Opus @ xhigh** | warn, continue |
 | weekly-review, rule-promotion, post-halt-review | **Opus @ xhigh** | **stop** |
 | unlock-authorization | **Opus @ max** | **stop** |
 
 The asymmetry is the point: a bad execution turn costs one trade; a bad rule
 promoted into a SKILL.md costs every trade until someone notices. If a
 blocking task cannot run, say so and leave it for a session that can.
+
+**Why the open and the close carry an Opus floor** (raised 2026-09-22). The
+risk engine protects against bad *decisions*; it cannot protect against bad
+*data*. A proposal built on a wrong number passes every gate, because the
+size, the stop and the expected R are all computed correctly from it. RKLB on
+2026-09-22 would have cleared the entire engine on a 20-day high that was
+0.91% too low, and the same defect had ATR wrong in 59 of 59 names. Only a
+model cross-checking its own feed caught it. The open is also the only session
+that *forms beliefs about the world* — the rest execute against beliefs already
+formed — so the asymmetry follows the task, not the phase. Pre-close prices
+overnight gap risk across a book whose names correlate 0.45–0.83, and a gap
+does not respect stops. The close is where findings are promoted or lost.
+
+**This floor is meant to be earned down.** Every data artifact a model finds
+should become a deterministic check; `cross_check()` exists for prices and
+belongs on levels and ATR next. Opus at the open is right while the data layer
+is still surprising us, not forever.
 
 **A blocking task needs two things, and you can supply only one of them.**
 Pass `--model` after reading the real value from the session record

@@ -236,7 +236,17 @@ class RiskOfficer:
         deployable = portfolio.settled_cash(date) - eq * c.min_cash_reserve_pct
         qty_by_cash = max(0.0, deployable) / (p.price * p.multiplier)
 
-        qty = min(qty_by_risk, qty_by_position, qty_by_class, qty_by_cash)
+        # aggregate open-risk cap (T-1). Per-trade 2% x 4 concurrent was 8%,
+        # twice the daily halt. The book's total is what a correlated move
+        # actually costs, and on this strategy the book is always correlated.
+        risk_room = max(0.0, eq * c.max_portfolio_risk_pct
+                        - portfolio.open_risk(prices))
+        per_share_risk = (p.price - p.stop) * p.multiplier
+        qty_by_book_risk = (risk_room / per_share_risk
+                            if per_share_risk > 0 else 0.0)
+
+        qty = min(qty_by_risk, qty_by_position, qty_by_class, qty_by_cash,
+                  qty_by_book_risk)
         if p.qty is not None:
             qty = min(qty, p.qty)
 
@@ -251,6 +261,9 @@ class RiskOfficer:
                 (qty_by_position, "single-position cap"),
                 (qty_by_class, f"{p.asset_class} class cap"),
                 (qty_by_cash, "settled cash after reserve"),
+                (qty_by_book_risk,
+                 f"portfolio open-risk cap ({c.max_portfolio_risk_pct:.0%} of "
+                 f"equity; ${portfolio.open_risk(prices):.2f} already at risk)"),
                 key=lambda t: t[0])[1]
             return d.reject(f"size rounds to zero; binding constraint: {binding}")
 

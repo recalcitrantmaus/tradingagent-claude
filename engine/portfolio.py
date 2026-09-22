@@ -124,6 +124,34 @@ class Portfolio:
         self.peak_equity = max(self.peak_equity, eq)
         return eq
 
+    def open_risk(self, prices: Dict[str, float]) -> float:
+        """Dollars lost if every open stop filled, measured FROM HERE.
+
+        T-1. Per-trade risk was capped at 2% and concurrency at 4, and nothing
+        capped the sum, so the book could carry 8% at once — twice the daily
+        halt and exactly the weekly one. The breakers cannot cover that gap:
+        `daily_loss_halt_pct` stops NEW trades once -4% is realised, it cannot
+        unwind stops already resting.
+
+        Measured from the CURRENT price, not from entry, so a trailed stop
+        genuinely frees up budget: a position at +2R with its stop at
+        breakeven is no longer consuming risk, and the book should be allowed
+        to use that room.
+
+        A position with no stop is counted at FULL NOTIONAL. Nothing should
+        ever create one — every entry supplies a stop — but if one exists its
+        loss is unbounded, and a risk total that quietly ignores it is exactly
+        the kind of comforting number this system keeps finding.
+        """
+        total = 0.0
+        for sym, pos in self.positions.items():
+            px = prices.get(sym, pos.avg_price)
+            if pos.stop is None:
+                total += pos.qty * px * pos.multiplier
+            else:
+                total += pos.qty * max(0.0, px - pos.stop) * pos.multiplier
+        return total
+
     def exposure_by_class(self, prices: Dict[str, float]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         for sym, pos in self.positions.items():

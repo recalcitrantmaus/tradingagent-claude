@@ -1664,3 +1664,158 @@ against both tapes and one that pins the stale-name relabelling. Monte Carlo
 unchanged at 300 seeds, 0.0% ruin across all arms.
 
 **Status:** active. M-29 and M-30 closed.
+
+---
+
+## 2026-09-22 — T-1: the book had no risk cap, and diversification is not available (T-2)
+
+Authorized by recalcitrantmaus. Two changes, one mechanism, because the evidence
+collapsed them into one.
+
+### What was wrong
+
+Per-trade risk capped at 2%, concurrency capped at 4, **nothing capping the
+sum.** Measured, not inferred — four proposals engineered to the full
+per-trade budget:
+
+```
+SYM0 APPROVED  open risk 2.0%      MAX SIMULTANEOUS OPEN RISK: 8.0%
+SYM1 APPROVED  open risk 4.0%      daily_loss_halt_pct  4%
+SYM2 APPROVED  open risk 6.0%      weekly_loss_halt_pct 8%
+SYM3 APPROVED  open risk 8.0%
+SYM4 REFUSED   already at max 4 positions
+```
+
+Twice the daily halt, exactly the weekly one, in one correlated move. And the
+breakers cannot close that gap: `daily_loss_halt_pct` stops NEW trades once
+-4% is realised — it cannot unwind stops already resting on the book. Today's
+five real signals took four positions at **4.53% aggregate, already past the
+daily breaker**, with no gate objecting.
+
+### T-2: why there is no sector rule
+
+The instinct was to enforce sector diversification. The measurement says that
+instrument does not work. 60-day daily-return correlation, SIP bars, on the
+day's own six signals:
+
+```
+        ASX    STM   DRAM   MCHP   JEPQ   RKLB    SPY
+ASX    1.00   0.67   0.76   0.58   0.78   0.59   0.61
+STM    0.67   1.00   0.64   0.72   0.76   0.54   0.59
+DRAM   0.76   0.64   1.00   0.60   0.78   0.51   0.45
+MCHP   0.58   0.72   0.60   1.00   0.71   0.59   0.61
+JEPQ   0.78   0.76   0.78   0.71   1.00   0.64   0.83
+RKLB   0.59   0.54   0.51   0.59   0.64   1.00   0.61
+```
+
+Three things kill the sector approach:
+
+1. **DRAM is an ETF.** Its SIC code says "investment trust". It correlates
+   0.76 with ASX and 0.64 with STM. A sector label misses the most obviously
+   concentrated name in the set.
+2. **JEPQ is the most correlated name here** — 0.71 to 0.78 against every
+   semiconductor, 0.83 against SPY — and no sector rule would ever flag a
+   broad-market income ETF.
+3. **The minimum pairwise correlation is 0.45.** Even a space company against
+   a semiconductor. There is no uncorrelated pair to diversify *into*.
+
+**A long-only breakout book is a single directional bet, always.** So "four
+independent trades at 2%" is close to one 8% position, and the lever is the
+total, not the selection. T-1 and T-2 are the same control.
+
+### Choosing the number, and what the evidence actually showed
+
+CLAUDE.md asks for a backtest with a better median and no worse ruin. The
+first sweep (300 seeds, 6 caps, 3 strategies) **failed that test**: tightening
+the cap produced a *worse* median (300.62 at 2% vs 308.40 at 8%) at an
+identical 0.0% ruin. Reported rather than worked around.
+
+Two things had to be checked before drawing any conclusion from that:
+
+- **Is the sim as correlated as reality?** If it were more diversified it
+  would understate the cap's value. It is not: sim pairwise correlation runs
+  min 0.43 / median 0.61 / max 0.86 against the real 0.45 / 0.63 / 0.83. The
+  inconvenient result stands on its own merits.
+- **Is `ruin` measuring anything?** No. It is a 50% loss and it is 0.0% at
+  every cap, so *"without a worse ruin rate"* is trivially satisfied by
+  everything and carries no information in this regime. The LOCKED rate
+  (-20% from peak, flatten, human only) is the operative catastrophe metric —
+  but at 300 seeds it was 1 to 4 events and **non-monotonic**, i.e. noise. A
+  4x reduction was there to be claimed and it would have been wrong.
+
+Resolved at **3000 seeds**, momentum_breakout, 260 days:
+
+```
+ cap   median    p05    maxDD  worstDD   LOCKED  n_lock
+  4%   302.27  264.35    8.9%    20.9%    0.50%      15
+  8%   305.42  264.56    9.3%    21.5%    0.90%      27
+```
+
+**The cap costs -$3.15 of median equity — 1.05% over a year — and roughly
+halves the locked-account rate, 0.90% to 0.50%.** z = -1.86 on the lock
+counts, marginal alone, but corroborated by two independent monotonic
+metrics: mean max drawdown 9.3% -> 8.9% and worst 21.5% -> 20.9%.
+
+So it is not a free win. It is a priced trade-off, and the price is ~1% of
+median annual return to halve the outcome that ends the account. For a system
+whose first line calls itself capital-preserving, and whose own lessons record
+that optimizing for return selects for strategies that ruin 94% of accounts,
+that is the right side of the trade. **Set at 4% so the invariant is
+checkable: if every stop filled at once, the loss is exactly the daily halt,
+and the breaker becomes a ceiling rather than a marker read afterwards.**
+
+### Implementation notes worth keeping
+
+- Risk is measured **from the current price, not from entry**, so a trailed
+  stop genuinely returns budget to the book. A position at breakeven consumes
+  nothing and the book should be free to use the room.
+- A position with **no stop counts its full notional.** Nothing should ever
+  create one, but its loss is unbounded, and a risk total that quietly skips
+  it is exactly the comforting-number failure this project keeps finding.
+
+### One more thing the sweep exposed
+
+`graduated_swing` and `momentum_breakout` returned *identical* numbers at
+every cap, because the option leg is locked below $1,500 equity and
+contributes nothing at $300. They are the same experiment reported twice in
+the suite, not two independent confirmations. Worth knowing before either is
+cited as corroboration.
+
+**Verified:** 184 tests (5 new). Sim suite re-run at 300 seeds, 0.0% ruin.
+
+**Status:** active. T-1 closed; T-2 answered and closed as not-implementable
+by sector, with the aggregate cap standing in its place.
+
+---
+
+## 2026-09-22 — model floors raised for the open, pre-close and close
+
+Authorized by recalcitrantmaus, recorded in `state/authorizations.jsonl`.
+
+`premarket-brief`, `trade-plan`, `pre-close` and `session-close` move from
+Sonnet @ xhigh to **Opus @ xhigh**. `execution`, `news-intel` and
+`trade-journal` stay at Sonnet.
+
+**The argument is about data, not difficulty.** The risk engine protects
+against bad decisions; it cannot protect against bad data. A proposal built on
+a wrong number passes every gate, because the size, the stop and the expected
+R are all computed correctly *from that number*. RKLB would have cleared the
+entire engine on a 20-day high 0.91% too low, and the same defect had ATR
+wrong in 59 of 59 names. Only a model suspicious of its own feed caught it.
+
+The open is also the only session that **forms beliefs about the world**; the
+others execute against beliefs already formed. So the asymmetry follows the
+task rather than the phase, and it will not expire when strategy testing does.
+Pre-close prices overnight gap risk across a book correlating 0.45-0.83, where
+a gap does not respect stops. The close is where findings are promoted or lost
+— Monday's close found M-16 unprompted and declined a `--model` override it
+was entitled to reach for.
+
+**This floor is meant to be earned down, and that should be said out loud.**
+Every artifact a model finds should become a deterministic check;
+`cross_check()` exists for prices and belongs on levels and ATR next. Opus at
+the open is right while the data layer is still surprising us — not forever.
+Cost is a real input to that: this is not free, and the schedule should be
+revisited once the data checks are code.
+
+**Status:** active.

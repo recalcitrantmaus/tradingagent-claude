@@ -57,22 +57,52 @@ POLICY: Dict[str, TaskPolicy] = {p.task: p for p in [
                "Rule-following with structured output. Every order still "
                "passes the deterministic risk gate, so a weaker model cannot "
                "size up, skip a stop, or trade through a halt.", blocking=False),
-    TaskPolicy("session-close", Tier.SONNET, "xhigh",
-               "Reconciliation and reporting against a fixed checklist.",
+    # Raised to Opus 2026-09-22. The close is where findings get promoted:
+    # Monday's close found M-16 unprompted and declined a --model override it
+    # was entitled to reach for. That is judgement, not reconciliation.
+    TaskPolicy("session-close", Tier.OPUS, "xhigh",
+               "Reconciliation against a fixed checklist, but also where the "
+               "day's findings are written down and escalated — the errors "
+               "here are the ones nobody catches later.", blocking=False),
+    # Raised to Opus 2026-09-22, on T-1/T-2. Pre-close decides the overnight
+    # carry, and a gap does not respect stops. With up to 4 positions whose
+    # measured pairwise correlation runs 0.45-0.83, pricing the gap risk of a
+    # correlated book is the highest-stakes judgement of the day. Revisit
+    # once the portfolio open-risk cap has live evidence behind it.
+    TaskPolicy("pre-close", Tier.OPUS, "xhigh",
+               "Prices overnight gap risk across a correlated book and "
+               "decides what is carried. A stop is a fill instruction, not a "
+               "price guarantee, and it does not survive a gap.",
                blocking=False),
     TaskPolicy("trade-journal", Tier.SONNET, "xhigh",
                "Recording a reflection is routine; PROMOTING one to a rule is "
                "not — that is rule-promotion, below.", blocking=False),
 
     # --- judgment: open-ended synthesis, errors propagate into every trade
-    TaskPolicy("premarket-brief", Tier.SONNET, "xhigh",
-               "Open-ended synthesis over noisy, conflicting sources. Sonnet "
-               "at xhigh is the validated floor; Opus is preferred when the "
-               "regime is unclear or posture would be RISK_OFF.",
-               blocking=False),
-    TaskPolicy("trade-plan", Tier.SONNET, "xhigh",
-               "Thesis construction sets the day's expectancy. Same floor as "
-               "the brief it consumes.", blocking=False),
+    # --- the OPEN session: raised to Opus on 2026-09-22 ----------------
+    # The deterministic risk engine protects against bad DECISIONS. It cannot
+    # protect against bad DATA — a proposal built on a wrong number passes
+    # every gate, because the size, the stop and the R are all computed
+    # correctly from it. RKLB on 2026-09-22 is the proof: it would have
+    # cleared the whole engine on a 20-day high that was 0.91% too low, and
+    # only a model cross-checking its own feed caught it. The same defect had
+    # ATR wrong in 59 of 59 names (bug B-21).
+    #
+    # The open is also the only session that FORMS beliefs about the world;
+    # the others execute against beliefs already formed. So the capability
+    # asymmetry follows the task, not the phase, and it does not expire when
+    # strategy testing ends.
+    #
+    # This floor should be EARNED DOWN. Every data artifact found here should
+    # become a deterministic check — cross_check() already exists for prices
+    # and belongs on levels and ATR next. When it is, revisit this.
+    TaskPolicy("premarket-brief", Tier.OPUS, "xhigh",
+               "Open-ended synthesis over noisy, conflicting sources, and the "
+               "only place a bad INPUT can be caught — the risk engine "
+               "validates decisions, not data.", blocking=False),
+    TaskPolicy("trade-plan", Tier.OPUS, "xhigh",
+               "Thesis construction sets the day's expectancy, on the same "
+               "inputs the brief just had to verify.", blocking=False),
 
     # --- durable decisions: a mistake here outlives the trade that caused it
     TaskPolicy("weekly-review", Tier.OPUS, "xhigh",
