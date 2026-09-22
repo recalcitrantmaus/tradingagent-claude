@@ -1475,3 +1475,79 @@ permissive, and every one of them printed `ok` while doing it.
 
 **Status:** no `engine/` change, no rule changed. D-17 confirmed. M-26, M-27
 and M-28 opened in `state/reviews/2026-09-22-queue.md`; M-28 fixed there.
+
+---
+
+## 2026-09-22 — M-22, second attempt: the gate that never bound (M-26)
+
+Authorized by recalcitrantmaus, attended, Opus 5 @ xhigh verified from the session record.
+Recorded in `state/authorizations.jsonl`.
+
+**What was wrong.** `is_attended()` read `CLAUDE_CODE_SESSION_ATTENDED` and
+returned True on `"1"`. That variable is set environment-wide, so it read `1`
+in every session — attended or not — and the gate never refused anything, once,
+ever. Demonstrated end to end on 2026-09-22: an unattended scheduled relay
+session ran `model_check --model claude-opus-5 rule-promotion` and got exit 0.
+
+It is the third instance of the pattern named in the entry above, and the
+worst, because it shipped *in the same commit* as the fix for the other two —
+one function below a comment warning that a blocking task must not clear on "a
+value that cannot vary with the thing being checked."
+
+**The proposed fix was also wrong, and the session that proposed it is the
+counterexample.** The plan was to require
+`TRADING_AGENT_ATTENDED_SESSION == CLAUDE_CODE_SESSION_ID`, so that an
+environment-wide value could satisfy at most one session. But a scheduled
+relay fired into session `38d73c9c` at 14:20Z with no human present, and recalcitrantmaus
+typed into that same session at 15:45Z. Same session id, same environment,
+same variables; attendance changed.
+
+**Attendance is a property of the TURN, not of the session or the
+environment.** Environment variables are snapshotted at session start, so no
+variable — of any scope, however cleverly bound — can track it. Two wrong
+fixes in two days, both of them environment reads, before the category error
+was visible: *I kept looking for a better variable when the problem was that
+attendance is not a variable.*
+
+**What replaced it.** The gate no longer tries to detect a human. It requires
+the override to be SAID and it records it:
+
+```
+python3 -m tools.model_check rule-promotion --model claude-opus-5 \
+    --authorization "<what is being changed and why, in the human's words>"
+```
+
+Appended to `state/authorizations.jsonl` — committed, not ignored — with task,
+model, session id and timestamp.
+
+**Be exact about what this buys, because overstating it is how the first
+version happened. It is attributable, not enforceable.** Nothing in-process
+can establish that a human is present: any check the process can read, the
+process can satisfy. A session could fabricate the string. What it cannot do
+is fabricate it without leaving a dated, session-stamped claim in the
+repository.
+
+Two things *are* enforced, and they cover the realistic failure — which was
+never an adversarial agent:
+
+- **A trivial authorization is refused.** "ok", "yes", "approved", anything
+  under 12 characters. Self-certification wearing a string is still
+  self-certification.
+- **A verbatim-reused authorization is refused**, case- and
+  whitespace-insensitive. This is the one that matters: a canned string pasted
+  into a Routine prompt would otherwise clear the gate on every firing,
+  unattended, forever. A nonce that must be new each time cannot be put on a
+  schedule. The nonce is spent only when the whole check passes, so a run
+  refused on tier or effort does not burn it.
+
+**Verified:** 171 tests (9 new, replacing 4 that encoded the broken
+behaviour), green under `CLAUDE_EFFORT` in {low, high, xhigh} x
+`CLAUDE_CODE_SESSION_ATTENDED` in {0, 1} and with both unset — because this
+morning's regression was a test suite that the environment decided. One test
+exists purely to go red if `CLAUDE_CODE_SESSION_ATTENDED` is ever honoured
+again. Monte Carlo suite unchanged at 300 seeds, 0.0% ruin across all arms,
+which is the expected result: this gate is consulted only for blocking tasks
+and never touches the trading path. `execution` still requires no
+authorization, by an explicit test — execution must never wait on a human.
+
+**Status:** active. M-22 and M-26 closed.

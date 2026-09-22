@@ -10,8 +10,11 @@ promoted into a SKILL.md costs every trade until someone notices. Capability
 is spent where mistakes are durable.
 """
 
+import datetime as dt
+import json
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional
 import os
 
@@ -150,23 +153,109 @@ def current_effort() -> Optional[str]:
     return effort_and_source()[0]
 
 
-def is_attended() -> bool:
-    """Is a human present in this session?
+# --- M-22, second attempt. The first one did not work. -----------------
+#
+# `is_attended()` used to read CLAUDE_CODE_SESSION_ATTENDED and return True on
+# "1". That variable is set environment-wide, so it read "1" in every session
+# including unattended scheduled firings, and the gate never once bound. On
+# 2026-09-22 an unattended relay session cleared `rule-promotion` with it.
+#
+# The replacement proposed at the time — require the variable to equal
+# CLAUDE_CODE_SESSION_ID, so an environment-wide value satisfies at most one
+# session — is ALSO wrong, and the session that proposed it is the
+# counterexample. A scheduled relay fired into it at 14:20Z (unattended) and a
+# human typed into the same session at 15:45Z (attended). Same session id,
+# same environment, same variables. **Attendance is a property of the TURN,
+# not of the session or the environment**, and environment variables are
+# snapshotted at session start, so no variable of any scope can track it.
+#
+# So this stops pretending to detect a human and starts recording a claim.
+# Be clear about what that buys, because overstating it is how the first
+# version happened: this is ATTRIBUTABLE, not ENFORCEABLE. Nothing in-process
+# can establish that a human is present — any check the process can read, the
+# process can satisfy. What it can do is make the assertion explicit, specific
+# and permanent, so a false one is a lie in an append-only log with a session
+# id and a timestamp on it, rather than a silent boolean read.
+#
+# Two things here ARE enforced, and they cover the realistic failure:
+#   1. A trivial authorization ("ok", "yes", "approved") is refused. The
+#      override has to say something.
+#   2. A verbatim-reused authorization is refused. That is the actual threat —
+#      not an adversarial agent, but a canned string pasted into a Routine
+#      prompt that then clears the gate every single day unattended. A nonce
+#      that must be new each time cannot be baked into a schedule.
 
-    `--model` exists so a session that has verified its own model can clear a
-    blocking gate. That is a human's act. An unattended session reaching for
-    it is not overriding on evidence, it is overriding on its own say-so —
-    which is the whole thing the gate prevents.
+AUTH_LOG = Path(__file__).resolve().parents[1] / "state" / "authorizations.jsonl"
 
-    Fail closed: anything other than an explicit affirmative is unattended.
-    A blocked review costs a review; a rule promoted by an under-powered
-    unattended session costs every trade until someone notices.
-    """
-    return os.environ.get("CLAUDE_CODE_SESSION_ATTENDED", "").strip() in ("1", "true", "True")
+# Rejected outright: an authorization that carries no information is the same
+# self-certification the gate exists to stop, wearing a string.
+TRIVIAL_AUTHORIZATIONS = {
+    "y", "n", "yes", "no", "ok", "okay", "1", "true", "go", "go ahead",
+    "sure", "approved", "authorised", "authorized", "proceed", "do it",
+    "confirmed", "confirm", "please", "fine", "accept", "accepted",
+    "human", "attended", "authorization", "auth",
+}
+MIN_AUTHORIZATION_CHARS = 12
+
+
+def _normalise(text: str) -> str:
+    return " ".join((text or "").lower().split())
+
+
+def _prior_authorizations(log_path=None) -> List[str]:
+    path = Path(log_path) if log_path else AUTH_LOG
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line).get("authorization", ""))
+        except json.JSONDecodeError:
+            continue          # a corrupt row must not silently clear the gate
+    return out
+
+
+def authorization_ok(text: Optional[str], log_path=None) -> tuple[bool, str]:
+    """Is this a usable human authorization? Returns (ok, reason)."""
+    if text is None or not text.strip():
+        return False, "no authorization was supplied"
+    norm = _normalise(text)
+    if norm in TRIVIAL_AUTHORIZATIONS or len(norm) < MIN_AUTHORIZATION_CHARS:
+        return False, (f"the authorization {text.strip()!r} carries no "
+                       "information. State what is being authorised and why, "
+                       "in the authorising human's own words.")
+    if norm in {_normalise(p) for p in _prior_authorizations(log_path)}:
+        return False, ("this authorization has been used before, verbatim. A "
+                       "reused string is a schedule, not a decision — it "
+                       "would clear this gate on every firing. Write a new "
+                       "one describing THIS change.")
+    return True, "authorization accepted and recorded"
+
+
+def record_authorization(task: str, model: Optional[str], text: str,
+                         log_path=None) -> None:
+    """Append-only. This log is the whole point: it is what makes a false
+    claim attributable after the fact."""
+    path = Path(log_path) if log_path else AUTH_LOG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "task": task,
+        "model": model,
+        "session": (os.environ.get("CLAUDE_CODE_SESSION_ID")
+                    or os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID") or ""),
+        "authorization": text.strip(),
+    }
+    with path.open("a") as fh:
+        fh.write(json.dumps(row) + "\n")
 
 
 def check(task: str, model: Optional[str] = None,
-          effort: Optional[str] = None) -> tuple[bool, List[str]]:
+          effort: Optional[str] = None, authorization: Optional[str] = None,
+          auth_log=None) -> tuple[bool, List[str]]:
     """Return (ok, messages). ok=False means do not perform this task."""
     p = POLICY.get(task)
     if p is None:
@@ -188,17 +277,24 @@ def check(task: str, model: Optional[str] = None,
     # environment would clear, whatever it actually runs. So an unverified
     # model is not good enough for a blocking task, even when it looks good
     # enough. Pass --model after reading the session record.
-    # An explicit --model is a human's override, so it is only honest from a
-    # session a human is actually in. The close session on 2026-09-21 reached
-    # this conclusion unprompted and declined the flag; this makes its
-    # judgement the rule rather than one session's good instinct.
-    if p.blocking and source == "explicit" and not is_attended():
-        return False, [
-            f"'{task}' is blocking and --model was passed in an UNATTENDED "
-            "session. That flag is a human's override, asserted on a session "
-            "record a human has read. A session cannot assert it about itself.",
-            "Run this task in an attended session, or leave it for one. "
-            "Refusing rather than self-certifying."]
+    # An explicit --model is a human's override, asserted on a session record
+    # a human has read. The first attempt tried to DETECT a human (see the
+    # note above authorization_ok); it could not, because nothing in-process
+    # can. So the override now has to be SAID, in terms that cannot be
+    # pre-baked into a schedule, and it is recorded.
+    if p.blocking and source == "explicit":
+        auth_ok, why = authorization_ok(authorization, auth_log)
+        if not auth_ok:
+            return False, [
+                f"'{task}' is blocking and --model was passed without a usable "
+                f"authorization: {why}",
+                'Pass --authorization "<what is being changed and why, in the '
+                'authorising human\'s words>". It is appended to '
+                "state/authorizations.jsonl with the session id and timestamp.",
+                "This gate is ATTRIBUTABLE, not enforceable: a session could "
+                "fabricate this string. It could not do so without leaving a "
+                "dated, session-stamped claim in the repository. Refusing "
+                "rather than self-certifying."]
 
     if p.blocking and source != "explicit":
         where = ("TRADING_AGENT_MODEL, an ENVIRONMENT-level default"
@@ -250,6 +346,9 @@ def check(task: str, model: Optional[str] = None,
 
     if ok:
         msgs.append(f"'{task}' cleared on {model} at effort {effort or 'unknown'}")
+        if p.blocking and source == "explicit" and authorization:
+            record_authorization(task, model, authorization, auth_log)
+            msgs.append("authorization recorded to state/authorizations.jsonl")
         return True, msgs
     if p.blocking:
         msgs.append("BLOCKING: do not perform this task. Re-run it in a "

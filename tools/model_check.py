@@ -3,6 +3,8 @@
 
     python3 -m tools.model_check weekly-review
     python3 -m tools.model_check execution --model claude-sonnet-5 --effort xhigh
+    python3 -m tools.model_check rule-promotion --model claude-opus-5 \
+        --authorization "recalcitrantmaus: fix M-22, the attendance gate never bound"
 
 Exit code 0 = proceed, 1 = do not perform this task in this session.
 """
@@ -20,6 +22,12 @@ def main() -> int:
     ap.add_argument("task", nargs="?", help="task name; omit to list the policy")
     ap.add_argument("--model")
     ap.add_argument("--effort")
+    ap.add_argument("--authorization", default=None,
+                    help="required with --model on a BLOCKING task: what is "
+                         "being authorised and why, in the authorising "
+                         "human's own words. Recorded to "
+                         "state/authorizations.jsonl. Must be specific and "
+                         "must not repeat a previous one.")
     a = ap.parse_args()
 
     if not a.task:
@@ -36,7 +44,7 @@ def main() -> int:
                   f"{'yes' if p.blocking else 'no':9}")
         return 0
 
-    ok, msgs = check(a.task, a.model, a.effort)
+    ok, msgs = check(a.task, a.model, a.effort, a.authorization)
     for m in msgs:
         print(("  ok: " if ok else "  !! ") + m)
     return 0 if ok else 1

@@ -93,6 +93,28 @@ The asymmetry is the point: a bad execution turn costs one trade; a bad rule
 promoted into a SKILL.md costs every trade until someone notices. If a
 blocking task cannot run, say so and leave it for a session that can.
 
+**A blocking task needs two things, and you can supply only one of them.**
+Pass `--model` after reading the real value from the session record
+(`get_session`, `session_context.model` and
+`external_metadata.last_served_model`) — the environment default is the same
+for every session here and is routinely wrong. And pass
+`--authorization "<why, in the authorising human's own words>"`, which is
+appended to `state/authorizations.jsonl` with the session id and timestamp.
+
+```
+python3 -m tools.model_check rule-promotion --model claude-opus-5 \
+    --authorization "recalcitrantmaus: promote the 2% cap change, evidence in docs/04"
+```
+
+A trivial authorization ("ok", "approved") is refused, and so is one used
+before, verbatim — so it cannot be baked into a Routine prompt and fired on a
+schedule. **Do not write your own authorization.** That string is a human's,
+and the gate cannot tell the difference: it is *attributable*, not
+enforceable. Nothing in-process can establish that a human is present — the
+first attempt at this read an environment variable and never once bound (see
+M-22/M-26 in `docs/04-lessons.md`). What the log does is make a false claim
+permanent and signed. Leave the task for a session where someone can type it.
+
 ## Changing a rule
 
 Rules change only with evidence: five consistent closed trades, or a backtest
