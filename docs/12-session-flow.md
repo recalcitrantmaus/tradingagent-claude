@@ -5,8 +5,15 @@ that shapes every diagram below: **the model decides what to trade, code
 decides whether it is allowed.** Wherever a diamond is drawn, the test behind
 it is deterministic code in `engine/`, not a judgement.
 
-Rendered by GitHub directly. To regenerate the images:
-`npx -y @mermaid-js/mermaid-cli -i docs/12-session-flow.md -o docs/flow.svg`
+Every diagram below is a fenced `mermaid` block, which GitHub renders inline.
+There are no checked-in image files: a rendered copy is a second artefact that
+drifts out of sync with its source the first time someone edits one and not
+the other, and a stale architecture diagram is worse than none because it is
+believed. The `docs/flow-*.svg` files that used to sit beside this page were
+exactly that duplicate and have been removed.
+
+To render locally (for a slide, or to check a change before pushing):
+`npx -y @mermaid-js/mermaid-cli -i docs/12-session-flow.md -o /tmp/flow.svg`
 
 ---
 

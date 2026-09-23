@@ -521,6 +521,61 @@ BUGS = [
   "sessions listed explicitly in other_sessions_present. Test pins it.",
   "2026-09-22 16:05", "2026-09-22 16:12", "2026-09-22 16:18",
   "0", "7c0c97e", "Closed"),
+ ("B-26", "Controls", "Medium",
+  "The trading day was the CONTAINER's date, not the exchange's. "
+  "drift_today() keyed on dt.date.today() and matched UTC timestamps by "
+  "string prefix. UTC midnight is 20:00 ET — four hours after the close but "
+  "on the same session's evening — so the drift window opened the previous "
+  "evening: the 2026-09-22 close counted a reading from Monday 22:32 ET. It "
+  "was also decided by the HOST, since the same code on an ET machine "
+  "compares an ET date against UTC strings and buckets differently or "
+  "matches nothing. Harmless at zero drift; not harmless once the cumulative "
+  "figure feeds drift_halts, and crypto fills around the clock.",
+  "One named trading_date() on ZoneInfo('America/New_York') rather than a "
+  "fixed -05:00, so DST is carried rather than remembered. EVERY 'today' in "
+  "the module moved to it — open, close, preclose, week key, day-start key — "
+  "because a drift window on ET and halt baselines on UTC would be worse "
+  "than either alone. 7 tests; suite green under four timezones. Two faults "
+  "occurred INSIDE the fix, both the same bug: the test mock no longer "
+  "reached the moved seam, and the replacement helper pinned the conversion "
+  "as well as the clock, relabelling Friday as Monday.",
+  "2026-09-15 18:36", "2026-09-22 20:07", "2026-09-23 04:05",
+  "7", "48353b4", "Closed"),
+ ("B-27", "Reporting", "Medium",
+  "Three of five Phase 2 exit criteria passed VACUOUSLY, so an account that "
+  "had never traded printed three [ok]s and read three-fifths of the way to "
+  "Phase 2 exit. all() over an empty list is True, and 'costs below gains' "
+  "carried an explicit `if trades else True`. Each is a defensible vacuous "
+  "truth alone; together they made inactivity look like progress. Same shape "
+  "as 'no protective leg was stripped — vacuously, with no position', but in "
+  "a published scorecard rather than a session note.",
+  "Three states: [ok], [XX], and [--] not yet measurable, with the exit gate "
+  "requiring every criterion to be measurable AND passed. Measurability keys "
+  "on TRADES, not sessions observed — the first attempt used sessions and "
+  "still printed two [ok]s, because you cannot breach a rail you never "
+  "touched and LOCKED needs a -20% drawdown, which needs losses. A guardrail "
+  "never exercised was not honoured, it was untested. A flat account now "
+  "reads 0/5. 4 tests.",
+  "2026-09-15 18:36", "2026-09-22 20:07", "2026-09-23 04:05",
+  "7", "48353b4", "Closed"),
+ ("B-28", "Controls", "Medium",
+  "CLAUDE_EFFORT is NOT snapshotted at session start, contrary to CLAUDE.md. "
+  "Measured within one session on 2026-09-22: high at 13:39Z, medium at "
+  "20:07Z. It tracks the TURN. model_check runs ONCE at task start and "
+  "nothing re-reads it, so a blocking task that clears at xhigh can perform "
+  "its durable write at medium with no signal; session-close ran two notches "
+  "below its floor that evening. Third member of a family found in two days: "
+  "attendance is a property of the turn (B-23), effort is a property of the "
+  "turn, and both were read as though they described a session.",
+  "PARKED, not wired in, at recalcitrantmaus's request — to be incorporated "
+  "deliberately at the end of a session rather than dropped into a live "
+  "trading day. recheck() re-reads effort at the DURABLE WRITE rather than "
+  "at task start, because that is where a downgrade costs something. It does "
+  "not re-verify the model: passing --model is a human's act, already "
+  "recorded and single-use. 6 tests, one of which fails the moment anyone "
+  "wires it in.",
+  "2026-09-20 00:00", "2026-09-22 20:07", "",
+  "2", "48353b4", "PARKED — activate at a session end"),
  ("B-18", "Permissions", "High",
   "`python3 -m tools.paper_session --submit` is refused by the permission "
   "classifier as a real-world transaction, so the live session path cannot "

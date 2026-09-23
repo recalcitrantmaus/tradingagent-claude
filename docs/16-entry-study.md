@@ -204,6 +204,39 @@ future claim here quotes the year-level figure.
 
 ## 3. The decomposition — the part that is actually robust
 
+```mermaid
+flowchart TD
+    SIG[13,912 breakout signals<br/>2021-2026, point-in-time universe] --> Q{does price return to<br/>the broken level<br/>within 5 sessions?}
+
+    Q -->|"yes — 10,117 signals (73%)"| PB[the two arms fill<br/>the SAME signals here]
+    Q -->|"no — 3,795 signals (27%)"| NPB[never pulls back]
+
+    PB --> C1["CHASE the next open<br/><b>−0.227R</b>"]
+    PB --> R1["wait for the RETEST<br/><b>+0.078R</b>"]
+    C1 -.->|"waiting is worth<br/><b>+0.305R</b> here"| R1
+
+    NPB --> C2["CHASE — <b>+0.957R</b><br/>year-level t = 12.1"]
+    NPB --> R2["RETEST never fills:<br/><b>forfeited entirely</b>"]
+
+    C1 --> TOT1["chase overall<br/>+0.096R"]
+    C2 --> TOT1
+    R1 --> TOT2["retest overall<br/>+0.078R"]
+    R2 -.->|"this forfeit IS<br/>the whole shortfall"| TOT2
+
+    style NPB fill:#d5e8d4,stroke:#82b366
+    style C2 fill:#d5e8d4,stroke:#82b366,stroke-width:3px
+    style R2 fill:#f8cecc,stroke:#b85450
+    style C1 fill:#f8cecc,stroke:#b85450
+```
+
+Read the diagram before the numbers below it. **Waiting is the better entry on
+every signal it fills, and loses anyway**, because the 27% it never fills are
+worth more than everything else combined. The entry style was never the
+error — being forced to choose between the two branches at signal time is, and
+that is a property of the design rather than of any particular day.
+
+
+
 The retest arm's fills and the chase arm's non-missed trades are the *same
 10,117 signals*, so the gap attributes exactly:
 
