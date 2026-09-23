@@ -311,13 +311,30 @@ class TestParkedEffortRecheck(unittest.TestCase):
         self.assertTrue(ok)
 
     def test_it_is_still_parked(self):
-        # Fails the moment someone wires it in, which is the reminder to
-        # delete the banner, add call sites and test them.
-        import subprocess
+        """Fails the moment someone wires it in — the reminder to delete the
+        banner, add the call sites and test them.
+
+        Parsed, not grepped. The first version matched the string "recheck()"
+        anywhere in a .py file and went red on a PROSE mention inside
+        tools/design_doc.py's bug description. A grep for a name is not a
+        check for a call, which is the same mistake this module keeps
+        recording: measuring something adjacent to the thing you care about.
+        """
+        import ast
         root = Path(__file__).resolve().parents[1]
-        hits = subprocess.run(
-            ["grep", "-rn", "recheck(", "--include=*.py", "engine", "tools"],
-            cwd=root, capture_output=True, text=True).stdout.splitlines()
-        live = [h for h in hits if "def recheck(" not in h and not
-                h.split(":", 2)[2].lstrip().startswith("#")]
+        live = []
+        for path in list((root / "engine").rglob("*.py")) + \
+                    list((root / "tools").rglob("*.py")):
+            try:
+                tree = ast.parse(path.read_text())
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                f = node.func
+                name = (f.id if isinstance(f, ast.Name)
+                        else f.attr if isinstance(f, ast.Attribute) else None)
+                if name == "recheck":
+                    live.append(f"{path.relative_to(root)}:{node.lineno}")
         self.assertEqual(live, [], f"recheck() is wired in now: {live}")
