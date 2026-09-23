@@ -2027,3 +2027,138 @@ banner and add the call sites.
 unchanged. Suite green under four timezones.
 
 **Status:** T-9 and T-8 active. T-10 parked.
+
+## 2026-09-23 — three controls that never reached the path that sends orders (T-12, T-13, T-14)
+
+Found live, with the market open, by writing down what the engine *should* do
+before running it. The plan for 2026-09-23 predicted RKLB would be refused on
+the tapered risk budget. The engine approved it at 1.70% of equity. The
+prediction was right and the runner was wrong, and that gap is the only reason
+any of this was found.
+
+**The habit is the finding.** Two sessions of "propose, run, report what
+happened" would not have caught this, because the output looked correct: two
+plausible orders, sensible sizes, no error. It is only wrong against a stated
+expectation. `state/plans/2026-09-23.md` now carries a "what I expect the
+engine to do, written before running it" section for that reason.
+
+### T-12: the runner handed the engine the same empty book every time
+
+`RiskOfficer.evaluate` reads both of the controls added on 2026-09-22 out of
+the portfolio it is given:
+
+```python
+n_open = len(portfolio.positions)          # the taper
+taper  = c.correlated_risk_decay ** n_open
+risk_room = max(0.0, eq * c.max_portfolio_risk_pct
+                - portfolio.open_risk(prices))   # T-1's aggregate cap
+```
+
+`tools/paper_session` looped over proposals calling
+`ro.evaluate(p, pf, prices, today)` and **never mutated `pf`**. So inside one
+session every proposal was gated as though it were the first: `n_open` stayed
+at the count of pre-existing broker positions, `open_risk` stayed at their
+risk, and both controls were inert.
+
+Measured on the four-name case in `tests/test_session_gating.py`: four
+proposals at $10 risking $0.60/share each take 7 shares apiece on the
+single-position cap, for **$16.80 of book risk on a $300 account — 5.6%, past
+the 4% cap and past the daily halt.** That is T-1's 8% book, restored in full,
+one day after T-1 was closed.
+
+This is T-1's own failure mode one layer up. The control was written into
+`engine/`, unit-tested in `engine/`, and never wired into the only caller that
+sends orders. **No engine-level test could have found it**, because from
+inside the engine both controls work perfectly — they were simply never asked
+a question that had a book in it. Note the wording in the T-1 entry: the five
+signals were run "through the engine *with the portfolio actually updating*".
+That measurement used a bespoke harness. Production did not do it.
+
+Fixed: the approved order is reserved into `pf` (position and cash) before the
+next proposal is gated. Reserved at **approval**, not at fill — a submitted
+bracket has already committed the risk, and reserving early can only make the
+engine refuse more, never less.
+
+### T-13: every refusal has been naming the wrong constraint
+
+Surfaced by the T-12 fix. `Decision.reject` **appends** the binding constraint
+to `reasons`, and `evaluate` appends informational notes before reaching it.
+The runner printed `d.reasons[0]`.
+
+So RKLB's refusal — genuinely on the tapered risk budget — was logged as:
+
+```
+REJECT RKLB: expected R 2.00
+```
+
+"expected R 2.00" is a **passing grade**, not a reason to refuse anything. The
+log named the reward-to-risk gate for a refusal that gate did not make. Every
+refusal on this path is suspect for as long as this has been live, and the
+approval branch was always correct (`d.reasons[-1]`), which is why nobody
+looked.
+
+This matters more than its one-character fix suggests. The daily routine's
+instruction is that *a refusal nobody can check is not a decision*. A refusal
+that names the wrong control is worse than an unlogged one: it reads as an
+audit trail while pointing at the wrong place, and the rejection histogram
+(M-4) counts it into the wrong bucket.
+
+Fixed: print `reasons[-1]`. Pinned by a test that asserts the logged line
+names the constraint that actually bound *and* that a genuine expected-R
+refusal still says so.
+
+### T-14: a carried position arrived without the stop that was resting for it
+
+Found by reasoning forward rather than by a failure — the DT order placed this
+morning is still resting, and the question was what tomorrow's session would
+do with it once filled.
+
+`paper_session` rebuilt broker positions as `Position(..., opened_at=today)`
+with no `stop`. `Portfolio.open_risk` counts a stopless position at **full
+notional**, deliberately and correctly, since an unstopped loss is unbounded.
+The arithmetic on a single filled DT share:
+
+```
+open_risk   = 1 x 58.47        = $58.47   (19.5% of equity)
+cap         = 0.04 x 299.99    = $12.00
+risk_room   = max(0, 12 - 58.47) = $0.00  -> every entry refused
+```
+
+The account would have frozen the next session, and the refusal would have
+read `portfolio open-risk cap ($58.47 already at risk)` — a guardrail's
+message, for what is actually an outage. **A conservative failure is still a
+failure, and it is the harder kind to see, because it looks like discipline.**
+The true risk was $2.67: the stop was resting at the broker the whole time and
+was never asked for.
+
+Fixed: `AlpacaAdapter.resting_stops()` returns the live stop *price* per
+symbol (widest stop wins on a tie), and the rebuild carries it onto the
+`Position`. `positions_without_stops` answers a different question — *is* it
+protected — and could not be reused. Verified against the live broker with
+DT's held bracket leg: `resting_stops() -> {'DT': 55.8}`.
+
+The fail-closed path is kept and tested: if the stop cannot be retrieved, the
+position still counts at full notional. The fix must not soften the rule it
+was hiding.
+
+### What pinned it
+
+`tests/test_session_gating.py`, 9 tests, driving the real `main()` loop
+against a fake broker rather than inspecting its source — the lesson of the
+2026-09-22 parked-check test, which grepped for a name instead of parsing for
+a call. Mutation-checked: with all three fixes reverted, 5 of the 9 fail; with
+them in place, 215/215 pass and `sim.run_suite --seeds 300` reports ruin 0.0%
+on every strategy.
+
+### The pattern, stated plainly, because it is now four for four
+
+T-1, M-22/M-26, M-30, and now T-12/T-13/T-14 are the same defect wearing
+different clothes: **a control that is correct in isolation and is never
+handed the state that makes it bind.** The engine is not where these live.
+They live at the seam between the engine and its caller, and every one of them
+was invisible to a test that exercised only one side of that seam.
+
+The standing check that follows from it: for each control in `engine/config.py`,
+name the caller that supplies its input, and write one test that drives the
+caller. A control with no such test should be assumed inert until shown
+otherwise.

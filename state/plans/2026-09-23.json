@@ -1,0 +1,38 @@
+[
+  {
+    "symbol": "DT",
+    "asset_class": "equity",
+    "side": "buy",
+    "price": 58.47,
+    "stop": 55.80,
+    "target": 63.81,
+    "thesis": "20-day-high breakout, 0.71 ATR clear of the 57.20 level. No catalyst; purely technical. Stop 1.5xATR, target 3xATR.",
+    "meta": {
+      "atr14": 1.7804,
+      "level_close20": 57.20,
+      "level_high20": 57.25,
+      "excess_atr": 0.713,
+      "conviction_rank": 1,
+      "cross_check_bps": 0.0,
+      "cross_check_time_utc": "2026-09-23T13:52Z"
+    }
+  },
+  {
+    "symbol": "RKLB",
+    "asset_class": "equity",
+    "side": "buy",
+    "price": 72.53,
+    "stop": 67.42,
+    "target": 82.74,
+    "thesis": "20-day-high breakout, but only 0.16 ATR clear of the 71.98 level. Meets the committed screen criteria; weaker on conviction than DT. No catalyst.",
+    "meta": {
+      "atr14": 3.4047,
+      "level_close20": 71.98,
+      "level_high20": 72.50,
+      "excess_atr": 0.162,
+      "conviction_rank": 2,
+      "cross_check_bps": 1.4,
+      "cross_check_time_utc": "2026-09-23T13:52Z"
+    }
+  }
+]

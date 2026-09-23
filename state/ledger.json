@@ -1,6 +1,6 @@
 {
   "broker_cash": 299.99,
-  "broker_cash_at": "2026-09-22T20:05:59.451546+00:00",
+  "broker_cash_at": "2026-09-23T13:46:36.014424+00:00",
   "broker_equity": 299.99,
   "cancelled_entries": [
     {
@@ -15,7 +15,7 @@
   ],
   "cash": 299.99,
   "day_start_equity": 299.99,
-  "day_start_key": "2026-09-22",
+  "day_start_key": "2026-09-23",
   "day_trades": [],
   "days": [
     {
@@ -100,7 +100,7 @@
   ],
   "halts": [],
   "human_authorization": null,
-  "last_reconciled": "2026-09-22",
+  "last_reconciled": "2026-09-23",
   "mode": "paper",
   "peak_equity": 300.0,
   "phase": "phase2",
@@ -156,11 +156,23 @@
       "at": "2026-09-22T20:05:59.451546+00:00",
       "broker_cash": 299.99,
       "drift": 0.0
+    },
+    {
+      "at": "2026-09-23T13:46:36.014424+00:00",
+      "broker_cash": 299.99,
+      "drift": 0.0
     }
   ],
   "risk_state": "NORMAL",
   "starting_equity": 300.0,
   "week_start_equity": 299.99,
   "week_start_key": "2026-W39",
-  "working_orders": []
+  "working_orders": [
+    {
+      "order_id": "99ebcbc4-36b2-4a63-b491-1265ea81b315",
+      "status": "new",
+      "symbol": "DT",
+      "unfilled_qty": 1.0
+    }
+  ]
 }

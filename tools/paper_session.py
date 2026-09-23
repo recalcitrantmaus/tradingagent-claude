@@ -29,7 +29,7 @@ from dataclasses import replace
 from engine.config import DEFAULT
 from engine.posture import limits_for, for_date as posture_for
 from engine.market import Bar, atr
-from engine.portfolio import Portfolio
+from engine.portfolio import Portfolio, Position
 from engine.risk import RiskOfficer, OrderProposal, State
 from tools import state
 from tools.review import closed_trades
@@ -186,11 +186,21 @@ def main() -> int:
     pf.cash = acct["cash"]
     ledger = state.load()
     pf.peak_equity = max(ledger.get("peak_equity", acct["equity"]), acct["equity"])
+    # Carry each position's REAL resting stop across, not just the position.
+    # `Portfolio.open_risk` counts a position with `stop=None` at full
+    # notional — correct, because an unstopped loss is unbounded — so
+    # rebuilding a stopped position without its stop reports a book at ~19% of
+    # equity against a 4% cap and refuses every subsequent entry. The stop is
+    # resting at the broker; it only had to be asked for.
+    try:
+        stops = adapter.resting_stops()
+    except (AdapterError, AttributeError):
+        stops = {}          # fail closed: no stop known, full notional at risk
     for p in broker_positions:
-        pf.positions[p["symbol"]] = __import__(
-            "engine.portfolio", fromlist=["Position"]).Position(
+        pf.positions[p["symbol"]] = Position(
             symbol=p["symbol"], asset_class="equity", qty=p["qty"],
-            avg_price=p["avg_price"], opened_at=today)
+            avg_price=p["avg_price"], opened_at=today,
+            stop=stops.get(p["symbol"]))
 
     ro = RiskOfficer(DEFAULT)
     ro.start_day(today, acct["equity"])
@@ -246,7 +256,16 @@ def main() -> int:
     for p in proposals:
         d = ro.evaluate(p, pf, prices, today)
         if not d.approved:
-            print(f"  REJECT {p.symbol}: {d.reasons[0]}")
+            # reasons[-1], not reasons[0]. `Decision.reject` APPENDS the
+            # binding constraint, while `evaluate` may already have appended
+            # informational notes (the expected-R grade, for one) before
+            # reaching it. Printing reasons[0] named whichever note happened to
+            # land first: on 2026-09-23 a refusal on the tapered risk budget
+            # was logged as "expected R 2.00", which is not a reason to refuse
+            # anything — it is a passing grade. A refusal that names the wrong
+            # constraint is worse than no log, because it reads as an audit
+            # trail while pointing at the wrong control.
+            print(f"  REJECT {p.symbol}: {d.reasons[-1]}")
             continue
         ticket = OrderTicket(
             symbol=p.symbol, asset_class=p.asset_class, side=p.side,
@@ -255,6 +274,29 @@ def main() -> int:
             take_profit=round(p.target, 2) if p.target else None,
             thesis=p.thesis)
         print(f"  APPROVE {p.symbol}: {d.reasons[-1]}")
+
+        # Reserve this order against the book BEFORE the next proposal is
+        # gated. `RiskOfficer.evaluate` reads BOTH the concurrency taper
+        # (`correlated_risk_decay ** len(portfolio.positions)`) and the T-1
+        # aggregate open-risk cap (`portfolio.open_risk`) out of the portfolio
+        # it is handed. This loop used to hand it the same untouched `pf` for
+        # every proposal, so within one session every proposal was gated as
+        # though it were the first: the taper never tapered and the 4% book cap
+        # never bound. Four 2% proposals in one session restored exactly the 8%
+        # book that T-1 was opened to prevent — the control landed in engine/
+        # and was never wired into the caller.
+        #
+        # Reserved at APPROVAL rather than at fill, deliberately. A submitted
+        # bracket has already committed the risk: the entry can fill a second
+        # later and the stop rests behind it. Reserving early can only make the
+        # engine refuse MORE, never less, which is the correct direction for
+        # the one error this account cannot afford.
+        pf.positions[p.symbol] = Position(
+            symbol=p.symbol, asset_class=p.asset_class, qty=d.qty,
+            avg_price=p.price, opened_at=today, stop=p.stop,
+            target=p.target, multiplier=p.multiplier)
+        pf.cash = max(0.0, pf.cash - d.qty * p.price * p.multiplier)
+
         result = adapter.submit(ticket)
         sent += 1
 

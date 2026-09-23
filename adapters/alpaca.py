@@ -274,6 +274,41 @@ class AlpacaAdapter:
         return [p["symbol"] for p in self.positions()
                 if p["symbol"] not in protected]
 
+    def resting_stops(self) -> Dict[str, float]:
+        """The live protective stop PRICE per symbol, not merely its existence.
+
+        `positions_without_stops` answers "is this position protected at all",
+        which is the flatten-or-fix question. It is not enough for
+        `Portfolio.open_risk`, which needs the price to compute what the book
+        actually loses if every stop fills.
+
+        Without this the runner rebuilds broker positions with `stop=None`, and
+        `open_risk` counts an unstopped position at FULL NOTIONAL — correctly,
+        by its own rule, since an unstopped loss is unbounded. The result is a
+        book that reads as 19% at risk against a 4% cap the moment any position
+        is carried, so every subsequent entry is refused on the aggregate cap.
+        That is not the cap working; it is the cap being fed a position whose
+        stop is resting at the broker and simply was not asked for.
+
+        Widest stop wins on a tie: two stops on one symbol means the protective
+        one is whichever fires last, so the conservative reading of the risk is
+        the lower stop price.
+        """
+        q = urllib.parse.urlencode({"status": "all", "limit": "200",
+                                    "direction": "desc", "nested": "true"})
+        out: Dict[str, float] = {}
+        for o in self._request("GET", f"{self.base}/v2/orders?{q}"):
+            sym = o.get("symbol")
+            for c in [o] + list(o.get("legs") or []):
+                if (c.get("type") in self.STOP_TYPES
+                        and (c.get("status") or "").lower() in self.ACTIVE_STATUSES):
+                    px = c.get("stop_price")
+                    if px is None:
+                        continue
+                    px = float(px)
+                    out[sym] = min(px, out[sym]) if sym in out else px
+        return out
+
     # ------------------------------------------------------------- writing
     def submit(self, ticket: OrderTicket, confirm_live: bool = False) -> Dict:
         """Bracket order: entry + stop + optional take-profit, atomically.
