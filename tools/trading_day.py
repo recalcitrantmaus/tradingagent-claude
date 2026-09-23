@@ -18,6 +18,7 @@ flow before broker keys exist. It refuses to mark the day as traded.
 """
 import argparse
 import datetime as dt
+from zoneinfo import ZoneInfo
 import json
 import statistics
 import sys
@@ -56,6 +57,52 @@ DRIFT_HALT_PCT = 0.005
 
 
 
+# ----------------------------------------------------------------------
+# What "today" means (T-9)
+# ----------------------------------------------------------------------
+# The trading day is an EXCHANGE concept and the exchange is in New York.
+# Everything here used to key on `dt.date.today()` — the container's local
+# date, which is UTC — against timestamps stored in UTC. Two things were
+# wrong with that:
+#
+#   1. UTC midnight is 20:00 ET, i.e. four hours AFTER the close but on the
+#      same session's evening. So "today's" drift window opened the previous
+#      evening. On 2026-09-22 the close session's four readings included one
+#      from Monday 22:32 ET.
+#   2. `date.today()` is the MACHINE's date. The same code on an ET host
+#      would compare an ET date against UTC timestamp strings and bucket
+#      differently — or match nothing at all. A check decided by where it
+#      runs, which is the pattern this repo keeps finding (M-28).
+#
+# Harmless while drift is +0.0000. Not harmless afterwards: the cumulative
+# figure feeds `drift_halts`, so an evening's drift would count against the
+# wrong session — and crypto, which the plan permits, fills around the clock.
+#
+# ZoneInfo("America/New_York") rather than a fixed -05:00: it carries DST, so
+# this stays correct across the November and March transitions without anyone
+# remembering to change it.
+ET = ZoneInfo("America/New_York")
+
+
+def trading_date(when: Optional[dt.datetime] = None) -> dt.date:
+    """The exchange's calendar date for an instant (default: now)."""
+    when = when or dt.datetime.now(dt.timezone.utc)
+    if when.tzinfo is None:                 # stored naive == stored UTC
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return when.astimezone(ET).date()
+
+
+def _parse_ts(raw) -> Optional[dt.datetime]:
+    """Parse a recorded timestamp, or None. A row whose timestamp cannot be
+    read is EXCLUDED rather than silently bucketed into today — a drift
+    reading attributed to the wrong session is worse than one that is missing,
+    because the halt check believes it."""
+    try:
+        return dt.datetime.fromisoformat(str(raw))
+    except (TypeError, ValueError):
+        return None
+
+
 def drift_today(ledger: Dict, today: Optional[dt.date] = None) -> Tuple[float, int]:
     """Drift already recorded today, and how many readings produced it.
 
@@ -68,9 +115,12 @@ def drift_today(ledger: Dict, today: Optional[dt.date] = None) -> Tuple[float, i
     each correctly reported, while $1.20 of the account has gone somewhere
     nobody can explain. Reporting only the last one understates the day.
     """
-    key = (today or dt.date.today()).isoformat()
-    rows = [r for r in (ledger.get("reconcile_drift") or [])
-            if str(r.get("at", "")).startswith(key)]
+    day = today or trading_date()
+    rows = []
+    for r in (ledger.get("reconcile_drift") or []):
+        ts = _parse_ts(r.get("at"))
+        if ts is not None and trading_date(ts) == day:
+            rows.append(r)
     return sum(r.get("drift", 0.0) for r in rows), len(rows)
 
 
@@ -241,7 +291,7 @@ def prices_of(snapshot: Dict) -> Dict[str, float]:
 # subcommands
 # ----------------------------------------------------------------------
 def cmd_open(args) -> int:
-    today = dt.date.today()
+    today = trading_date()
     ledger = state.load()
     broker = get_broker(args.offline)
     ok, notes, snap = reconcile(broker, ledger)
@@ -323,7 +373,7 @@ def cmd_open(args) -> int:
 
 
 def cmd_close(args) -> int:
-    today = dt.date.today()
+    today = trading_date()
     ledger = state.load()
     broker = get_broker(args.offline)
     ok, notes, snap = reconcile(broker, ledger)
@@ -475,7 +525,7 @@ def cmd_preclose(args) -> int:
     So the cancellation moves here, into the management window, and `close`
     keeps it as a backstop for the day this session does not run.
     """
-    today = dt.date.today()
+    today = trading_date()
     ledger = state.load()
     broker = get_broker(args.offline)
     ok, notes, snap = reconcile(broker, ledger)
@@ -549,24 +599,64 @@ def cmd_week(args) -> int:
     else:
         print("expectancy      not measurable yet (no closed trades with a stop)")
 
+    # --- Phase 2 exit criteria (T-8) -----------------------------------
+    #
+    # Three states, not two. "zero guardrail breaches", "costs below gains"
+    # and "never LOCKED" all passed VACUOUSLY on an account that had never
+    # traded — `all()` over an empty list is True, and "costs below gains"
+    # carried an explicit `if trades else True`. Each is a defensible vacuous
+    # truth on its own. Together they made a flat account print three [ok]s
+    # and read THREE-FIFTHS OF THE WAY TO PHASE 2 EXIT, which is the kind of
+    # figure that gets repeated in a summary without its denominator.
+    #
+    # It is the same shape as "no protective leg was stripped — vacuously,
+    # with no position": a check that cannot fail is not evidence, and a
+    # scorecard that cannot tell "passed" from "never ran" rewards inactivity.
+    # Doing nothing is now visibly unscored rather than quietly winning.
+    #
+    # A criterion is MEASURABLE only if the thing it judges exists. Its
+    # `measurable` flag says so, and the exit gate requires every criterion to
+    # be both measurable and passed.
+    # Measurability keys on TRADES, not on sessions observed. Tying it to
+    # sessions was the first attempt and it was too weak: it still printed
+    # two [ok]s for a flat account, because "zero guardrail breaches" and
+    # "never LOCKED" pass trivially when nothing has been risked. You cannot
+    # breach a rail you never touched, and LOCKED requires a -20% drawdown,
+    # which requires losses, which requires trades. A guardrail that was
+    # never exercised was not honoured — it was untested.
+    #
+    # So every criterion except the trade COUNT is unmeasurable until the
+    # account trades, and a flat account reads 0/5. That is the whole point:
+    # inactivity should score nothing, not most of the way to exit.
+    has_trades = bool(trades)
+    has_days = has_trades
     print("\n--- Phase 2 exit criteria ---")
     crit = [
-        ("30+ closed trades", len(trades) >= 30, f"{len(trades)}/30"),
-        ("positive expectancy", bool(rs) and statistics.mean(rs) > 0,
-         f"{statistics.mean(rs):+.3f}R" if rs else "n/a"),
+        ("30+ closed trades", len(trades) >= 30, True, f"{len(trades)}/30"),
+        ("positive expectancy", bool(rs) and statistics.mean(rs) > 0, bool(rs),
+         f"{statistics.mean(rs):+.3f}R" if rs else "no closed trade with a stop"),
         ("zero guardrail breaches",
          not any(d.get("escalations") for d in ledger.get("days", [])),
-         f"{sum(len(d.get('escalations', [])) for d in ledger.get('days', []))} escalations"),
-        ("costs below gains", costs <= max(net, 0) if trades else True,
-         f"${costs:,.2f} vs ${net:,.2f}"),
+         has_days,
+         f"{sum(len(d.get('escalations', [])) for d in ledger.get('days', []))} "
+         f"escalations over {len(ledger.get('days', []))} session(s)"),
+        ("costs below gains", has_trades and costs <= max(net, 0), has_trades,
+         f"${costs:,.2f} vs ${net:,.2f}" if has_trades else "no trade has cost anything yet"),
         ("never LOCKED", all(d.get("risk_state") != "LOCKED"
-                             for d in ledger.get("days", [])), ""),
+                             for d in ledger.get("days", [])), has_days,
+         f"{len(ledger.get('days', []))} session(s) observed"),
     ]
-    for name, passed, detail in crit:
-        print(f"  [{'ok' if passed else 'XX'}] {name:26} {detail}")
+    for name, passed, measurable, detail in crit:
+        mark = "ok" if (measurable and passed) else ("XX" if measurable else "--")
+        print(f"  [{mark}] {name:26} {detail}")
+    n_pass = sum(1 for _, ps, m, _ in crit if m and ps)
+    n_unmeasurable = sum(1 for _, _, m, _ in crit if not m)
+    print(f"\n  {n_pass}/{len(crit)} met"
+          + (f", {n_unmeasurable} NOT YET MEASURABLE — an account that has not "
+             f"traded cannot pass these" if n_unmeasurable else ""))
     print("\nNote: hitting +5% in a week is NOT an exit criterion. "
           "Report the gap; never close it with leverage.")
-    return 0 if all(c[1] for c in crit) else 1
+    return 0 if all(m and ps for _, ps, m, _ in crit) else 1
 
 
 def main() -> int:

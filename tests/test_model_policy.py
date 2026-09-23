@@ -16,7 +16,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from engine.model_policy import check, model_and_source, POLICY
+from engine.model_policy import check, model_and_source, recheck, POLICY
 
 # Every blocking task now needs an authorization, and the gate refuses a
 # REUSED one — so tests that merely need a blocking task to clear must mint a
@@ -261,3 +261,63 @@ class TestOverrideMustBeAuthorised(unittest.TestCase):
                           authorization="recalcitrantmaus: a real and specific reason here",
                           auth_log=self.log)
         self.assertTrue(ok)
+
+
+class TestParkedEffortRecheck(unittest.TestCase):
+    """T-10, PARKED. Nothing calls recheck() yet — recalcitrantmaus asked for the fix to
+    be incorporated deliberately at the end of a session rather than dropped
+    into a live trading day. Tested anyway: parked is not the same as unproven,
+    and the activation should be a one-line change, not a debugging session.
+
+    The finding: CLAUDE_EFFORT tracks the TURN, not the session. Measured
+    13:39Z high and 20:07Z medium inside one session on 2026-09-22, which
+    contradicts CLAUDE.md's blanket claim that env vars are snapshotted at
+    session start. check() runs once at task start, so a blocking task that
+    clears at xhigh can do its durable write at medium with no signal.
+    """
+
+    def test_a_blocking_write_is_refused_when_effort_dropped(self):
+        with env(CLAUDE_EFFORT="medium"):
+            ok, msgs = recheck("rule-promotion", started_at_effort="xhigh")
+        self.assertFalse(ok)
+        self.assertTrue(any("EFFORT MOVED" in m for m in msgs))
+        self.assertTrue(any("does not carry" in m for m in msgs))
+
+    def test_a_blocking_write_passes_when_effort_held(self):
+        with env(CLAUDE_EFFORT="xhigh"):
+            ok, msgs = recheck("rule-promotion", started_at_effort="xhigh")
+        self.assertTrue(ok)
+
+    def test_a_move_that_stays_above_the_floor_is_reported_but_allowed(self):
+        # max -> xhigh is a move worth saying out loud; it is not a breach.
+        with env(CLAUDE_EFFORT="xhigh"):
+            ok, msgs = recheck("rule-promotion", started_at_effort="max")
+        self.assertTrue(ok)
+        self.assertTrue(any("EFFORT MOVED" in m for m in msgs))
+
+    def test_a_declared_only_effort_refuses_the_write(self):
+        # A declaration cannot move, so it cannot detect the thing this
+        # exists to detect. Fail closed rather than assume it held.
+        with mock.patch.dict(os.environ, {"TRADING_AGENT_EFFORT": "xhigh"},
+                             clear=True):
+            ok, msgs = recheck("rule-promotion", started_at_effort="xhigh")
+        self.assertFalse(ok)
+        self.assertTrue(any("cannot re-verify" in m for m in msgs))
+
+    def test_execution_never_stalls_on_this(self):
+        # Non-blocking tasks always pass. Execution must never wait on a gate.
+        with mock.patch.dict(os.environ, {}, clear=True):
+            ok, _ = recheck("execution", started_at_effort="xhigh")
+        self.assertTrue(ok)
+
+    def test_it_is_still_parked(self):
+        # Fails the moment someone wires it in, which is the reminder to
+        # delete the banner, add call sites and test them.
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        hits = subprocess.run(
+            ["grep", "-rn", "recheck(", "--include=*.py", "engine", "tools"],
+            cwd=root, capture_output=True, text=True).stdout.splitlines()
+        live = [h for h in hits if "def recheck(" not in h and not
+                h.split(":", 2)[2].lstrip().startswith("#")]
+        self.assertEqual(live, [], f"recheck() is wired in now: {live}")

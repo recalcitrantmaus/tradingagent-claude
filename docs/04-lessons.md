@@ -1915,3 +1915,115 @@ file keeps recording. Sim suite green, 0.0% ruin.
 
 **Status:** active. T-2 now fully answered: no sector rule (not implementable
 on this universe), an aggregate cap, and a size taper.
+
+---
+
+## 2026-09-22/23 — T-9, T-8 and T-10: three checks that could not fail
+
+Authorized by recalcitrantmaus. All three came out of the Tuesday close session, and they
+are one family: a check whose input cannot vary with the thing it claims to
+measure, so it reports success on nothing.
+
+### T-9 — "today" was the container's date, not the exchange's
+
+`drift_today()` keyed on `dt.date.today()` and matched UTC timestamps by
+string prefix. Two faults:
+
+- **UTC midnight is 20:00 ET** — four hours after the close, on the same
+  session's evening. So the drift window opened the previous evening.
+  Tuesday's four readings included one from Monday 22:32 ET.
+- **`date.today()` is the HOST's date.** The same code on an ET machine would
+  compare an ET date against UTC timestamp strings and bucket differently, or
+  match nothing at all. A check decided by where it runs.
+
+Harmless at +0.0000. Not harmless afterwards: the cumulative figure feeds
+`drift_halts`, so an evening's drift would count against the wrong session —
+and crypto, which the plan permits, fills around the clock.
+
+Now one named function, `trading_date()`, on `ZoneInfo("America/New_York")`
+rather than a fixed −05:00, so DST is carried rather than remembered. **Every**
+"today" in the module moved to it — `cmd_open`, `cmd_close`, `cmd_preclose`,
+the week key and the day-start key — because a drift window bucketed on ET
+while the halt baselines bucketed on UTC would be worse than either alone.
+
+Verified live: UTC date 2026-09-23, trading date 2026-09-22, and the Monday
+evening reading moved back where it belongs — Tuesday 3 readings, Monday 5,
+where the old keying reported four for Tuesday.
+
+**Two things went wrong in the fix itself, and both are the same bug as the
+one being fixed.** The tests mocked `dt.date`, but `trading_date()` reads the
+clock through `datetime.now()`, so the mock stopped reaching it — the seam had
+moved. And the replacement helper pinned the *conversion* as well as the
+clock, which relabelled Friday's timestamp as Monday and pulled a stale
+reading into today's total. Mis-bucketing, reintroduced inside the helper
+written to prevent mis-bucketing. The helper now pins only "now".
+
+The suite is green under UTC, America/New_York, Asia/Tokyo and
+Australia/Sydney, and one test exists purely to assert that the answer does
+not depend on when the suite runs.
+
+### T-8 — a flat account read three-fifths of the way to Phase 2 exit
+
+"zero guardrail breaches", "costs below gains" and "never LOCKED" all passed
+**vacuously**: `all()` over an empty list is True, and costs carried an
+explicit `if trades else True`. Each is a defensible vacuous truth alone.
+Together they printed three `[ok]`s for an account that had never traded.
+
+Same shape as Monday's "no protective leg was stripped — vacuously, with no
+position", now in a published scorecard rather than a session note. **A check
+that cannot fail is not evidence, and a scorecard that cannot tell "passed"
+from "never ran" rewards doing nothing.**
+
+Three states now: `[ok]`, `[XX]`, and `[--] not yet measurable`, with the exit
+gate requiring every criterion to be measurable AND passed.
+
+The first attempt keyed measurability on *sessions observed* and was too
+weak — it still printed two `[ok]`s, because you cannot breach a rail you
+never touched and LOCKED needs a −20% drawdown, which needs losses, which
+needs trades. **A guardrail that was never exercised was not honoured; it was
+untested.** So measurability keys on trades, and everything except the trade
+count is unmeasurable until the account trades:
+
+```
+  [XX] 30+ closed trades          0/30
+  [--] positive expectancy        no closed trade with a stop
+  [--] zero guardrail breaches    0 escalations over 7 session(s)
+  [--] costs below gains          no trade has cost anything yet
+  [--] never LOCKED               7 session(s) observed
+
+  0/5 met, 4 NOT YET MEASURABLE
+```
+
+Three-fifths became zero. Inactivity now scores nothing.
+
+### T-10 — a per-turn value, checked once. PARKED, not wired in.
+
+`CLAUDE_EFFORT` moved **high (13:39Z) → medium (20:07Z) inside one session**.
+CLAUDE.md's blanket claim that environment variables are snapshotted at
+session start is not true of it: it tracks the turn. For M-17 that is good
+news, since the value chosen as the measurement really does measure.
+
+The problem is the gate. `check()` runs once at task start and nothing
+re-reads it, so a blocking task that clears at `xhigh` can perform its durable
+write at `medium` with no signal. On 2026-09-22 `session-close` ran two
+notches below its floor and only the journal recorded it.
+
+**This is the third member of a family found inside two days.** Attendance is
+a property of the turn (M-22/M-26). Effort is a property of the turn. Both
+were being read as though they described a session. The general lesson is
+sharper than any of the three fixes: *ask not only what a value measures, but
+over what interval it is true.*
+
+`recheck()` is written and tested and **nothing calls it** — parked at recalcitrantmaus's
+request, to be incorporated deliberately at the end of a session rather than
+dropped into a live trading day. It re-reads effort at the durable write, not
+at task start, because that is where a downgrade costs something. It does not
+re-verify the model: passing `--model` is a human's act, already recorded and
+single-use, and the model does not move under a session the way effort does.
+One test fails the moment anyone wires it in, as the reminder to delete the
+banner and add the call sites.
+
+**Verified:** 206 tests (17 new). Sim suite green, 0.0% ruin, medians
+unchanged. Suite green under four timezones.
+
+**Status:** T-9 and T-8 active. T-10 parked.

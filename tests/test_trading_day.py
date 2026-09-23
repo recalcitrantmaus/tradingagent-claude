@@ -236,10 +236,28 @@ class TestCashAnchor(unittest.TestCase):
 # `trading_day open` runs at every management firing — midday and pre-close as
 # well as the open — and it used to re-anchor day_start_equity every time.
 # ---------------------------------------------------------------------------
+import contextlib
+import io
 import argparse
 
 
-def _run_open(ledger, equity, today, monkey, cash=300.0):
+
+def _on(day=dt.date(2026, 9, 21)):
+    """Pin the TRADING day (T-9).
+
+    The seam moved when the trading day stopped being `dt.date.today()` — the
+    host's local date — and became an ET calendar date derived from the
+    instant. Patching `dt.date` no longer reaches it, which is the point:
+    "which session is this" is now one named decision instead of a property
+    of the machine the container happens to run on.
+    """
+    real = td.trading_date
+    return mock.patch.object(
+        td, "trading_date",
+        lambda when=None: day if when is None else real(when))
+
+
+def _run_open(ledger, equity, today, monkey, cash=300.0, day=None):
     """Invoke cmd_open against a fake broker, returning the mutated ledger.
 
     Cash is held FIXED while equity moves, because that is what a losing day
@@ -254,7 +272,8 @@ def _run_open(ledger, equity, today, monkey, cash=300.0):
          mock.patch.object(td.state, "read_fills", lambda: []), \
          mock.patch.object(td, "get_broker",
                            lambda offline: FakeBroker(equity=equity, cash=cash)), \
-         mock.patch.object(td.dt, "date", monkey):
+         mock.patch.object(td.dt, "date", monkey), \
+         _on(day or monkey.today()):
         rc = td.cmd_open(argparse.Namespace(offline=False))
     assert rc == 0, f"cmd_open returned {rc}; it never reached the anchors"
     return ledger
@@ -267,6 +286,7 @@ class _FixedDate(dt.date):
     @classmethod
     def today(cls):
         return cls._today
+
 
 
 class TestHaltBaselinesAnchorToTheCalendar(unittest.TestCase):
@@ -353,7 +373,7 @@ class TestCumulativeDrift(unittest.TestCase):
         led = self.led(self.hist(-0.40),
                        self.hist(-0.40, at="2026-09-21T19:30:00+00:00"),
                        self.hist(-9.00, at="2026-09-18T20:00:00+00:00"))
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             _, notes, snap = reconcile(FakeBroker(cash=299.60), led)
         # -0.40 now, -0.80 already today; Friday's -9.00 is not today's problem
         self.assertAlmostEqual(snap["cash_drift"], -0.40)
@@ -371,7 +391,7 @@ class TestCumulativeDrift(unittest.TestCase):
         """
         led = self.led(self.hist(-0.60),
                        self.hist(-0.60, at="2026-09-21T19:30:00+00:00"))
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             ok, notes, snap = reconcile(FakeBroker(cash=299.40), led)
         self.assertAlmostEqual(snap["cash_drift"], -0.60)      # each is small
         self.assertAlmostEqual(snap["cash_drift_today"], -1.80)  # together, not
@@ -384,7 +404,7 @@ class TestCumulativeDrift(unittest.TestCase):
         # reported but not halting. Detection is tight, response is tiered.
         led = self.led(self.hist(-0.40),
                        self.hist(-0.40, at="2026-09-21T19:30:00+00:00"))
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             ok, notes, snap = reconcile(FakeBroker(cash=299.60), led)
         self.assertTrue(ok)
         self.assertAlmostEqual(snap["cash_drift_today"], -1.20)
@@ -398,7 +418,7 @@ class TestCumulativeDrift(unittest.TestCase):
 
     def test_a_single_clean_reading_after_a_clean_day_stays_clean(self):
         led = self.led(self.hist(0.0))
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             ok, notes, snap = reconcile(FakeBroker(cash=300.0), led)
         self.assertTrue(ok)
         self.assertAlmostEqual(snap["cash_drift_today"], 0.0)
@@ -409,14 +429,14 @@ class TestCumulativeDrift(unittest.TestCase):
         # but each reading was reported when it happened and both sit in the
         # history. The net is what the halt acts on; the notes carry the rest.
         led = self.led(self.hist(+1.00))
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             ok, notes, snap = reconcile(FakeBroker(cash=299.00), led)
         self.assertAlmostEqual(snap["cash_drift"], -1.00)
         self.assertAlmostEqual(snap["cash_drift_today"], 0.0)
         self.assertTrue(any("CASH DRIFT -1.0000" in n for n in notes))
 
     def test_the_first_reading_of_the_day_reports_itself_as_the_total(self):
-        with mock.patch.object(td.dt, "date", _FixedDate), _fills():
+        with _on(), mock.patch.object(td.dt, "date", _FixedDate), _fills():
             _, notes, snap = reconcile(FakeBroker(cash=299.99), self.led())
         self.assertAlmostEqual(snap["cash_drift_today"], -0.01)
         self.assertEqual(snap["drift_readings_today"], 1)
@@ -479,3 +499,136 @@ class TestPrecloseClosesTheEntryBookBeforeTheBell(unittest.TestCase):
                 raise RuntimeError("broker unreachable")
 
         self.assertEqual(self.run_preclose(B(), {"positions": {}, "cash": 300.0}), 1)
+
+
+class TestTheTradingDayIsAnExchangeDate(unittest.TestCase):
+    """T-9. "Today" used to be `dt.date.today()` — the container's local date,
+    which is UTC — compared against UTC timestamps by string prefix.
+
+    UTC midnight is 20:00 ET, four hours after the close but on the same
+    session's evening, so the drift window opened the previous evening. The
+    2026-09-22 close session's four readings included one from Monday 22:32
+    ET, and the cumulative figure feeds `drift_halts` — so an evening's drift
+    would have counted against the wrong session. Crypto, which the plan
+    permits, fills around the clock.
+
+    It was also decided by the HOST: the same code on an ET machine compares
+    an ET date against UTC timestamp strings and buckets differently, or
+    matches nothing. A check decided by where it runs (M-28's shape).
+    """
+
+    def test_an_evening_timestamp_belongs_to_the_session_that_just_ended(self):
+        # 2026-09-22T01:00:00Z is 2026-09-21 21:00 ET — Monday evening, after
+        # Monday's close. It is MONDAY's trading day, not Tuesday's.
+        ts = dt.datetime(2026, 9, 22, 1, 0, tzinfo=dt.timezone.utc)
+        self.assertEqual(td.trading_date(ts), dt.date(2026, 9, 21))
+        self.assertNotEqual(td.trading_date(ts), ts.date())
+
+    def test_a_session_timestamp_is_its_own_date(self):
+        # 14:30Z = 10:30 ET, mid-session.
+        ts = dt.datetime(2026, 9, 22, 14, 30, tzinfo=dt.timezone.utc)
+        self.assertEqual(td.trading_date(ts), dt.date(2026, 9, 22))
+
+    def test_dst_is_carried_not_hardcoded(self):
+        # A fixed -05:00 would put this on the wrong day in summer. 2026-07-01
+        # 23:30Z is 19:30 EDT (-04:00), still 07-01; the same instant at a
+        # hardcoded -05:00 would read 18:30 and also 07-01, so use the case
+        # that actually separates them: 03:30Z in July is 23:30 EDT of the
+        # PREVIOUS day, where a -05:00 offset would say 22:30 previous day —
+        # same date — but in January 03:30Z is 22:30 EST, also previous day.
+        # The real discriminator is the transition weekend itself.
+        summer = dt.datetime(2026, 7, 1, 3, 30, tzinfo=dt.timezone.utc)
+        winter = dt.datetime(2026, 1, 7, 3, 30, tzinfo=dt.timezone.utc)
+        self.assertEqual(td.trading_date(summer), dt.date(2026, 6, 30))
+        self.assertEqual(td.trading_date(winter), dt.date(2026, 1, 6))
+        # 2026-03-08 is the US DST transition. 06:30Z is 01:30 EST on the 8th.
+        spring = dt.datetime(2026, 3, 8, 6, 30, tzinfo=dt.timezone.utc)
+        self.assertEqual(td.trading_date(spring), dt.date(2026, 3, 8))
+
+    def test_a_naive_timestamp_is_read_as_utc_not_as_local(self):
+        naive = dt.datetime(2026, 9, 22, 1, 0)
+        self.assertEqual(td.trading_date(naive), dt.date(2026, 9, 21))
+
+    def test_an_unparseable_timestamp_is_excluded_not_counted_as_today(self):
+        # A reading attributed to the wrong session is worse than a missing
+        # one, because the halt check believes it.
+        led = {"reconcile_drift": [{"at": "not a timestamp", "drift": -99.0},
+                                   {"at": None, "drift": -99.0}]}
+        total, n = td.drift_today(led, dt.date(2026, 9, 22))
+        self.assertEqual((total, n), (0.0, 0))
+
+    def test_the_evening_reading_does_not_join_the_next_days_total(self):
+        # The concrete 2026-09-22 case, pinned.
+        led = {"reconcile_drift": [
+            {"at": "2026-09-22T02:32:52+00:00", "drift": -5.00},   # Mon 22:32 ET
+            {"at": "2026-09-22T14:00:00+00:00", "drift": -0.40},   # Tue 10:00 ET
+        ]}
+        tue, n_tue = td.drift_today(led, dt.date(2026, 9, 22))
+        mon, n_mon = td.drift_today(led, dt.date(2026, 9, 21))
+        self.assertAlmostEqual(tue, -0.40)
+        self.assertEqual(n_tue, 1)
+        self.assertAlmostEqual(mon, -5.00)
+        self.assertEqual(n_mon, 1)
+
+    def test_the_answer_does_not_depend_on_when_the_suite_runs(self):
+        # Yesterday's regression was a suite the environment decided. These
+        # are absolute instants, so the mapping is fixed forever.
+        for ts, expect in ((dt.datetime(2026, 9, 22, 0, 1, tzinfo=dt.timezone.utc),
+                            dt.date(2026, 9, 21)),
+                           (dt.datetime(2026, 9, 22, 23, 59, tzinfo=dt.timezone.utc),
+                            dt.date(2026, 9, 22))):
+            self.assertEqual(td.trading_date(ts), expect)
+
+
+class TestExitCriteriaDoNotRewardInactivity(unittest.TestCase):
+    """T-8. Three of five criteria passed VACUOUSLY on an account that had
+    never traded — `all()` over an empty list is True, and "costs below gains"
+    carried an explicit `if trades else True`. A flat account printed three
+    [ok]s and read three-fifths of the way to Phase 2 exit.
+
+    Same shape as "no protective leg was stripped — vacuously, with no
+    position": a check that cannot fail is not evidence. A scorecard that
+    cannot tell "passed" from "never ran" rewards doing nothing.
+    """
+
+    def _week(self, ledger, fills):
+        buf = io.StringIO()
+        with mock.patch.object(td.state, "load", lambda: ledger), \
+             mock.patch.object(td.state, "read_fills", lambda: fills), \
+             contextlib.redirect_stdout(buf):
+            rc = td.cmd_week(argparse.Namespace(offline=True))
+        return rc, buf.getvalue()
+
+    def test_a_flat_account_scores_zero_not_three_fifths(self):
+        led = {"days": [{"equity": 300.0, "risk_state": "NORMAL",
+                         "escalations": []} for _ in range(7)],
+               "week_start_equity": 300.0}
+        rc, out = self._week(led, [])
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.count("[ok]"), 0,
+                         f"a flat account passed a criterion:\n{out}")
+        self.assertIn("0/5 met", out)
+        self.assertIn("NOT YET MEASURABLE", out)
+
+    def test_an_untested_guardrail_is_unmeasurable_not_passed(self):
+        # You cannot breach a rail you never touched, and LOCKED needs a -20%
+        # drawdown, which needs losses, which needs trades.
+        led = {"days": [{"equity": 300.0, "risk_state": "NORMAL",
+                         "escalations": []}], "week_start_equity": 300.0}
+        _, out = self._week(led, [])
+        for line in out.splitlines():
+            if "zero guardrail breaches" in line or "never LOCKED" in line:
+                self.assertIn("[--]", line)
+
+    def test_the_trade_count_is_always_measurable_and_can_fail(self):
+        led = {"days": [], "week_start_equity": 300.0}
+        _, out = self._week(led, [])
+        self.assertTrue(any("[XX]" in l and "30+ closed trades" in l
+                            for l in out.splitlines()), out)
+
+    def test_exit_still_requires_every_criterion_to_be_measurable_AND_passed(self):
+        # The gate must not be satisfiable by an unmeasurable criterion.
+        led = {"days": [{"equity": 300.0, "risk_state": "NORMAL",
+                         "escalations": []}], "week_start_equity": 300.0}
+        rc, _ = self._week(led, [])
+        self.assertEqual(rc, 1)

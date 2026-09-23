@@ -386,3 +386,83 @@ def check(task: str, model: Optional[str] = None,
         return False, msgs
     msgs.append("non-blocking: proceed, and record the downgrade in the journal.")
     return True, msgs
+
+
+# ======================================================================
+# T-10 — PARKED, NOT WIRED IN. Activate at the end of a session, deliberately.
+# ======================================================================
+#
+# Nothing calls `recheck()` yet. That is on purpose: recalcitrantmaus asked for the fix
+# to be parked and incorporated at the end of a session rather than dropped
+# into a live trading day, and a gate that starts refusing mid-session
+# without anyone expecting it is its own incident.
+#
+# THE FINDING. CLAUDE.md says environment variables are snapshotted at session
+# start. That is NOT true of `CLAUDE_EFFORT`. Measured within one session on
+# 2026-09-22:
+#
+#     13:39Z  CLAUDE_EFFORT=high
+#     20:07Z  CLAUDE_EFFORT=medium
+#
+# It tracks the TURN. For M-17 that is good news — the value chosen as the
+# measurement really does measure. The problem is what it implies for the
+# gate: `check()` runs ONCE, at the start of a task, and nothing re-reads it.
+# A blocking task that clears at xhigh can perform its durable write at medium
+# with no signal at all. On 2026-09-22 `session-close` ran two notches below
+# its floor and only the journal recorded it.
+#
+# A point-in-time check on a per-turn value certifies the turn it was taken
+# in, not the task. This is the third member of a family found in two days:
+# attendance is a property of the turn (M-22/M-26), effort is a property of
+# the turn, and both were being read as though they described a session.
+#
+# WHAT THIS DOES NOT DO. It does not re-verify the model. Passing `--model` is
+# a human's act and the authorization is already recorded and single-use; the
+# model does not silently change under a session the way effort does. Only the
+# value that actually moves is re-read.
+#
+# TO ACTIVATE, at the end of a session, not during one:
+#   1. Call `recheck(task, effort_floor_of(task))` immediately before each
+#      DURABLE WRITE in a blocking task — the `engine/config.py` edit, the
+#      SKILL.md write, the docs/04-lessons.md entry — not at task start.
+#      That is where a downgrade would actually cost something.
+#   2. On a False, abandon the write and say so. Do not finish "just this
+#      one" — a rule promoted at medium is exactly the cost M-17 priced.
+#   3. Delete this banner and add the call sites to the tests.
+
+
+def recheck(task: str, started_at_effort: Optional[str] = None
+            ) -> tuple[bool, List[str]]:
+    """Re-read the effort floor at the moment of a durable write.
+
+    Returns (ok, messages). ok=False means: do not perform this write.
+    Non-blocking tasks always pass — execution must never stall on this.
+    """
+    p = POLICY.get(task)
+    if p is None or not p.blocking:
+        return True, []
+
+    effort, src = effort_and_source()
+    msgs: List[str] = []
+    if src != "harness":
+        # Without the harness value there is nothing to re-check against, and
+        # a declaration cannot move, so it cannot detect the thing this exists
+        # to detect. Fail closed on a blocking write.
+        return False, [
+            f"'{task}': cannot re-verify effort at the write — "
+            f"CLAUDE_EFFORT is unavailable (source: {src}). "
+            "Refusing the durable write rather than assuming it held."]
+
+    if started_at_effort and effort != started_at_effort:
+        msgs.append(f"EFFORT MOVED during '{task}': started {started_at_effort!r}, "
+                    f"now {effort!r}. CLAUDE_EFFORT tracks the turn, not the "
+                    f"session.")
+
+    if effort in EFFORTS and EFFORTS.index(effort) < EFFORTS.index(p.min_effort):
+        msgs.append(f"'{task}' requires effort >= {p.min_effort}; this turn is "
+                    f"running {effort}. The gate cleared earlier at a higher "
+                    f"effort — that clearance does not carry.")
+        return False, msgs
+
+    msgs.append(f"'{task}' still at {effort} (>= {p.min_effort}) at the write")
+    return True, msgs
