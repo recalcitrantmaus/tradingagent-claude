@@ -2162,3 +2162,93 @@ The standing check that follows from it: for each control in `engine/config.py`,
 name the caller that supplies its input, and write one test that drives the
 caller. A control with no such test should be assumed inert until shown
 otherwise.
+
+---
+
+## 2026-09-23 — the first fill, and a stop that never went live
+
+Phase 2's first fill, and it produced three findings in twenty-four minutes.
+Authorized by recalcitrantmaus.
+
+### What happened
+
+DT filled 1 share @ 58.47 at 14:04:57Z. Its bracket legs then read:
+
+```
+sell limit 63.81   status=new    submitted 14:04:57   updated 14:04:57
+sell stop  55.80   status=held   submitted 13:59:22   updated 13:59:22
+```
+
+The take-profit was created at the instant of the fill and went live. **The
+stop was never touched** — its `updated_at` still equalled its `submitted_at`
+from before the parent filled. `positions_without_stops()` returned `[]`
+anyway, because `held` is in `ACTIVE_STATUSES`.
+
+The position was flattened at 58.10, realising **−$0.37 = −0.139R**.
+
+### What the documentation actually says
+
+Alpaca's own page on bracket orders:
+
+> "The second and third orders won't be active until the first order is
+> completely filled."
+> — https://docs.alpaca.markets/us/docs/orders-at-alpaca
+
+So after a *complete* fill, both legs are supposed to be active. Ours was not.
+
+And a second thing, which matters more: **`held` is not in Alpaca's documented
+order-status list at all.** The documented values are `new`,
+`partially_filled`, `filled`, `done_for_day`, `canceled`, `expired`,
+`replaced`, `pending_cancel`, `pending_replace`, `accepted`, `pending_new`,
+`accepted_for_bidding`, `stopped`, `rejected`, `suspended`, `calculated`. The
+API returns a state its own reference does not define, and this project built a
+protective control on top of it.
+
+Community reports describe the same symptom, including exit legs stuck `held`
+after a parent fills and at least one report of a stop not converting when
+price crossed it. **I could not read those threads** —
+`forum.alpaca.markets` is blocked by this environment's egress policy, only
+`docs.alpaca.markets` was opened — so they are listed as leads, not evidence:
+
+- https://forum.alpaca.markets/t/half-of-bracket-order-held/2727
+- https://forum.alpaca.markets/t/bracket-order-exit-trades-not-executing/3697
+- https://forum.alpaca.markets/t/issues-with-bracket-orders-being-held/5023
+- https://forum.alpaca.markets/t/some-bracket-orders-don-t-have-stop-loss/5797
+
+### What was changed, and what deliberately was not
+
+**Not** changed: nobody established that a `held` stop fails to fire. Asserting
+it does would have been as unfounded as the assumption it replaced.
+
+What IS established is that this is not the documented behaviour, on a status
+the vendor does not document, so it **cannot be relied upon**. That is enough
+to act on without resolving the mechanism:
+
+- `positions_with_unconfirmed_stops()` returns `{symbol: status}` for a
+  position whose stop is not in a confirmed-working state. It names the
+  ambiguity instead of resolving it by guess.
+- `trading_day preclose` now **refuses** on an unconfirmed stop, exactly as it
+  refuses on a missing one. Intraday it is a flag; overnight it is a refusal,
+  because a gap does not wait for us to find out.
+- `positions_without_stops()` is unchanged and keeps accepting `held`. The two
+  answer different questions — "was a stop ever placed" and "did it go live" —
+  and a bracket leg legitimately sits `held` before its parent fills, so
+  folding them together would report every pending bracket as naked.
+
+### The counterfactual, recorded because a small number is still a number
+
+DT never traded below **57.39** on the consolidated tape (IEX said 57.52 — M-30
+in miniature, a subset overstating a low). The stop at 55.80 was never within
+$1.59. Holding would have been about −0.075R unrealised against the −0.139R
+realised, so **flattening cost roughly 0.064R and bought certainty about
+protection.** The right trade, and the honest footnote is that today produced
+no evidence either way about whether that stop would have fired — price never
+went near it.
+
+**Verified:** 231 tests (16 new). Sim unchanged, 0.0% ruin. Live `preclose`
+against the flat book exits 0 and now prints "every position has a live,
+CONFIRMED stop".
+
+**Status:** active. The mechanism question stays open and is worth resolving if
+`forum.alpaca.markets` is ever reachable, or by watching the next filled
+bracket's legs directly.

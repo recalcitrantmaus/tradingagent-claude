@@ -763,3 +763,86 @@ class TestFillsAreRecoveredFromTheBroker(unittest.TestCase):
             dict(self.SELL, fees=0.0, multiplier=1, ts=self.SELL["at"])])
         self.assertEqual(n, 2)
         self.assertAlmostEqual(both, 299.62, places=2)   # the broker's figure
+
+
+class TestAnUnconfirmedStopBlocksTheOvernightCarry(unittest.TestCase):
+    """Established from Alpaca's own documentation, not from our reading of a
+    status string:
+
+        "The second and third orders won't be active until the first order is
+         completely filled."
+        https://docs.alpaca.markets/us/docs/orders-at-alpaca
+
+    So after a COMPLETE fill the exit legs are supposed to be active. On
+    2026-09-23 DT's take-profit went `new` at the instant the parent filled
+    and the stop did not — it stayed `held`, with updated_at still equal to
+    its pre-fill submitted_at. And `held` does not appear in Alpaca's
+    documented status list at all, so the API returns a state its own
+    reference does not define.
+
+    That does not prove such a stop fails to fire. It proves it is not the
+    documented behaviour and cannot be relied on. Intraday that is a flag;
+    overnight, where a gap does not wait for us to find out, it is a refusal.
+    """
+
+    class Broker:
+        def __init__(self, unconfirmed):
+            self._u = unconfirmed
+        def account(self):
+            return {"equity": 299.62, "cash": 241.52, "buying_power": 241.52,
+                    "daytrade_count": 0, "pattern_day_trader": False,
+                    "trading_blocked": False, "raw": {}}
+        def positions(self):
+            return [{"symbol": "DT", "qty": 1.0, "avg_price": 58.47,
+                     "market_value": 58.25, "unrealized_pl": -0.22}]
+        def positions_without_stops(self):
+            return []                       # a stop EXISTS — that is the point
+        def positions_with_unconfirmed_stops(self):
+            return dict(self._u)
+        def cancel_unfilled_entries(self):
+            return []
+        def resting_stops(self):
+            return {"DT": 55.80}
+        def fills_since(self, after):
+            return []
+
+    def _preclose(self, broker, ledger):
+        buf = io.StringIO()
+        with mock.patch.object(td.state, "load", lambda: ledger), \
+             mock.patch.object(td.state, "save", lambda l: None), \
+             mock.patch.object(td.state, "read_fills", lambda: []), \
+             mock.patch.object(td, "get_broker", lambda offline: broker), \
+             contextlib.redirect_stdout(buf):
+            rc = td.cmd_preclose(argparse.Namespace(offline=False))
+        return rc, buf.getvalue()
+
+    # The ledger must already KNOW about DT, or reconciliation fails on
+    # "at broker but NOT in ledger" and preclose returns 1 before it ever
+    # reaches the stop check — which would make the first test below pass for
+    # entirely the wrong reason. It did, on the first draft, and only the
+    # assertion on the MESSAGE caught it.
+    LEDGER = {"positions": {"DT": {"qty": 1.0, "avg_price": 58.47,
+                                   "stop": 55.80}},
+              "cash": 241.52, "broker_cash": 241.52,
+              "broker_cash_at": "2026-09-23T14:00:00+00:00"}
+
+    def test_a_held_stop_fails_preclose(self):
+        led = dict(self.LEDGER)
+        rc, out = self._preclose(self.Broker({"DT": "held"}), led)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("UNCONFIRMED STOP", out)
+        self.assertIn("Do not carry", out)
+
+    def test_a_confirmed_stop_passes(self):
+        led = dict(self.LEDGER)
+        rc, out = self._preclose(self.Broker({}), led)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("CONFIRMED stop", out)
+
+    def test_the_missing_stop_check_is_unchanged_and_separate(self):
+        # positions_without_stops still answers "is there a stop AT ALL".
+        # Both checks must exist: one catches a stop that was never placed,
+        # the other a stop that was placed and never went live.
+        b = self.Broker({"DT": "held"})
+        self.assertEqual(b.positions_without_stops(), [])
+        self.assertEqual(b.positions_with_unconfirmed_stops(), {"DT": "held"})

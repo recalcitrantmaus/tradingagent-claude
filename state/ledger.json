@@ -1,6 +1,6 @@
 {
   "broker_cash": 299.62,
-  "broker_cash_at": "2026-09-23T14:46:20.594801+00:00",
+  "broker_cash_at": "2026-09-23T15:22:55.525479+00:00",
   "broker_equity": 299.62,
   "cancelled_entries": [
     {
@@ -166,18 +166,16 @@
       "at": "2026-09-23T14:46:20.594801+00:00",
       "broker_cash": 299.62,
       "drift": 0.0
+    },
+    {
+      "at": "2026-09-23T15:22:55.525479+00:00",
+      "broker_cash": 299.62,
+      "drift": 0.0
     }
   ],
   "risk_state": "NORMAL",
   "starting_equity": 300.0,
   "week_start_equity": 299.99,
   "week_start_key": "2026-W39",
-  "working_orders": [
-    {
-      "order_id": "99ebcbc4-36b2-4a63-b491-1265ea81b315",
-      "status": "new",
-      "symbol": "DT",
-      "unfilled_qty": 1.0
-    }
-  ]
+  "working_orders": []
 }
