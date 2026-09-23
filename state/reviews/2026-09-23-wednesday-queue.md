@@ -126,3 +126,132 @@ parent fill, TIF verbatim) and M-16 (`trading_day preclose` live) remain
 untested. Today got one step closer than the previous two days — a real
 bracket is resting at the broker with both legs `held`, which is B-16's
 precondition — and no closer to a fill.
+
+---
+
+# Pre-close addendum — 15:30 ET
+
+## Verified today (both fixes re-evaluated under real conditions)
+
+### B-15 fill recovery — HOLDS on a second run.
+`tools.trading_day preclose` run again at 19:31Z. `state/fills.jsonl` is
+**byte-identical** (md5 `697b2842456595384a656b043ee2b727` before and after),
+still exactly one buy and one sell with `dry_run: false`, activity_ids unique.
+Dedupe on `activity_id` works. `tools.review` shows 1 closed trade at
+**-0.139R**. Cash drift **$+0.0000** across 5 reconciliations — no $58.47 drift
+reappeared. `trading_day preclose` exit code **0**; cancelled **nothing**
+("none resting"), correct on a flat book. M-16 has now run live.
+
+### Stop fix — returns `{}` on a flat book, which proves almost nothing.
+`positions_with_unconfirmed_stops()` -> `{}`, `positions_without_stops()` ->
+`[]`, `resting_stops()` -> `{}`. **Said plainly: today produced no live
+evidence either way.** The book was flat from 14:28Z onward, so the control was
+never asked the question it exists to answer. A green result from a control
+with no input is the vacuous-pass family this repo has now logged four times.
+
+---
+
+## T-17 — the `held` stop leg was probably live, and flattening cost 0.371R. HIGH. OPEN.
+
+**The cost is larger than it looked at 15:00.** The routine recorded DT at
+58.27 and put the cost of the flatten at ~0.064R. DT closed at **59.09** (SIP
+consolidated; session 57.54 / 59.31 / 57.39 / 59.09):
+
+```
+realised (flattened at 58.10)    -0.139R
+counterfactual (held to 59.09)   +0.232R
+-----------------------------------------
+cost of the flatten               0.371R
+```
+
+Nearly 3x the loss actually taken, and it converted a winning trade into a
+losing one. The stop at 55.80 was **never within $1.59** of the session low.
+
+**Alpaca's documentation appears to explain the `held` reading.** From
+https://docs.alpaca.markets/us/docs/orders-at-alpaca (fetched today, HTTP 200
+— the host is **NOT** blocked by this environment's egress policy, contrary to
+the note in the routine; `alpaca.markets/docs/...` is 403 at the proxy, but
+`docs.alpaca.markets` resolves and serves):
+
+> "The first order is used to enter a new long or short position, and **once
+> it is completely filled, two conditional exit orders are activated.**"
+
+> "Note that when you retrieve the list of orders with the nested parameter
+> true, **the take-profit order shows up as the parent order while the
+> stop-loss order appears as a child order.**"
+
+That is precisely the shape observed: at the parent's fill the take-profit was
+(re)submitted at 14:04:57 and went `new`, while the stop leg kept its original
+13:59:22 submission timestamp and reported `held`. Read together, `held` looks
+like **the documented representation of a live OCO child**, not an inert order.
+
+**NOT asserted as settled, and deliberately left open.** No page in Alpaca's
+reachable documentation defines the `held` status string — searched
+`orders-at-alpaca`, `working-with-orders`, and the `alpaca-py` `OrderStatus`
+enum, which lists `HELD = "held"` with no semantics. Today's data cannot close
+it: both legs are now `canceled`, so their live status can no longer be read,
+and the stop was never near enough to prove itself by triggering.
+
+**Nothing was changed.** The control is wrong in the *safe* direction, and
+loosening a protection is exactly the change an unattended session must not
+make on one observation. `model_check rule-promotion` exited **1** — refused
+for want of an authorization, and none was written.
+
+**How to settle it for ~$0:** the next time a bracket parent fills, query the
+stop leg by its own order id and record `status`, `order_class`, and whether it
+appears as an independent row in `GET /v2/orders`. Two or three observations
+decide it deterministically, riding on trades taken for their own reasons.
+
+**Why this is urgent despite being safe-direction:** if the stop *is* live,
+this control will flatten **every** bracket position this account ever opens,
+at a cost of roughly 0.37R each on today's evidence. That is not a guardrail;
+it is a systematic bleed with a guardrail's error message — and a -0.139R
+expectancy built from trades exited that way measures our plumbing, not our
+edge.
+
+## T-18 — "costs below gains" passes vacuously on a losing account. LOW. OPEN.
+
+`trading_day week` prints:
+
+```
+  [ok] costs below gains          $0.00 vs $-0.37
+```
+
+$0.00 is not below -$0.37. The test is `costs <= max(net, 0)`, so with net
+negative it reduces to `costs <= 0`, which zero-commission paper trading always
+satisfies. The criterion is defensible as written — no costs means costs are
+eating nothing — but the **displayed line asserts a false comparison** and
+reads green on a losing week.
+
+This is the T-8 family again (a criterion that passes vacuously and gets
+repeated in a summary without its denominator), surviving in a criterion T-8
+itself rewrote. Suggest it report a third state — *not measurable while net
+<= 0* — rather than `[ok]`. Not changed here: exit criteria are rule-adjacent
+and this session is unattended.
+
+---
+
+## Day's numbers
+
+| | |
+|---|---|
+| equity | **$299.62** |
+| day | **-0.12%** |
+| week | **-0.12%**, gap to the +5% hurdle **-5.12%** |
+| since inception | -0.13% |
+| drawdown from peak | 0.13% |
+| closed trades | 1 (0W / 1L), net -$0.37, expectancy **-0.139R** |
+| costs | $0.00 |
+| cash drift | **$+0.0000** across 5 reconciliations |
+| risk state | NORMAL |
+| carried overnight | none — flat |
+| escalations | none |
+| Phase 2 exit criteria | 3/5 (30+ trades 1/30; expectancy -0.139R) |
+
+`trading_day close` exit 0; `trading_day week` exit 1 (criteria unmet, not an
+error).
+
+**On the expectancy figure:** -0.139R over one trade, and that one trade was
+exited by a control rather than by the market. It is a measurement of our
+software, not of the strategy. It should not be cited as evidence about 20-day
+breakouts in either direction.

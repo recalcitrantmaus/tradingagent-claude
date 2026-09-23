@@ -2252,3 +2252,84 @@ CONFIRMED stop".
 **Status:** active. The mechanism question stays open and is worth resolving if
 `forum.alpaca.markets` is ever reachable, or by watching the next filled
 bracket's legs directly.
+
+## 2026-09-23 (pre-close) — the first fill, and the control that took it away
+
+Phase 2's first fill ever: DT, 1 share @ 58.47 at 14:04:57Z, **zero slippage**
+against the proposed 58.47. It was flattened 24 minutes later at 58.10 because
+the bracket's stop leg reported `status=held` and could not be confirmed live.
+
+### What was verified, under real conditions rather than asserted
+
+**B-15 holds.** `trading_day preclose` run a second time left `fills.jsonl`
+byte-identical (md5 `697b2842456595384a656b043ee2b727` before and after), with
+exactly one buy and one sell at `dry_run: false` and unique `activity_id`s.
+Dedupe works, and cash drift stayed **$+0.0000** across five reconciliations —
+the $58.47 drift did not reappear. `tools.review` reads 1 closed trade at
+-0.139R. M-16 (`preclose` live) ran clean, exit 0, cancelled nothing on a flat
+book.
+
+**The stop control was not verified.** It returned `{}` — on a flat book,
+having been asked nothing. Recorded as no evidence rather than as a pass; a
+green result from a control with no input is the vacuous-pass family this repo
+has now logged four times.
+
+### The finding: `held` is probably what a live OCO child looks like
+
+Alpaca's own documentation, https://docs.alpaca.markets/us/docs/orders-at-alpaca
+(HTTP 200 today — **the host is reachable**, though `alpaca.markets/docs/...`
+is 403 at this environment's proxy):
+
+> "The first order is used to enter a new long or short position, and **once
+> it is completely filled, two conditional exit orders are activated.**"
+
+> "when you retrieve the list of orders with the nested parameter true, **the
+> take-profit order shows up as the parent order while the stop-loss order
+> appears as a child order.**"
+
+Which is exactly the shape observed: at the parent's fill the take-profit was
+resubmitted (`submitted_at` 14:04:57) and went `new`; the stop leg kept its
+original `submitted_at` of 13:59:22 and reported `held`. A filled bracket
+becomes an OCO, the take-profit is its parent, the stop-loss is its child —
+and the child reports `held`.
+
+**Left open, not concluded.** No reachable Alpaca page defines the `held`
+string (`orders-at-alpaca`, `working-with-orders`, and the `alpaca-py`
+`OrderStatus` enum, which lists `HELD = "held"` with no semantics). Both legs
+are now `canceled`, so their live status can no longer be read, and the stop
+was never within $1.59 of triggering. The next bracket fill settles it for
+nothing: query the stop leg by its own id at the moment the parent fills.
+
+### Why a safe-direction bug is still expensive
+
+The flatten cost more than the pre-close estimate. DT closed at **59.09**:
+
+```
+realised (flattened at 58.10)    -0.139R
+counterfactual (held to 59.09)   +0.232R
+cost of the flatten               0.371R
+```
+
+Nearly three times the loss taken, and it turned a winner into a loser. If the
+stop really is live, this control will do that to **every** bracket position
+this account opens — a systematic bleed wearing a guardrail's error message.
+
+**The general lesson, and it is the opposite of the last four entries.** Those
+were controls that failed open — inert, passing vacuously, letting risk
+through. This one fails *closed*, and closed failures are harder to see
+precisely because they look like discipline: the account loses money and the
+log says a protection worked. **A control that cannot distinguish "unprotected"
+from "protected, represented differently" is not conservative. It is wrong, in
+a direction that flatters it.**
+
+Corollary for the expectancy number now on the books: -0.139R over one trade
+exited by our own plumbing measures the plumbing. It is not evidence about
+20-day breakouts, and it must not be cited as any.
+
+### Not changed
+
+Nothing was promoted or altered. `model_check rule-promotion` exited 1 for want
+of an authorization; none was written. Loosening a protection on one
+observation, unattended, is the change this project least wants made. Filed as
+T-17 in `state/reviews/2026-09-23-wednesday-queue.md` with the test that would
+settle it.
