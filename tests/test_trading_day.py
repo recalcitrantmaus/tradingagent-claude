@@ -96,10 +96,35 @@ class TestEngineRebuild(unittest.TestCase):
         self.assertAlmostEqual(pf.drawdown(prices_of(snap)), 0.375)
 
     def test_track_record_starts_disqualifying(self):
-        _, _, snap = reconcile(FakeBroker(), {"positions": {}, "cash": 300.0})
-        _, ro = build_engine(snap, {}, TODAY)
+        """An account with no closed trades must not clear the option gate.
+
+        Reads a fixture, not state/fills.jsonl. The first version read the
+        live file and so asserted a property of the ACCOUNT rather than of
+        build_engine — it passed for eight days because nothing had traded,
+        and went red the moment Phase 2's first round trip closed. A test
+        decided by the environment is the bug this repo keeps rediscovering.
+        """
+        with mock.patch.object(td.state, "read_fills", lambda: []):
+            _, _, snap = reconcile(FakeBroker(), {"positions": {}, "cash": 300.0})
+            _, ro = build_engine(snap, {}, TODAY)
         self.assertEqual(ro.closed_trades, 0)
         self.assertEqual(ro.expectancy_R, 0.0)
+
+    def test_the_gate_reads_real_closed_trades_when_there_are_some(self):
+        # The other half: with a closed round trip the engine must SEE it,
+        # or the option lock could never be earned out of.
+        fills = [
+            {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 58.47,
+             "stop": 55.80, "fees": 0.0, "multiplier": 1,
+             "ts": "2026-09-23T14:04:57Z"},
+            {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 58.10,
+             "fees": 0.0, "multiplier": 1, "ts": "2026-09-23T14:28:52Z"},
+        ]
+        with mock.patch.object(td.state, "read_fills", lambda: fills):
+            _, _, snap = reconcile(FakeBroker(), {"positions": {}, "cash": 300.0})
+            _, ro = build_engine(snap, {}, TODAY)
+        self.assertEqual(ro.closed_trades, 1)
+        self.assertAlmostEqual(ro.expectancy_R, -0.1386, places=3)
 
 
 if __name__ == "__main__":
@@ -632,3 +657,109 @@ class TestExitCriteriaDoNotRewardInactivity(unittest.TestCase):
                          "escalations": []}], "week_start_equity": 300.0}
         rc, _ = self._week(led, [])
         self.assertEqual(rc, 1)
+
+
+class TestFillsAreRecoveredFromTheBroker(unittest.TestCase):
+    """B-15, and the reason Phase 2's first real fill was recorded nowhere.
+
+    `paper_session --submit` waits FILL_WAIT_SECONDS (30s), records the entry
+    if it fills, and otherwise files it under ledger["working_orders"] with the
+    comment "session-close must reconcile". On 2026-09-23 DT filled 5m35s after
+    submission — a limit order resting for minutes is the normal case — and
+    NOTHING ever swept working_orders. It is written by paper_session, cleared
+    by preclose, and reconciled by no one.
+
+    Sweeping working_orders would still have missed every EXIT, because
+    nothing submits a stop or take-profit; they are OCO legs that fire on their
+    own. So the fix asks the broker what filled rather than checking our own
+    list of what we sent.
+    """
+
+    class Feed:
+        """A broker that filled things we never recorded."""
+        def __init__(self, rows, stop=55.80):
+            self.rows, self._stop = rows, stop
+        def fills_since(self, after):
+            return list(self.rows)
+        def stop_of_order(self, oid):
+            return self._stop
+
+    BUY = {"activity_id": "a1", "order_id": "o1", "symbol": "DT",
+           "side": "buy", "qty": 1.0, "price": 58.47,
+           "at": "2026-09-23T14:04:57Z"}
+    SELL = {"activity_id": "a2", "order_id": "o2", "symbol": "DT",
+            "side": "sell", "qty": 1.0, "price": 58.10,
+            "at": "2026-09-23T14:28:52Z"}
+
+    def setUp(self):
+        self.written = []
+        self.patch = mock.patch.object(td.state, "append_fill",
+                                       lambda r: self.written.append(r))
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+
+    def _post(self, broker, existing=()):
+        with mock.patch.object(td.state, "read_fills", lambda: list(existing)):
+            return td.post_broker_fills(broker, {"broker_cash_at": "2026-09-23T13:00:00Z"})
+
+    def test_a_late_entry_fill_is_recovered(self):
+        notes = self._post(self.Feed([self.BUY]))
+        self.assertEqual(len(self.written), 1)
+        self.assertEqual(self.written[0]["price"], 58.47)
+        self.assertFalse(self.written[0]["dry_run"])
+        self.assertTrue(any("POSTED BUY" in n for n in notes))
+
+    def test_an_exit_nobody_submitted_is_recovered(self):
+        # The case sweeping working_orders could never have caught: a stop or
+        # take-profit executing on its own.
+        self._post(self.Feed([self.SELL]))
+        self.assertEqual(self.written[0]["side"], "sell")
+        self.assertEqual(self.written[0]["reason"], "exit")
+
+    def test_the_entry_carries_the_brokers_stop_so_R_is_measurable(self):
+        # Without this every recovered trade has R=None, and the Phase 2 exit
+        # criterion "positive expectancy" stays unmeasurable forever.
+        self._post(self.Feed([self.BUY]))
+        self.assertAlmostEqual(self.written[0]["stop"], 55.80)
+
+    def test_a_missing_stop_is_reported_not_silently_dropped(self):
+        notes = self._post(self.Feed([self.BUY], stop=None))
+        self.assertNotIn("stop", self.written[0])
+        self.assertTrue(any("NO stop" in n for n in notes), notes)
+
+    def test_already_recorded_fills_are_not_posted_twice(self):
+        existing = [{"activity_id": "a1", "symbol": "DT", "side": "buy",
+                     "qty": 1.0, "price": 58.47}]
+        notes = self._post(self.Feed([self.BUY, self.SELL]), existing=existing)
+        self.assertEqual(len(self.written), 1)
+        self.assertEqual(self.written[0]["activity_id"], "a2")
+        self.assertEqual(len(notes), 1)
+
+    def test_a_broker_without_the_feed_is_not_an_error(self):
+        class Old:
+            pass
+        self.assertEqual(self._post(Old()), [])
+        self.assertEqual(self.written, [])
+
+    def test_a_failing_feed_reports_but_does_not_block_the_session(self):
+        class Broken:
+            def fills_since(self, after):
+                raise RuntimeError("upstream 503")
+        notes = self._post(Broken())
+        self.assertTrue(any("could not read" in n for n in notes))
+        self.assertEqual(self.written, [])
+
+    def test_the_recovered_pair_reconciles_the_cash_that_would_have_halted(self):
+        # The live consequence: without these rows the ledger's expected cash
+        # stays at the pre-trade anchor while the broker's moves by the trade,
+        # so reconcile reports $58.47 of "unexplained drift" against a ~$1.50
+        # halt threshold and stops the day over a bookkeeping hole.
+        from tools.trading_day import expected_cash
+        led = {"broker_cash": 299.99, "broker_cash_at": "2026-09-23T13:00:00Z"}
+        none_recorded, _ = expected_cash(led, [])
+        self.assertAlmostEqual(none_recorded, 299.99)
+        both, n = expected_cash(led, [
+            dict(self.BUY, fees=0.0, multiplier=1, ts=self.BUY["at"]),
+            dict(self.SELL, fees=0.0, multiplier=1, ts=self.SELL["at"])])
+        self.assertEqual(n, 2)
+        self.assertAlmostEqual(both, 299.62, places=2)   # the broker's figure

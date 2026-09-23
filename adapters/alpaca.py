@@ -109,8 +109,32 @@ class AlpacaAdapter:
         return self._request(
             "GET", f"{self.base}/v2/orders?{urllib.parse.urlencode(q)}")
 
-    def order(self, order_id: str) -> Dict:
-        return self._request("GET", f"{self.base}/v2/orders/{order_id}")
+    def order(self, order_id: str, nested: bool = False) -> Dict:
+        q = "?nested=true" if nested else ""
+        return self._request("GET", f"{self.base}/v2/orders/{order_id}{q}")
+
+    def stop_of_order(self, order_id: str) -> Optional[float]:
+        """The protective stop PRICE attached to a bracket parent.
+
+        Needed when a fill is recovered from the broker feed rather than from
+        our own submission: the feed carries symbol, side, qty and price, but
+        not the stop — and without a stop the fill log cannot compute R, so
+        every recovered trade lands in the expectancy table as `None` and the
+        Phase 2 exit criterion "positive expectancy" stays permanently
+        unmeasurable. The broker's own leg is the authoritative value: it is
+        the stop that was actually resting, not the one the plan intended.
+        """
+        try:
+            o = self.order(order_id, nested=True)
+        except AdapterError:
+            return None
+        for leg in (o.get("legs") or []):
+            if leg.get("type") in self.STOP_TYPES and leg.get("stop_price"):
+                try:
+                    return float(leg["stop_price"])
+                except (TypeError, ValueError):
+                    return None
+        return None
 
     # Terminal in the sense that matters here: the order will not fill later.
     TERMINAL_STATUSES = {"filled", "canceled", "cancelled", "expired",
@@ -246,6 +270,11 @@ class AlpacaAdapter:
                        "pending_new", "accepted_for_bidding", "calculated",
                        "pending_replace", "replaced"}
     STOP_TYPES = ("stop", "stop_limit", "trailing_stop")
+    # A stop in one of these is working in its own right. `held` is NOT here:
+    # it means "waiting on a parent", which is correct before the parent fills
+    # and unexplained after. See positions_with_unconfirmed_stops.
+    CONFIRMED_STOP_STATUSES = {"new", "accepted", "partially_filled",
+                               "accepted_for_bidding", "calculated", "replaced"}
 
     def positions_without_stops(self) -> List[str]:
         """Positions with no live stop. Session-close treats these as a
@@ -273,6 +302,92 @@ class AlpacaAdapter:
                     protected.add(o.get("symbol"))
         return [p["symbol"] for p in self.positions()
                 if p["symbol"] not in protected]
+
+    def positions_with_unconfirmed_stops(self) -> Dict[str, str]:
+        """Positions whose only stop is still `held` AFTER the parent filled.
+
+        Measured on Phase 2's first fill, 2026-09-23. DT's bracket parent
+        filled at 14:04:57. Its two exit legs then read:
+
+            sell limit 63.81  status=new   submitted 14:04:57  updated 14:04:57
+            sell stop  55.80  status=held  submitted 13:59:22  updated 13:59:22
+
+        The take-profit was created at the instant of the fill and went live.
+        The stop was NOT touched — its `updated_at` still equalled its
+        `submitted_at` from before the parent filled.
+
+        `held` is in ACTIVE_STATUSES because a bracket's legs sit `held` until
+        the parent fills, and Alpaca's `status=open` filter excludes them, so a
+        genuinely-placed stop would otherwise be invisible. That reasoning is
+        sound BEFORE the fill. After it, `held` means something this codebase
+        has not established, and `positions_without_stops()` returns [] either
+        way — reporting protection it has not verified.
+
+        **This method does not guess which reading is right.** Asserting that
+        `held` means live would risk carrying an unprotected position; asserting
+        it means dead would flag every bracketed position and halt trading on a
+        false alarm. Both are worse than naming the ambiguity, so the ambiguity
+        is what it returns: {symbol: status} for any position whose best stop is
+        not in a confirmed-working state.
+
+        Callers should treat an entry here as "do not carry overnight without
+        resolving it", not as "flatten immediately".
+        """
+        q = urllib.parse.urlencode({"status": "all", "limit": "200",
+                                    "direction": "desc", "nested": "true"})
+        rows = self._request("GET", f"{self.base}/v2/orders?{q}")
+        best: Dict[str, str] = {}
+        for o in rows:
+            for c in [o] + list(o.get("legs") or []):
+                if c.get("type") not in self.STOP_TYPES:
+                    continue
+                st = (c.get("status") or "").lower()
+                if st not in self.ACTIVE_STATUSES:
+                    continue
+                sym = o.get("symbol")
+                # A confirmed status wins over held; we want each symbol's
+                # BEST evidence, not its first.
+                if best.get(sym) not in self.CONFIRMED_STOP_STATUSES:
+                    best[sym] = st
+        held = {}
+        for pos in self.positions():
+            st = best.get(pos["symbol"])
+            if st is not None and st not in self.CONFIRMED_STOP_STATUSES:
+                held[pos["symbol"]] = st
+        return held
+
+    def fills_since(self, after: str) -> List[Dict]:
+        """Every fill the BROKER reports since `after` (an ISO date or stamp).
+
+        The canonical record, and the only one that sees the whole picture.
+        `paper_session` records a fill only if the entry it just submitted
+        fills within FILL_WAIT_SECONDS; it cannot see a fill that arrives
+        later, and it never sees a stop or take-profit executing at all,
+        because nothing submits those — they are OCO legs that fire on their
+        own. On 2026-09-23 the first real entry filled 5m35s after submission
+        and was recorded nowhere.
+
+        `id` is Alpaca's activity id and is stable, so callers dedupe on it.
+        """
+        q = urllib.parse.urlencode({"after": after})
+        rows = self._request(
+            "GET", f"{self.base}/v2/account/activities/FILL?{q}")
+        out = []
+        for r in rows or []:
+            try:
+                qty = abs(float(r.get("qty") or 0))
+                px = float(r.get("price") or 0)
+            except (TypeError, ValueError):
+                continue
+            if qty <= 0 or px <= 0:
+                continue
+            out.append({"activity_id": r.get("id"),
+                        "order_id": r.get("order_id"),
+                        "symbol": r.get("symbol"),
+                        "side": (r.get("side") or "").lower(),
+                        "qty": qty, "price": px,
+                        "at": r.get("transaction_time")})
+        return sorted(out, key=lambda x: x["at"] or "")
 
     def resting_stops(self) -> Dict[str, float]:
         """The live protective stop PRICE per symbol, not merely its existence.

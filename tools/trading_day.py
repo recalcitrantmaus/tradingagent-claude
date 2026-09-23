@@ -144,6 +144,79 @@ def expected_cash(ledger: Dict, fills: List[Dict]) -> Tuple[Optional[float], int
     counted = [f for f in fills
                if not f.get("dry_run") and str(f.get("ts", "")) > since]
     return anchor + sum(cash_effect(f) for f in counted), len(counted)
+def post_broker_fills(broker, ledger: Dict) -> List[str]:
+    """Record every fill the BROKER reports that our log has not got.
+
+    Phase 2's first real fill was recorded nowhere, and the reason is a gap
+    between two correct-looking pieces of code:
+
+      - `paper_session --submit` waits FILL_WAIT_SECONDS (30s) for the entry
+        it just sent, records it if it fills, and otherwise files it under
+        `ledger["working_orders"]` with the comment "session-close must
+        reconcile". DT filled 5m35s after submission — a limit order resting
+        for minutes is the NORMAL case, not an edge case.
+      - Nothing ever reconciled `working_orders`. It is written by
+        `paper_session` and cleared by `preclose`, and swept by no one. The
+        promise in that comment was never implemented.
+
+    And even a working sweep of `working_orders` would only catch ENTRIES.
+    Nothing submits a stop or a take-profit — they are OCO legs that fire on
+    their own — so no exit has ever had a code path that records it. Neither
+    did the manual flatten on 2026-09-23.
+
+    So this does not sweep our list of orders. It asks the broker what filled
+    and writes down anything missing, which is the only version that cannot be
+    outflanked by a fill we did not originate. Deduped on Alpaca's activity id.
+
+    Consequence if it does not run, measured live: the ledger's expected cash
+    stays at the pre-trade anchor while the broker's moves by the trade, so
+    `reconcile` reports a $58.47 "unexplained drift" against a ~$1.50 halt
+    threshold and stops the day — a halt that is arithmetically correct and
+    describes a bookkeeping hole rather than a missing dollar.
+    """
+    if not hasattr(broker, "fills_since"):
+        return []
+    known = {f.get("activity_id") for f in state.read_fills()
+             if f.get("activity_id")}
+    since = (ledger.get("broker_cash_at") or "")[:10] or \
+        (trading_date() - dt.timedelta(days=5)).isoformat()
+    try:
+        rows = broker.fills_since(since)
+    except Exception as e:                       # never block a session on this
+        return [f"could not read the broker fill feed: {str(e)[:120]}"]
+
+    notes = []
+    for r in rows:
+        if r.get("activity_id") in known:
+            continue
+        row = {
+            "symbol": r["symbol"], "side": r["side"], "qty": r["qty"],
+            "price": r["price"], "fees": 0.0, "multiplier": 1,
+            "reason": "entry" if r["side"] == "buy" else "exit",
+            "activity_id": r.get("activity_id"), "order_id": r.get("order_id"),
+            "ts": r.get("at"), "dry_run": False,
+            "source": "broker reconciliation",
+            "thesis": "recovered from the broker fill feed, not from submission",
+        }
+        # An entry without its stop cannot produce an R, and a trade with no R
+        # never reaches the expectancy table — so "positive expectancy" would
+        # stay unmeasurable forever while trades accumulated. Take the stop
+        # from the broker's own bracket leg: that is the stop that was actually
+        # resting, not the one the plan asked for.
+        if r["side"] == "buy" and r.get("order_id") and hasattr(broker, "stop_of_order"):
+            st = broker.stop_of_order(r["order_id"])
+            if st:
+                row["stop"] = st
+            else:
+                notes.append(f"  ! {r['symbol']} entry recovered with NO stop "
+                             f"price — its R will be unmeasurable")
+        state.append_fill(row)
+        notes.append(f"POSTED {r['side'].upper()} {r['qty']:g} {r['symbol']} "
+                     f"@ {r['price']:.4f} from the broker feed "
+                     f"({r.get('at', '')[11:19]}Z) — not recorded at submission")
+    return notes
+
+
 
 
 def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
@@ -172,6 +245,12 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
 
     if acct["trading_blocked"]:
         notes.append("BROKER REPORTS trading_blocked — stop")
+
+    # Post anything the broker filled that our log has not got, BEFORE the
+    # drift check reads it — otherwise the drift check measures our own
+    # bookkeeping hole and halts the day over it.
+    for n in post_broker_fills(broker, ledger):
+        notes.append(n)
 
     # --- cash drift ---------------------------------------------------
     # Equity moves every second for legitimate reasons, so comparing it needs

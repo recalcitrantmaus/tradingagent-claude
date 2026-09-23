@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from adapters import base
 from adapters.base import AdapterError, Authorization, OrderTicket
 from adapters.robinhood_mcp import preflight, ticket_to_mcp_args
+from adapters.alpaca import AlpacaAdapter
 
 TODAY = dt.date(2026, 9, 15)
 
@@ -534,3 +535,64 @@ class TestUnprotectedPositionsAreDetectedHonestly(unittest.TestCase):
               "order_class": "bracket", "status": "new", "legs": []}],
             [{"symbol": "AAA", "qty": 1.0}])
         self.assertEqual(a.positions_without_stops(), ["AAA"])
+
+
+class TestAStopThatIsStillHeldIsNotConfirmed(unittest.TestCase):
+    """Phase 2's first fill, 2026-09-23. DT's bracket parent filled at
+    14:04:57 and its exit legs then read:
+
+        sell limit 63.81  status=new   submitted 14:04:57  updated 14:04:57
+        sell stop  55.80  status=held  submitted 13:59:22  updated 13:59:22
+
+    The take-profit was created at the fill and went live. The stop was never
+    touched — its updated_at still equalled its submitted_at from BEFORE the
+    parent filled. `positions_without_stops()` returned [] regardless, because
+    `held` is in ACTIVE_STATUSES.
+
+    That inclusion is right before the parent fills: a bracket's legs sit
+    `held` and Alpaca's status=open filter hides them, so a real stop would
+    otherwise be invisible. After the fill, `held` means something this
+    codebase has not established.
+
+    These tests pin the ambiguity being SURFACED rather than resolved by
+    guess. Asserting held==live risks carrying an unprotected position;
+    asserting held==dead flags every bracketed position and halts on a false
+    alarm. Naming it is the only honest option available.
+    """
+
+    def _adapter(self, leg_status, position=True):
+        a = AlpacaAdapter.__new__(AlpacaAdapter)
+        a.base = "https://paper-api.alpaca.markets"
+        a._request = lambda m, u: [{
+            "symbol": "DT", "status": "filled", "order_class": "bracket",
+            "legs": [
+                {"type": "limit", "status": "new", "limit_price": "63.81"},
+                {"type": "stop", "status": leg_status, "stop_price": "55.80"},
+            ]}]
+        a.positions = lambda: ([{"symbol": "DT", "qty": 1.0,
+                                 "avg_price": 58.47, "market_value": 58.25,
+                                 "unrealized_pl": -0.22}] if position else [])
+        return a
+
+    def test_a_held_stop_after_the_parent_filled_is_flagged(self):
+        a = self._adapter("held")
+        self.assertEqual(a.positions_with_unconfirmed_stops(), {"DT": "held"})
+
+    def test_a_live_stop_is_not_flagged(self):
+        for st in ("new", "accepted", "partially_filled"):
+            a = self._adapter(st)
+            self.assertEqual(a.positions_with_unconfirmed_stops(), {},
+                             f"{st} should count as confirmed")
+
+    def test_no_position_means_nothing_to_flag(self):
+        a = self._adapter("held", position=False)
+        self.assertEqual(a.positions_with_unconfirmed_stops(), {})
+
+    def test_the_hard_check_still_says_protected_so_the_two_are_distinct(self):
+        # positions_without_stops answers "is there a stop AT ALL" and must
+        # keep accepting held, or a genuinely-placed stop on an unfilled
+        # bracket reads as missing. The new method answers the different
+        # question, and both are needed.
+        a = self._adapter("held")
+        self.assertEqual(a.positions_without_stops(), [])
+        self.assertEqual(a.positions_with_unconfirmed_stops(), {"DT": "held"})

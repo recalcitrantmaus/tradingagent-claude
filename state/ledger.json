@@ -1,7 +1,7 @@
 {
-  "broker_cash": 299.99,
-  "broker_cash_at": "2026-09-23T13:46:36.014424+00:00",
-  "broker_equity": 299.99,
+  "broker_cash": 299.62,
+  "broker_cash_at": "2026-09-23T14:46:20.594801+00:00",
+  "broker_equity": 299.62,
   "cancelled_entries": [
     {
       "at": "2026-09-21T19:33:09.453873121Z",
@@ -13,7 +13,7 @@
       "symbol": "ETHA"
     }
   ],
-  "cash": 299.99,
+  "cash": 299.62,
   "day_start_equity": 299.99,
   "day_start_key": "2026-09-23",
   "day_trades": [],
@@ -160,6 +160,11 @@
     {
       "at": "2026-09-23T13:46:36.014424+00:00",
       "broker_cash": 299.99,
+      "drift": 0.0
+    },
+    {
+      "at": "2026-09-23T14:46:20.594801+00:00",
+      "broker_cash": 299.62,
       "drift": 0.0
     }
   ],
