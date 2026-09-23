@@ -1,0 +1,218 @@
+# Wednesday 2026-09-23 — session-close queue (W-n)
+
+New IDs W-1.. per the 16:05 ET routine. **Numbering conflict, flagged rather
+than silently resolved:** the 15:30 pre-close routine instructed "continue the
+T- numbering", so two findings from earlier today are already committed as
+**T-17** (the `held` stop leg / 0.371R flatten) and **T-18** ("costs below
+gains" passing vacuously), in
+`state/reviews/2026-09-23-wednesday-queue.md`. This routine instructs W-n and
+says not to renumber. **Both instructions are honoured literally: T-17 and T-18
+keep their IDs, and everything below is W-n.** A human should settle the
+convention — Wednesday now has findings under two prefixes, which is exactly
+the collision the T-n convention was introduced to prevent.
+
+---
+
+## W-1 — `record_day_trade` has no callers, so the day-trade budget has never counted anything. MEDIUM.
+
+Found by noticing the broker reported **zero day trades** after DT was bought
+at 14:04:57Z and sold at 14:28:52Z — the same session. That is a day trade by
+any definition, and it is recorded nowhere.
+
+```
+$ grep -rn "record_day_trade" --include=*.py . | grep -v "def record_day_trade"
+(no output)
+```
+
+`RiskOfficer.record_day_trade` (`engine/risk.py:117`) is the only thing that
+appends to `self.day_trades`, and **nothing in the repository calls it.** So
+`len(self.day_trades)` is permanently 0 and the check at `engine/risk.py:193`
+cannot fire. Separately, `ledger["day_trades"]` is initialised to `[]` in
+`tools/state.py:29` and is never written by anything, while
+`tools/trading_day.py:240` reads it for the `day trades 0 / 3` line that
+`trading_day open` prints. **The display is sourced from a field nothing
+maintains.**
+
+## W-2 — and if it did fire, it advises rather than refuses. MEDIUM. Same block.
+
+```python
+if c.assume_pdt_regime and len(self.day_trades) >= c.max_day_trades_per_5d:
+    d.reasons.append("at day-trade budget: this must be held overnight")
+```
+
+`d.reasons.append`, not `d.reject`. The budget is advisory. And the advice is
+invisible in practice: on an approval the runner prints `d.reasons[-1]`, which
+is the `sized N @ …` line appended after this one, so the string never reaches
+an operator at all.
+
+**It is inert three times over**, and each layer alone would be enough:
+
+1. The block sits inside `if p.asset_class == "option":`, so it is unreachable
+   for equities entirely. Options are locked twice over ($299.62 < $1,500, and
+   1 closed trade < 30), so it is unreachable today and for a long time.
+2. Its counter is never incremented (W-1).
+3. It appends instead of rejecting, and what it appends is never displayed.
+
+## W-3 — `assume_pdt_regime = True` describes a regime this account is not in. LOW, but it is why W-1/W-2 matter less than they look.
+
+The broker's own payload says cash account, not margin: `multiplier: 1`,
+`buying_power == cash == regt_buying_power == 299.62`, `shorting_enabled:
+false`, and **no `pattern_day_trader` or `daytrade_count` field is present in
+the raw account payload at all** (`adapters.alpaca.account()` supplies both
+with `.get(..., 0/False)` defaults, which is why they read 0 and False rather
+than missing).
+
+FINRA's current guidance frames the cash-account intraday constraint as
+settlement, not as a count of trades —
+https://www.finra.org/investors/insights/frequent-intraday-trading (dated June
+04, 2026, fetched today, HTTP 200):
+
+> "settlement time for most equity trades is T+1, or the next business day.
+> Therefore, if you want to engage in intraday trading in a cash account, be
+> sure that you fully pay for those securities at the time of purchase with
+> settled funds."
+
+**I am deliberately not citing the $25,000 pattern-day-trader threshold**: that
+figure is not on this page, and I will not source a number from memory. What
+the page does support is that the binding constraint for a cash account is T+1
+settlement with settled funds — and `Portfolio.settled_cash` already models
+exactly that, and `evaluate` already gates on it via `qty_by_cash`.
+
+So the *practical* exposure from W-1/W-2 is small. The *pattern* is not: a
+control that prints `day trades 0 / 3` in the open report, reads its number
+from a field nothing writes, sits behind an asset class that is locked, and
+advises rather than refuses. That is four of the five failure shapes this
+repository has catalogued, stacked in nine lines.
+
+**Not fixed, deliberately.** All three live in `engine/`. W-2 in particular is
+a genuine design question — should exceeding a day-trade budget refuse an order
+or annotate it? — and answering it changes what the agent does. Rules change
+only with evidence plus a human's authorization, and
+`model_check rule-promotion` exited **1** today for want of one. None was
+written.
+
+---
+
+## Session-close verification, item by item as asked
+
+### a. Cash drift — **$+0.0000**, unconditionally.
+
+Clean across **6 reconciliations** today (cumulative day figure), the latest at
+20:06Z. Every entry in `ledger["reconcile_drift"]` for 2026-09-23 reads
+`drift: 0.0`. No drift of any size appeared, and in particular the $58.47
+drift that the fill-recovery fix was written to prevent did not.
+
+`state/fills.jsonl` md5 is **`697b2842456595384a656b043ee2b727`** — unchanged
+across the 19:31Z preclose, the 19:45Z close and the 20:06Z close. **Three
+idempotent runs**, no duplicate rows, `activity_id` dedupe holding.
+
+### b. `cancel_unfilled_entries()` — cancelled **nothing**, and nothing was owed.
+
+"cancelled entries: none resting." The day's only entry (DT bracket
+`99ebcbc4`) **filled** at 14:04:57Z, so it was never an unfilled entry to
+cancel. `open_orders()` is `[]` at 20:06Z; nothing went through the closing
+auction.
+
+**Correcting this routine's premise:** it warns that if positions were held and
+no pre-close ran, the overnight book was never reviewed. **A pre-close did
+run** — at 19:31Z, exit code 0 — and it ran a second time within the same
+session. There is no such gap today, and the book is flat regardless. Saying so
+rather than accepting a caveat that does not apply.
+
+### c. No protective leg stripped — true, but **vacuously**, and that is worth naming.
+
+```
+UNPROTECTED: []
+open_orders(): []
+positions(): []
+positions_with_unconfirmed_stops(): {}
+```
+
+There is no position, so there is no stop that could have been stripped. This
+is an empty-set pass, not evidence that the protection path works. It is the
+same vacuous-truth family as T-8 and as the `{}` the stop control returned at
+pre-close. **Recorded as no evidence.**
+
+### Guardrails that fired today
+
+| Control | Fired? | On what |
+|---|---|---|
+| per-trade risk taper (`correlated_risk_decay`) | **YES** | RKLB refused: `size rounds to zero; binding constraint: per-trade risk budget tapered to 1.00% as position 2` |
+| single-position cap (25%) | **YES** | DT sized 2.25 shares by risk budget, bound to **1 share** ($58.47 = 19.5% vs a $75.00 cap) |
+| aggregate open-risk cap (4%, T-1) | **NO** | Never bound. Peak book risk was one position at $2.67 = 0.89% of equity, nowhere near the $12.00 ceiling. Reported explicitly because the routine asks which proposal it bound on: **none did.** |
+| posture gate | passed | NEUTRAL, not NO_TRADE |
+| option sleeve lock | not reached | no option proposed |
+| max concurrent positions (4) | not reached | 1 position |
+| circuit breakers (-4% / -8% / -20%) | not reached | day -0.12% |
+| unconfirmed-stop protection | **YES** | flattened DT — see T-17; this is the one that cost money |
+
+### Guardrails that should have fired and did not
+
+- **The day-trade budget.** DT was a same-session round trip. W-1/W-2: nothing
+  counted it, and the check could not have refused it anyway. Mitigating: the
+  check is options-only and the account is cash, so the real constraint is
+  settlement, which *is* enforced.
+- **Nothing else.** No breach went unrefused.
+
+### Carried overnight
+
+**Nothing.** The book is flat: no positions, no resting orders.
+
+- Gap risk at ~2x the stop distance: **$0.00 (0.00% of equity)**, per the close
+  report's own overnight-risk block.
+- `time_in_force` confirmation: **not applicable — there is no leg to confirm.**
+  For the record, the legs that existed today were `gtc`, read back verbatim
+  from the broker (parent `limit … tif gtc`, take-profit `limit 63.81 … gtc`,
+  stop `55.8 … gtc`), and all are now `canceled`.
+
+### B-15 / B-16 / M-20 status, stated precisely
+
+- **B-15 — CONFIRMED.** `fills.jsonl` carries the broker's own
+  `filled_avg_price`: buy **58.47**, sell **58.10**, both tagged
+  `source: "broker reconciliation"` with `activity_id`s. **Realised slippage on
+  the entry: $0.00, exactly 0.00%** — the limit filled at precisely the proposed
+  58.47. The exit was a market order at 58.10.
+- **B-16 / M-20 — NOT confirmed, and this is the day's open question.** A
+  bracket leg was *not* observed being promoted from `held` to `new` by the
+  parent fill. What was observed is the **take-profit** leg going `new` while
+  the **stop** leg stayed `held`. That asymmetry is T-17 and it is unresolved:
+  Alpaca documents both exits as activated on complete fill, with the stop-loss
+  represented as the OCO child, which would make `held` the normal
+  representation of a live stop — but no reachable page defines the status
+  string, and both legs are now `canceled` so it cannot be read retrospectively.
+  **Not claiming this path as tested.**
+
+### Journal
+
+DT's entry was written at pre-close (`state/journal/2026-09-23.md`): process
+A−, outcome D, exit reason `halt`, and the verdict that the flatten cost
+**0.371R** and that neither leg of the P&L was luck. **Nothing has closed
+since**, so no new entry was written. No winning trade was taken off-plan;
+there were no winning trades.
+
+### Numbers
+
+| | |
+|---|---|
+| equity | **$299.62** |
+| day | **-0.12%** |
+| week | **-0.12%**; gap to the +5% hurdle **-5.12%** |
+| since inception | -0.13% |
+| drawdown from peak | 0.13% |
+| closed trades | 1 (0W / 1L), net **-$0.37**, expectancy **-0.139R** |
+| costs | $0.00 |
+| risk state | NORMAL |
+| escalations | none, across 9 sessions |
+| Phase 2 exit criteria | **3/5** |
+
+`trading_day close` exit **0**; `trading_day week` exit **1** (criteria unmet,
+not an error).
+
+**The account is not flat because nothing traded** — that clause of the routine
+does not apply today. Something did trade, for the first time in Phase 2. But
+the related honesty still holds in a different form: **one closed trade, exited
+by our own protection control rather than by the market, is not evidence about
+the strategy in either direction.** The -0.139R on the books measures software.
+A -0.12% week is not capital preservation demonstrated; it is a week in which
+the only real test we ran was of our plumbing, and the plumbing lost 0.371R of
+a working trade.
