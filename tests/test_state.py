@@ -17,6 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools import state
 
+# Snapshot before any test body runs. See the guard class below.
+_state_at_import = state.STATE
+
 
 class _Isolated(unittest.TestCase):
     """Never touch the real state/ directory."""
@@ -129,3 +132,53 @@ class TestFillsAreAppendOnly(_Isolated):
         first = (self.tmp / "ledger.json").read_text()
         state.save({"a": 1, "b": 2})
         self.assertEqual(first, (self.tmp / "ledger.json").read_text())
+
+
+class TestTheSuiteCannotTouchTheRealLedger(unittest.TestCase):
+    """The guard that exists because a test already breached it.
+
+    A test wrote a phantom BUY into the real state/fills.jsonl on 2026-09-24,
+    with dry_run False and a fabricated activity_id, because it called
+    post_broker_fills without mocking append_fill. closed_trades would have
+    paired it as a genuine open lot and corrupted the next real DT trade's
+    entry price and R.
+
+    tests/__init__.py now redirects the state paths to a throwaway directory
+    for the whole run. These assert that it is actually in force, so the
+    redirect cannot be removed or reordered without something going red.
+    """
+
+    # Captured at MODULE IMPORT, before any test body runs. Importing `tests`
+    # inside a test would apply the sandbox at that moment and the assertion
+    # would pass too late to have protected anything — which is exactly what
+    # the first version of this guard did.
+    _STATE_AT_IMPORT = _state_at_import
+
+    def test_the_sandbox_was_in_force_before_any_test_ran(self):
+        """Fails under `python3 -m unittest discover -s tests`.
+
+        That form imports test modules as TOP-LEVEL modules, so tests/__init__
+        is never imported and the sandbox never applies — measured directly:
+        `-s tests` reports STATE as the real repo directory, `-s tests -t .`
+        reports a temp directory. CLAUDE.md and the README document the `-t .`
+        form for exactly this reason, and this test is what makes using the
+        wrong one visible instead of silent.
+        """
+        self.assertIn("tradingagent-tests-", str(self._STATE_AT_IMPORT),
+                      "state was NOT sandboxed when this module was imported — "
+                      "run: python3 -m unittest discover -s tests -t .")
+
+    def test_the_sandbox_is_not_inside_the_repository(self):
+        repo = Path(__file__).resolve().parents[1]
+        self.assertFalse(str(state.STATE).startswith(str(repo)),
+                         f"the test sandbox is inside the repo: {state.STATE}")
+
+    def test_an_unmocked_write_lands_in_the_sandbox_not_the_repo(self):
+        # The exact accident, reproduced: append_fill with nothing patched.
+        import tests
+        state.append_fill({"symbol": "CANARY", "side": "buy", "qty": 1.0,
+                           "price": 1.0})
+        real_fills = tests.real_state_paths()["FILLS"]
+        if real_fills.exists():
+            self.assertNotIn("CANARY", real_fills.read_text(),
+                             "a test just wrote to the real fill log")

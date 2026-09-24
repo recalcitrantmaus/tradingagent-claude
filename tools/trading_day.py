@@ -144,7 +144,7 @@ def expected_cash(ledger: Dict, fills: List[Dict]) -> Tuple[Optional[float], int
     counted = [f for f in fills
                if not f.get("dry_run") and str(f.get("ts", "")) > since]
     return anchor + sum(cash_effect(f) for f in counted), len(counted)
-def post_broker_fills(broker, ledger: Dict) -> List[str]:
+def post_broker_fills(broker, ledger: Dict) -> Tuple[List[str], set]:
     """Record every fill the BROKER reports that our log has not got.
 
     Phase 2's first real fill was recorded nowhere, and the reason is a gap
@@ -168,6 +168,13 @@ def post_broker_fills(broker, ledger: Dict) -> List[str]:
     and writes down anything missing, which is the only version that cannot be
     outflanked by a fill we did not originate. Deduped on Alpaca's activity id.
 
+    Returns (notes, symbols_explained). The second element matters: a position
+    at the broker that the ledger has never heard of is alarming in general,
+    but one created by a fill THIS call just recovered is accounted for, and
+    `reconcile` must not fail the session over it. Getting that wrong would
+    repeat, for positions, the phantom halt that unrecorded fills produced for
+    cash.
+
     Consequence if it does not run, measured live: the ledger's expected cash
     stays at the pre-trade anchor while the broker's moves by the trade, so
     `reconcile` reports a $58.47 "unexplained drift" against a ~$1.50 halt
@@ -175,7 +182,7 @@ def post_broker_fills(broker, ledger: Dict) -> List[str]:
     describes a bookkeeping hole rather than a missing dollar.
     """
     if not hasattr(broker, "fills_since"):
-        return []
+        return [], set()
     known = {f.get("activity_id") for f in state.read_fills()
              if f.get("activity_id")}
     since = (ledger.get("broker_cash_at") or "")[:10] or \
@@ -183,12 +190,13 @@ def post_broker_fills(broker, ledger: Dict) -> List[str]:
     try:
         rows = broker.fills_since(since)
     except Exception as e:                       # never block a session on this
-        return [f"could not read the broker fill feed: {str(e)[:120]}"]
+        return [f"could not read the broker fill feed: {str(e)[:120]}"], set()
 
-    notes = []
+    notes, explained = [], set()
     for r in rows:
         if r.get("activity_id") in known:
             continue
+        explained.add(r["symbol"])
         row = {
             "symbol": r["symbol"], "side": r["side"], "qty": r["qty"],
             "price": r["price"], "fees": 0.0, "multiplier": 1,
@@ -214,7 +222,7 @@ def post_broker_fills(broker, ledger: Dict) -> List[str]:
         notes.append(f"POSTED {r['side'].upper()} {r['qty']:g} {r['symbol']} "
                      f"@ {r['price']:.4f} from the broker feed "
                      f"({r.get('at', '')[11:19]}Z) — not recorded at submission")
-    return notes
+    return notes, explained
 
 
 
@@ -249,8 +257,8 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
     # Post anything the broker filled that our log has not got, BEFORE the
     # drift check reads it — otherwise the drift check measures our own
     # bookkeeping hole and halts the day over it.
-    for n in post_broker_fills(broker, ledger):
-        notes.append(n)
+    posted_notes, explained = post_broker_fills(broker, ledger)
+    notes.extend(posted_notes)
 
     # --- cash drift ---------------------------------------------------
     # Equity moves every second for legitimate reasons, so comparing it needs
@@ -289,7 +297,23 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
         if only_ledger:
             notes.append(f"in ledger but NOT at broker: {sorted(only_ledger)}")
         if only_broker:
-            notes.append(f"at broker but NOT in ledger: {sorted(only_broker)}")
+            # Split the genuinely unknown from the just-explained. A position
+            # the ledger had never heard of is alarming; one created by a fill
+            # this same reconciliation recovered from the broker feed is
+            # accounted for, and `cmd_open` writes it to the ledger moments
+            # later. Failing the session on it would repeat the phantom halt
+            # that B-15's cash drift produced — measured here by the e2e
+            # suite, which caught it because nothing else drives the spine
+            # across a fill the session never submitted.
+            surprising = sorted(only_broker - explained)
+            accounted = sorted(only_broker & explained)
+            if accounted:
+                notes.append(
+                    f"at broker and newly recorded this run: {accounted} "
+                    f"— explained by the recovered fill(s) above")
+            if surprising:
+                notes.append(f"at broker but NOT in ledger: {surprising}")
+            only_broker = set(surprising)
     if unprotected:
         notes.append(f"positions with NO resting stop: {unprotected}")
 
@@ -304,7 +328,11 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
                      "the ledger and the broker disagree materially. "
                      "DO NOT TRADE until this is explained.")
 
-    ok = (not acct["trading_blocked"] and ledger_syms == broker_syms
+    # `ledger_syms == broker_syms` would still fail on a position this run
+    # just explained, so compare against the reconciled view: symbols the
+    # ledger knew about PLUS the ones whose fills were recovered a moment ago.
+    reconciled_syms = ledger_syms | (broker_syms & explained)
+    ok = (not acct["trading_blocked"] and reconciled_syms == broker_syms
           and not drift_halts)
     return ok, notes, {"equity": acct["equity"], "cash": acct["cash"],
                        "positions": positions, "unprotected": unprotected,

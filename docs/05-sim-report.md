@@ -8,7 +8,7 @@ Reproduce with:
 python3 -m sim.run_suite --seeds 300 --days 260
 python3 -m sim.run_suite --seeds 300 --days 260 --options-at-300
 python3 -m sim.run_suite --seeds 300 --days 260 --no-guardrails
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests -t .
 ```
 
 **What this is not:** a backtest. Every market-data host is blocked in this

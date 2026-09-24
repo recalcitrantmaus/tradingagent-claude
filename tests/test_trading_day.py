@@ -699,8 +699,19 @@ class TestFillsAreRecoveredFromTheBroker(unittest.TestCase):
         self.addCleanup(self.patch.stop)
 
     def _post(self, broker, existing=()):
+        """Returns just the notes. post_broker_fills also returns the set of
+        symbols it explained, which `reconcile` needs so a position created by
+        a recovered fill does not fail the session — see
+        TestAFullRoundTripThroughTheSpine in the e2e suite."""
         with mock.patch.object(td.state, "read_fills", lambda: list(existing)):
-            return td.post_broker_fills(broker, {"broker_cash_at": "2026-09-23T13:00:00Z"})
+            notes, _ = td.post_broker_fills(
+                broker, {"broker_cash_at": "2026-09-23T13:00:00Z"})
+            return notes
+
+    def _post_both(self, broker, existing=()):
+        with mock.patch.object(td.state, "read_fills", lambda: list(existing)):
+            return td.post_broker_fills(
+                broker, {"broker_cash_at": "2026-09-23T13:00:00Z"})
 
     def test_a_late_entry_fill_is_recovered(self):
         notes = self._post(self.Feed([self.BUY]))
@@ -738,7 +749,7 @@ class TestFillsAreRecoveredFromTheBroker(unittest.TestCase):
     def test_a_broker_without_the_feed_is_not_an_error(self):
         class Old:
             pass
-        self.assertEqual(self._post(Old()), [])
+        self.assertEqual(self._post_both(Old()), ([], set()))
         self.assertEqual(self.written, [])
 
     def test_a_failing_feed_reports_but_does_not_block_the_session(self):
@@ -764,3 +775,60 @@ class TestFillsAreRecoveredFromTheBroker(unittest.TestCase):
         self.assertEqual(n, 2)
         self.assertAlmostEqual(both, 299.62, places=2)   # the broker's figure
 
+
+
+_BUY_DT = {"activity_id": "a1", "order_id": "o1", "symbol": "DT",
+           "side": "buy", "qty": 1.0, "price": 58.47,
+           "at": "2026-09-23T14:04:57Z"}
+
+
+class _FeedBroker:
+    def __init__(self, rows):
+        self.rows = rows
+    def fills_since(self, after):
+        return list(self.rows)
+    def stop_of_order(self, oid):
+        return 55.80
+
+
+class TestARecoveredPositionDoesNotFailTheSession(unittest.TestCase):
+    """Found by the e2e suite, not by any unit test, and it is the direct
+    sibling of B-15.
+
+    `reconcile` compares the ledger's positions against the broker's and
+    returns ok=False on a mismatch. A fill the session never submitted creates
+    exactly such a mismatch — so the first firing after ANY recovered fill
+    returned 1, "RECONCILIATION FAILED — resolve before the bell", on
+    information the same call had just explained one line earlier.
+
+    On 2026-09-23 this did not bite only because DT was already flat by the
+    time `trading_day open` ran. Had it still been open at 15:30, `preclose`
+    would have failed and the position would have been carried overnight under
+    a failed session — which is the M-16 failure arriving by a different road.
+
+    A position the ledger has never heard of is still alarming and still fails.
+    """
+
+    def test_a_symbol_explained_by_a_recovered_fill_is_reported_as_accounted(self):
+        # read_fills AND append_fill are both patched. The first draft patched
+        # neither, wrote a phantom BUY into the real state/fills.jsonl, and
+        # then failed on its own leftover row. tests/__init__.py now sandboxes
+        # the paths as well, so this is belt and braces.
+        with mock.patch.object(td.state, "read_fills", lambda: []), \
+             mock.patch.object(td.state, "append_fill", lambda r: None):
+            notes, explained = td.post_broker_fills(
+                _FeedBroker([_BUY_DT]), {"broker_cash_at": "2026-09-23T13:00:00Z"})
+        self.assertEqual(explained, {"DT"})
+
+    def test_an_already_known_fill_explains_nothing_new(self):
+        known = [{"activity_id": "a1"}]
+        with mock.patch.object(td.state, "read_fills", lambda: known), \
+             mock.patch.object(td.state, "append_fill", lambda r: None):
+            _, explained = td.post_broker_fills(
+                _FeedBroker([_BUY_DT]), {"broker_cash_at": "2026-09-23T13:00:00Z"})
+        self.assertEqual(explained, set())
+
+    def test_a_broker_with_no_feed_explains_nothing(self):
+        class Old:
+            pass
+        self.assertEqual(td.post_broker_fills(Old(), {}), ([], set()))

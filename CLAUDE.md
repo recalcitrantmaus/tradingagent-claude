@@ -163,9 +163,15 @@ Rules without an evidence trail are deleted at the next review.
 ## Verification
 
 ```
-python3 -m unittest discover -s tests     # the constitution's teeth
+python3 -m unittest discover -s tests -t . # the constitution's teeth
 python3 -m sim.run_suite --seeds 300      # Monte Carlo the guardrails
 ```
+
+**The `-t .` is not cosmetic.** Without it, `unittest` imports test modules as
+top-level modules, `tests/__init__.py` never runs, and the suite writes to the
+REAL `state/` directory. On 2026-09-24 a test wrote a phantom fill into
+`state/fills.jsonl` that way. `tests/__init__.py` redirects state to a
+throwaway directory, and one test fails loudly if it was not in force.
 
 Both must pass before any change to `engine/` is committed.
 
