@@ -76,7 +76,7 @@ So:
    paper week on exactly that configuration.
 2. Treat any later model change as a **config change requiring re-validation**:
    re-run `python3 -m sim.run_suite --seeds 300` and `python3 -m unittest
-   discover -s tests` (these pin the engine, which is model-independent, so
+   discover -s tests -t .` (these pin the engine, which is model-independent, so
    they should be unchanged — if they are not, something else broke), then
    run one shadow week where the new model produces plans that are journaled
    but not traded, and compare its calls to the incumbent's.

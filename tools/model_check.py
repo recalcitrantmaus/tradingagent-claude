@@ -44,6 +44,18 @@ def main() -> int:
                   f"{'yes' if p.blocking else 'no':9}")
         return 0
 
+    # An unrecognised task name exits 1 here even though check() returns True
+    # for it. check() is a library call and "no policy, proceed" is right for
+    # one; this is the GATE, and at the gate a task name is an assertion. A
+    # typo in a Routine prompt — `rule_promotion` for `rule-promotion` — is
+    # indistinguishable from a deliberate bypass and would have cleared
+    # silently, which is the same vacuous-pass shape as M-22.
+    if a.task not in POLICY:
+        print(f"  !! no model policy for '{a.task}'. Refusing rather than "
+              f"clearing a task nobody has defined a floor for.")
+        print(f"     known tasks: {', '.join(sorted(POLICY))}")
+        return 1
+
     ok, msgs = check(a.task, a.model, a.effort, a.authorization)
     for m in msgs:
         print(("  ok: " if ok else "  !! ") + m)

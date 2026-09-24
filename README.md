@@ -85,7 +85,7 @@ name selection.
 ## Run it
 
 ```bash
-python3 -m unittest discover -s tests -t . # 322 tests — the constitution's teeth
+python3 -m unittest discover -s tests -t . # 419 tests — the constitution's teeth
 python3 -m sim.run_suite --seeds 300      # Monte Carlo the guardrails
 
 python3 -m tools.preflight_phase2         # network, keys, model, tests, state, data

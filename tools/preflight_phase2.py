@@ -124,7 +124,13 @@ def _model():
 
 @check("risk engine tests", "Do not trade on a failing constitution. Fix first.")
 def _tests():
-    r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"],
+    # `-t .` is load-bearing, not tidiness. Without it unittest imports the
+    # test modules as top-level modules, tests/__init__.py never runs, and the
+    # suite writes to the REAL state/ directory — which is how a phantom fill
+    # got into state/fills.jsonl on 2026-09-24. Preflight runs before every
+    # session, so this invocation was the one most likely to do it again.
+    r = subprocess.run([sys.executable, "-m", "unittest", "discover",
+                        "-s", "tests", "-t", "."],
                        cwd=ROOT, capture_output=True, text=True)
     last = [l for l in r.stderr.splitlines() if l.startswith("Ran ")]
     return r.returncode == 0, (last[0] if last else "see output") + \

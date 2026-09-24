@@ -16,6 +16,7 @@ visible. Four of them appear more than once:
 
 Each test names its bug id and its shape. If one goes red, the bug is back.
 """
+import contextlib
 import datetime as dt
 import sys
 import unittest
@@ -23,8 +24,10 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
+import io
 import tools.trading_day as td
 from adapters.alpaca import AlpacaAdapter
 from engine.config import DEFAULT
@@ -66,6 +69,33 @@ class TestShapeA_ControlsThatMeasuredTheWrongThing(unittest.TestCase):
 
 
 class TestShapeB_ChecksThatCouldNotFail(unittest.TestCase):
+
+    def test_B21_the_routing_gate_refuses_a_task_it_has_no_policy_for(self):
+        # `model_check <task>` exited 0 for any name absent from POLICY,
+        # printing "no model policy; proceeding". A Routine prompt with
+        # `rule_promotion` for `rule-promotion` would therefore clear the
+        # blocking gate silently, and a typo is indistinguishable from a
+        # deliberate bypass. check() still returns True — that is right for a
+        # library call — but the GATE now refuses.
+        from tools import model_check
+        buf = io.StringIO()
+        with mock.patch.object(sys, "argv", ["m", "rule_promotion"]), \
+             contextlib.redirect_stdout(buf):
+            rc = model_check.main()
+        self.assertEqual(rc, 1)
+        self.assertIn("rule-promotion", buf.getvalue())   # names the real one
+
+    def test_B22_preflight_runs_the_suite_inside_the_sandbox(self):
+        # preflight_phase2 ran `unittest discover -s tests` with no `-t .`,
+        # which skips tests/__init__.py and points the suite at the REAL
+        # state/ directory — the exact invocation that wrote a phantom BUY
+        # into state/fills.jsonl. CLAUDE.md and the README were corrected and
+        # this call site was not, so the documented rule was true everywhere
+        # except in the code that runs before every session.
+        src = (ROOT / "tools" / "preflight_phase2.py").read_text()
+        flat = " ".join(src.split())
+        self.assertIn('"discover", "-s", "tests", "-t", "."', flat)
+
 
     def test_B20_a_take_profit_is_not_a_stop(self):
         # positions_without_stops marked a symbol protected on

@@ -576,6 +576,38 @@ BUGS = [
   "wires it in.",
   "2026-09-20 00:00", "2026-09-22 20:07", "",
   "2", "48353b4", "PARKED — activate at a session end"),
+ ("B-29", "Controls", "High",
+  "`tools/model_check.py` exited 0 for any task name absent from POLICY, "
+  "printing 'no model policy; proceeding'. The routing gate is invoked by "
+  "name from Routine prompts and skill text, so `rule_promotion` for "
+  "`rule-promotion` — or any other typo — cleared a BLOCKING task silently. "
+  "A typo and a deliberate bypass are indistinguishable at the gate. Same "
+  "vacuous-pass shape as M-22: the check ran, reported, and could not fail.",
+  "The CLI now refuses an unrecognised task and prints the known names. "
+  "model_policy.check() still returns True for an unknown task — 'no policy, "
+  "proceed' is correct for a library call — so the change is at the gate "
+  "only. Regression test B-21 in tests/test_regressions.py.",
+  "2026-09-16 00:00", "2026-09-24 00:00", "2026-09-24 00:00", "8", "", "Fixed"),
+
+ ("B-30", "Controls", "High",
+  "`tools/preflight_phase2.py` ran the suite as `unittest discover -s tests` "
+  "with no `-t .`, which imports test modules as top-level modules so "
+  "tests/__init__.py never runs and the suite writes to the REAL state/ "
+  "directory. That is the exact invocation that put a phantom BUY into "
+  "state/fills.jsonl on 2026-09-24. CLAUDE.md, README and docs/05 were "
+  "corrected the same day; this call site was not, so the rule held "
+  "everywhere except in the code that runs before every single session. "
+  "It would also have reported a test FAILURE at every preflight from then "
+  "on, because the sandbox guard fires under the wrong form.",
+  "Added `-t .`. Found by writing the reporting-tool tests, not by a "
+  "session failing. A repo-wide invariant test now scans every tracked "
+  "file for a `discover -s tests` without `-t .`; its first version read "
+  "grep lines and scored ZERO against this mutation, because the call is "
+  "wrapped across two lines — a guard that could not see the code it "
+  "guarded. It now scans whitespace-normalised file contents. "
+  "Regression test B-22.",
+  "2026-09-15 00:00", "2026-09-24 00:00", "2026-09-24 00:00", "9", "", "Fixed"),
+
  ("B-18", "Permissions", "High",
   "`python3 -m tools.paper_session --submit` is refused by the permission "
   "classifier as a real-world transaction, so the live session path cannot "

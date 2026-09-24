@@ -175,6 +175,45 @@ throwaway directory, and one test fails loudly if it was not in force.
 
 Both must pass before any change to `engine/` is committed.
 
+### When to run what (binding)
+
+A "script" here is a **module** — one `.py` file, addressed as `tools.status`,
+`engine.risk`. There is no trigger-equivalent in the language; the thing that
+fires unattended is a **Routine**, and it runs `tools/trading_day.py`.
+
+| After | Run | Why |
+|---|---|---|
+| **any edit to a module** | the test files that name it (command below) | catches the edit itself, in seconds |
+| **any edit under `engine/`** | the whole suite **and** `sim.run_suite` | the engine is the thing the model may not bypass; a local pass proves nothing about the gates it composes with |
+| **a major update** — touches 2+ modules, changes a signature, or crosses the money/state/order path | the whole suite **and** `tests/test_e2e_trading_day.py` (inside it) | unit tests pin functions; only the e2e spine catches a contract broken *between* them. That is how the recovered-position reconciliation bug was found |
+| **any defect, ever** | add a test to `tests/test_regressions.py` first, then fix | a defect without a test is a defect scheduled to return |
+| **before a commit** | the whole suite, as its own command | never chain it into `&&`; the shell reports the last command's status, which is how a commit went out over a red suite on 2026-09-23 |
+
+Which test files cover what you just changed:
+
+```
+git diff --name-only HEAD | grep '\.py$' | xargs -r -n1 basename | sed 's/\.py$//' \
+  | while read m; do grep -rlw "$m" tests/ --include='*.py'; done | sort -u
+```
+
+If that prints nothing, the module you changed has **no test**. Write one
+before you commit, or say plainly in the commit message that it is untested
+and why.
+
+Regression tests are not optional and not a "best practice" to be weighed.
+`tests/test_regressions.py` carries one test per shipped defect, grouped by the
+four shapes in `docs/04-lessons.md`: a control reading a value that cannot vary
+with what it measures; a check that passes vacuously; a datum that means
+something other than it appears; a control that is correct in isolation and
+never receives the state that makes it bind. **When a new bug does not fit one
+of the four, that is the finding** — write the shape down.
+
+A test suite is only worth its green. Periodically re-break a fix on purpose
+and confirm the suite goes red; a guard that scores zero against its own bug is
+not a guard. Clear `__pycache__` when you do — a same-size edit restored inside
+the same mtime second leaves CPython running the mutated bytecode, which
+happened on 2026-09-24 and made a mutation look caught when it was not.
+
 ## Environment
 
 **Network access was opened on 2026-09-15.** Alpaca, `agent.robinhood.com`,

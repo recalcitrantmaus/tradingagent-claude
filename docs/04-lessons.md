@@ -2412,3 +2412,82 @@ until it is observed here.
 **Verified:** 229 tests. Live `preclose` exits 0 against the flat book.
 
 **Status:** active. Supersedes the 2026-09-23 entry above it.
+
+## 2026-09-24 — testing the tools that decide what we believe (B-29, B-30)
+
+The unit-test audit had stopped at the modules that move money and deferred
+the research and reporting tools on the reasoning that "a bug there gives a
+wrong conclusion, not a lost dollar". recalcitrantmaus pushed back: a wrong conclusion
+misaligns the strategy and *then* costs dollars, at a lag and without a
+traceable cause. That is right, and it is the worse failure of the two,
+because a lost dollar announces itself.
+
+Two live defects came out of writing those tests. Neither was found by a
+session failing.
+
+### B-29 — the routing gate cleared any task name it did not recognise
+
+`model_check <task>` returned exit 0 for anything absent from `POLICY`,
+printing "no model policy for 'x'; proceeding". The gate is invoked **by
+name**, from Routine prompts and skill text, so `rule_promotion` instead of
+`rule-promotion` cleared a blocking task silently — and a typo is
+indistinguishable at the gate from a deliberate bypass. Shape B: the check
+ran, reported, and could not fail.
+
+`model_policy.check()` still returns True for an unknown task. That is correct
+for a library call. The refusal belongs at the CLI, because that is where a
+task name stops being a lookup and becomes an assertion.
+
+### B-30 — preflight ran the test suite against the real ledger
+
+`preflight_phase2` invoked `unittest discover -s tests` with no `-t .` — the
+exact form that skips `tests/__init__.py`, so the sandbox never applies and the
+suite writes to the real `state/` directory. That is how a phantom BUY reached
+`state/fills.jsonl` earlier the same day.
+
+The part worth keeping: **CLAUDE.md, the README and docs/05 were all corrected
+that morning, and this call site was not.** The rule was true everywhere except
+in the code that runs before every single session. Documenting a fix is not
+shipping it, and a grep for the wrong form would have found this in seconds.
+
+### The guard that could not see the code it guarded
+
+The fix came with a repo-wide invariant test: nothing tracked may invoke
+`discover -s tests` without `-t .`. Mutation-testing it scored **zero** —
+removing `-t .` from preflight failed nothing. The test read `git grep` output
+line by line, and preflight's call is wrapped across two lines with the word
+`discover` on the first. So the guard against vacuous checks was itself a
+vacuous check. It now scans whitespace-normalised file contents.
+
+The general lesson, which has now cost three separate guards: **a check written
+against a remembered bug must be run against the bug.** Not against a
+description of it.
+
+### A mutation harness that lied
+
+Two of the mutations were pure re-orderings of adjacent `if` blocks, so the
+mutated file had the **same byte size** as the original, and `shutil.copy`
+restored it inside the same mtime second. CPython's bytecode cache keys on
+mtime and size, so the "restored" tree kept running the mutated `.pyc`. One
+mutation was scored caught on evidence from a stale cache, and `classify` went
+on returning `inverse` for a 2x product until the full suite caught it.
+
+Clear `__pycache__` around any file-swapping harness. A verification tool that
+can be wrong in the flattering direction is worth less than no tool, because it
+is trusted.
+
+### What was added
+
+`tests/test_research.py` (51) and `tests/test_reporting.py` (44). The research
+file concentrates on two things: arithmetic that is easy to get *flatteringly*
+wrong — gapped stop fills, which side of a tie wins, median vs mean liquidity —
+and look-ahead, which is the failure a backtest cannot show you because it
+makes the results better. Several tests rewrite the bars *after* a signal and
+assert that nothing computed at signal time moved.
+
+Twenty-one mutations, every one caught: 9 on the research suite (1–7 tests
+each) and 12 on the reporting suite (1–2 each).
+
+**Verified:** 419 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin.
+
+**Status:** active.
