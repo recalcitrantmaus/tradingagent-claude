@@ -537,62 +537,72 @@ class TestUnprotectedPositionsAreDetectedHonestly(unittest.TestCase):
         self.assertEqual(a.positions_without_stops(), ["AAA"])
 
 
-class TestAStopThatIsStillHeldIsNotConfirmed(unittest.TestCase):
-    """Phase 2's first fill, 2026-09-23. DT's bracket parent filled at
-    14:04:57 and its exit legs then read:
 
-        sell limit 63.81  status=new   submitted 14:04:57  updated 14:04:57
-        sell stop  55.80  status=held  submitted 13:59:22  updated 13:59:22
+class TestHeldIsTheNormalRestingStateForAStop(unittest.TestCase):
+    """`held` means MONITORED, not broken — and this codebase got that wrong
+    in both directions inside 24 hours, so it is pinned here.
 
-    The take-profit was created at the fill and went live. The stop was never
-    touched — its updated_at still equalled its submitted_at from BEFORE the
-    parent filled. `positions_without_stops()` returned [] regardless, because
-    `held` is in ACTIVE_STATUSES.
+    Alpaca's Dan Whitnable, in
+    https://forum.alpaca.markets/t/half-of-bracket-order-held/2727 :
 
-    That inclusion is right before the parent fills: a bracket's legs sit
-    `held` and Alpaca's status=open filter hides them, so a real stop would
-    otherwise be invisible. After the fill, `held` means something this
-    codebase has not established.
+        "Being 'held' simply means it hasn't been sent to the exchange yet."
+        "Until the market price reaches that value, it is 'held'... In the
+         background, the price is being monitored. If/when the price reaches
+         the stop price then the stop-loss order will 'un-held'."
+        "...the stop loss order is now submitted and the state is changed
+         from 'held' to 'new'."
 
-    These tests pin the ambiguity being SURFACED rather than resolved by
-    guess. Asserting held==live risks carrying an unprotected position;
-    asserting held==dead flags every bracketed position and halts on a false
-    alarm. Naming it is the only honest option available.
+    A limit sell can rest on an exchange book; a stop cannot, so the broker
+    watches the price and routes it on the trigger. A filled bracket showing
+    take-profit `new` and stop `held` is therefore CORRECT.
+
+    On 2026-09-23 that asymmetry was read as a broken stop and a position was
+    flattened over it, realising -0.37 on a misreading. These tests exist so
+    the next person to notice the asymmetry finds the answer instead of
+    rediscovering the wrong one.
     """
 
-    def _adapter(self, leg_status, position=True):
+    def _adapter(self, stop_status, tp_status="new", position=True):
         a = AlpacaAdapter.__new__(AlpacaAdapter)
         a.base = "https://paper-api.alpaca.markets"
         a._request = lambda m, u: [{
             "symbol": "DT", "status": "filled", "order_class": "bracket",
             "legs": [
-                {"type": "limit", "status": "new", "limit_price": "63.81"},
-                {"type": "stop", "status": leg_status, "stop_price": "55.80"},
+                {"type": "limit", "status": tp_status, "limit_price": "63.81"},
+                {"type": "stop", "status": stop_status, "stop_price": "55.80"},
             ]}]
         a.positions = lambda: ([{"symbol": "DT", "qty": 1.0,
                                  "avg_price": 58.47, "market_value": 58.25,
                                  "unrealized_pl": -0.22}] if position else [])
         return a
 
-    def test_a_held_stop_after_the_parent_filled_is_flagged(self):
-        a = self._adapter("held")
-        self.assertEqual(a.positions_with_unconfirmed_stops(), {"DT": "held"})
+    def test_held_counts_as_protection(self):
+        # The exact live shape from 2026-09-23: parent filled, TP new, stop held.
+        self.assertEqual(self._adapter("held").positions_without_stops(), [])
 
-    def test_a_live_stop_is_not_flagged(self):
-        for st in ("new", "accepted", "partially_filled"):
-            a = self._adapter(st)
-            self.assertEqual(a.positions_with_unconfirmed_stops(), {},
-                             f"{st} should count as confirmed")
+    def test_held_is_in_active_statuses_and_must_stay_there(self):
+        # A regression guard on the constant itself. Removing `held` would
+        # report every correctly-bracketed position as naked, and session-close
+        # treats that as a flatten-or-fix event.
+        self.assertIn("held", AlpacaAdapter.ACTIVE_STATUSES)
 
-    def test_no_position_means_nothing_to_flag(self):
-        a = self._adapter("held", position=False)
-        self.assertEqual(a.positions_with_unconfirmed_stops(), {})
+    def test_a_triggered_stop_reading_new_is_also_protection(self):
+        # The other side of the documented transition, held -> new.
+        self.assertEqual(self._adapter("new").positions_without_stops(), [])
 
-    def test_the_hard_check_still_says_protected_so_the_two_are_distinct(self):
-        # positions_without_stops answers "is there a stop AT ALL" and must
-        # keep accepting held, or a genuinely-placed stop on an unfilled
-        # bracket reads as missing. The new method answers the different
-        # question, and both are needed.
-        a = self._adapter("held")
-        self.assertEqual(a.positions_without_stops(), [])
-        self.assertEqual(a.positions_with_unconfirmed_stops(), {"DT": "held"})
+    def test_a_cancelled_stop_is_NOT_protection(self):
+        # What a genuinely missing stop looks like, so the check still bites.
+        self.assertEqual(self._adapter("canceled").positions_without_stops(),
+                         ["DT"])
+
+    def test_a_take_profit_alone_is_not_protection(self):
+        # B-20's original finding, still pinned: a live limit leg with no stop
+        # leg at all must not read as protected.
+        a = AlpacaAdapter.__new__(AlpacaAdapter)
+        a.base = "https://paper-api.alpaca.markets"
+        a._request = lambda m, u: [{
+            "symbol": "DT", "status": "filled", "order_class": "bracket",
+            "legs": [{"type": "limit", "status": "new", "limit_price": "63.81"}]}]
+        a.positions = lambda: [{"symbol": "DT", "qty": 1.0, "avg_price": 58.47,
+                                "market_value": 58.25, "unrealized_pl": -0.22}]
+        self.assertEqual(a.positions_without_stops(), ["DT"])

@@ -262,19 +262,31 @@ class AlpacaAdapter:
               or (d.get("dailyBar") or {}).get("c"))
         return float(px) if px else None
 
-    # An order in one of these states can still execute. `held` matters most:
-    # a bracket's legs sit held until the parent fills, and Alpaca's
-    # status=open filter EXCLUDES held, so a stop can be perfectly in place
-    # and invisible to a naive listing.
+    # An order in one of these states can still execute. `held` matters most,
+    # and it is worth being precise about why, because this codebase got it
+    # wrong in both directions inside 24 hours.
+    #
+    # `held` means the order is being MONITORED and has not been routed to the
+    # exchange yet. For a stop that is the normal resting state for its whole
+    # life: a stop cannot sit on an exchange book, so the broker watches the
+    # price and submits it on the trigger. Alpaca's Dan Whitnable, in
+    # https://forum.alpaca.markets/t/half-of-bracket-order-held/2727 :
+    #
+    #   "Being 'held' simply means it hasn't been sent to the exchange yet."
+    #   "Until the market price reaches that value, it is 'held'... In the
+    #    background, the price is being monitored. If/when the price reaches
+    #    the stop price then the stop-loss order will 'un-held'."
+    #   "...the stop loss order is now submitted and the state is changed from
+    #    'held' to 'new'."
+    #
+    # So a filled bracket showing take-profit `new` and stop `held` is CORRECT,
+    # not a fault: the limit can rest on the book, the stop cannot. On
+    # 2026-09-23 that asymmetry was read as a broken stop and a position was
+    # flattened over it. `held` belongs here; do not remove it.
     ACTIVE_STATUSES = {"new", "accepted", "held", "partially_filled",
                        "pending_new", "accepted_for_bidding", "calculated",
                        "pending_replace", "replaced"}
     STOP_TYPES = ("stop", "stop_limit", "trailing_stop")
-    # A stop in one of these is working in its own right. `held` is NOT here:
-    # it means "waiting on a parent", which is correct before the parent fills
-    # and unexplained after. See positions_with_unconfirmed_stops.
-    CONFIRMED_STOP_STATUSES = {"new", "accepted", "partially_filled",
-                               "accepted_for_bidding", "calculated", "replaced"}
 
     def positions_without_stops(self) -> List[str]:
         """Positions with no live stop. Session-close treats these as a
@@ -302,59 +314,6 @@ class AlpacaAdapter:
                     protected.add(o.get("symbol"))
         return [p["symbol"] for p in self.positions()
                 if p["symbol"] not in protected]
-
-    def positions_with_unconfirmed_stops(self) -> Dict[str, str]:
-        """Positions whose only stop is still `held` AFTER the parent filled.
-
-        Measured on Phase 2's first fill, 2026-09-23. DT's bracket parent
-        filled at 14:04:57. Its two exit legs then read:
-
-            sell limit 63.81  status=new   submitted 14:04:57  updated 14:04:57
-            sell stop  55.80  status=held  submitted 13:59:22  updated 13:59:22
-
-        The take-profit was created at the instant of the fill and went live.
-        The stop was NOT touched — its `updated_at` still equalled its
-        `submitted_at` from before the parent filled.
-
-        `held` is in ACTIVE_STATUSES because a bracket's legs sit `held` until
-        the parent fills, and Alpaca's `status=open` filter excludes them, so a
-        genuinely-placed stop would otherwise be invisible. That reasoning is
-        sound BEFORE the fill. After it, `held` means something this codebase
-        has not established, and `positions_without_stops()` returns [] either
-        way — reporting protection it has not verified.
-
-        **This method does not guess which reading is right.** Asserting that
-        `held` means live would risk carrying an unprotected position; asserting
-        it means dead would flag every bracketed position and halt trading on a
-        false alarm. Both are worse than naming the ambiguity, so the ambiguity
-        is what it returns: {symbol: status} for any position whose best stop is
-        not in a confirmed-working state.
-
-        Callers should treat an entry here as "do not carry overnight without
-        resolving it", not as "flatten immediately".
-        """
-        q = urllib.parse.urlencode({"status": "all", "limit": "200",
-                                    "direction": "desc", "nested": "true"})
-        rows = self._request("GET", f"{self.base}/v2/orders?{q}")
-        best: Dict[str, str] = {}
-        for o in rows:
-            for c in [o] + list(o.get("legs") or []):
-                if c.get("type") not in self.STOP_TYPES:
-                    continue
-                st = (c.get("status") or "").lower()
-                if st not in self.ACTIVE_STATUSES:
-                    continue
-                sym = o.get("symbol")
-                # A confirmed status wins over held; we want each symbol's
-                # BEST evidence, not its first.
-                if best.get(sym) not in self.CONFIRMED_STOP_STATUSES:
-                    best[sym] = st
-        held = {}
-        for pos in self.positions():
-            st = best.get(pos["symbol"])
-            if st is not None and st not in self.CONFIRMED_STOP_STATUSES:
-                held[pos["symbol"]] = st
-        return held
 
     def fills_since(self, after: str) -> List[Dict]:
         """Every fill the BROKER reports since `after` (an ISO date or stamp).

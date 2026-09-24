@@ -242,16 +242,6 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
     acct = broker.account()
     positions = broker.positions()
     unprotected = broker.positions_without_stops()
-    # A stop that is still `held` after its parent FILLED is not confirmed
-    # protection, and the evidence says so (see the block above
-    # positions_with_unconfirmed_stops). Carried in the snapshot so the
-    # management firings can act on it; `preclose` treats it as blocking.
-    unconfirmed = {}
-    if hasattr(broker, "positions_with_unconfirmed_stops"):
-        try:
-            unconfirmed = broker.positions_with_unconfirmed_stops()
-        except Exception as e:
-            notes.append(f"could not check stop confirmation: {str(e)[:100]}")
 
     if acct["trading_blocked"]:
         notes.append("BROKER REPORTS trading_blocked — stop")
@@ -302,13 +292,6 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
             notes.append(f"at broker but NOT in ledger: {sorted(only_broker)}")
     if unprotected:
         notes.append(f"positions with NO resting stop: {unprotected}")
-    for sym, st in (unconfirmed or {}).items():
-        notes.append(
-            f"UNCONFIRMED STOP on {sym}: the stop leg is still '{st}' after its "
-            f"parent filled. Alpaca's docs say a bracket's exit legs become "
-            f"active once the entry is completely filled, and '{st}' is not in "
-            f"its documented status list at all. Treat as unprotected until "
-            f"established otherwise.")
 
     halt_at = max(DRIFT_HALT_ABS, DRIFT_HALT_PCT * (acct["equity"] or 0.0))
     single_halts = drift is not None and abs(drift) > halt_at
@@ -325,7 +308,6 @@ def reconcile(broker, ledger: Dict) -> Tuple[bool, List[str], Dict]:
           and not drift_halts)
     return ok, notes, {"equity": acct["equity"], "cash": acct["cash"],
                        "positions": positions, "unprotected": unprotected,
-                       "unconfirmed_stops": unconfirmed,
                        "daytrades": acct["daytrade_count"],
                        "cash_drift": drift,
                        "cash_drift_today": cum if n_prior else drift,
@@ -576,11 +558,6 @@ def cmd_close(args) -> int:
         escalations.append("the ledger did not reconcile")
     if snap["unprotected"]:
         escalations.append(f"unprotected positions: {snap['unprotected']}")
-    if snap.get("unconfirmed_stops"):
-        escalations.append(
-            f"stops that never confirmed after their parent filled: "
-            f"{snap['unconfirmed_stops']} — carried overnight on an "
-            f"unverified protective order")
     if wk_pnl <= -DEFAULT.weekly_loss_halt_pct:
         escalations.append(f"weekly loss {wk_pnl:.2%}")
     if ro.closed_trades >= 20 and ro.expectancy_R <= 0:
@@ -662,34 +639,7 @@ def cmd_preclose(args) -> int:
             print("     Fix or flatten before the bell. Do not carry this.")
             return 1
 
-        # An UNCONFIRMED stop blocks the overnight carry just as a missing one
-        # does, and for a reason established from Alpaca's own documentation
-        # rather than from our reading of a status string:
-        #
-        #   "The second and third orders won't be active until the first order
-        #    is completely filled."
-        #   https://docs.alpaca.markets/us/docs/orders-at-alpaca
-        #
-        # So after a complete fill the legs are supposed to be ACTIVE. On
-        # 2026-09-23 DT's take-profit went `new` at the instant the parent
-        # filled and the stop did not — it stayed `held`, with `updated_at`
-        # still equal to its pre-fill `submitted_at`. And `held` is not in
-        # Alpaca's documented status list at all, so the API returns a state
-        # its own reference does not define.
-        #
-        # This still does not establish that such a stop fails to fire; it
-        # establishes that it is NOT the documented behaviour and cannot be
-        # relied upon. A gap does not wait for us to find out. Intraday this
-        # is a flag; overnight it is a refusal.
-        unconfirmed = snap.get("unconfirmed_stops") or {}
-        if unconfirmed:
-            print(f"  !! UNCONFIRMED STOP: {unconfirmed}")
-            print("     The parent filled but the stop leg never went active. "
-                  "Alpaca's docs say it should have.")
-            print("     Flatten, or replace it with a standalone stop, before "
-                  "the bell. Do not carry an unverified stop overnight.")
-            return 1
-        print("protection    : every position has a live, CONFIRMED stop")
+        print("protection    : every position has a live stop")
 
     anchor_cash(ledger, snap)
     ledger["working_orders"] = []

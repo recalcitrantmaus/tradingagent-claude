@@ -2167,6 +2167,12 @@ otherwise.
 
 ## 2026-09-23 — the first fill, and a stop that never went live
 
+> **WRONG, CORRECTED 2026-09-24.** `held` is the normal working state for a
+> stop leg, not a fault. The conclusion below was reached without the vendor's
+> own explanation, which was one forum thread away. See the correction that
+> follows this entry. The flatten it justified cost $0.37 on a misreading.
+
+
 Phase 2's first fill, and it produced three findings in twenty-four minutes.
 Authorized by recalcitrantmaus.
 
@@ -2333,3 +2339,76 @@ of an authorization; none was written. Loosening a protection on one
 observation, unattended, is the change this project least wants made. Filed as
 T-17 in `state/reviews/2026-09-23-wednesday-queue.md` with the test that would
 settle it.
+
+---
+
+## 2026-09-24 — correction: `held` was right all along
+
+recalcitrantmaus opened `forum.alpaca.markets`. The answer was there, from Alpaca's own
+staff, and it reverses yesterday's conclusion.
+
+Dan Whitnable, Alpaca, in
+https://forum.alpaca.markets/t/half-of-bracket-order-held/2727 :
+
+> "Being 'held' simply means it hasn't been sent to the exchange yet."
+>
+> "Until the market price reaches that value, it is 'held'... In the
+> background, the price is being monitored. If/when the price reaches the
+> stop price then the stop-loss order will 'un-held'."
+>
+> "...the take-profit order is canceled and the stop loss order is now
+> submitted and the state is changed from 'held' to 'new'."
+>
+> "It is a bit disconcerting that 'held' orders show up under the 'closed'
+> section, but not to worry, they are truly being held (and not closed)."
+
+**So the asymmetry was correct behaviour.** A limit sell at 63.81 can rest on
+an exchange book, so it shows `new`. A stop at 55.80 cannot — a stop is not an
+exchange order until it triggers — so the broker monitors it and routes it on
+the trigger. Take-profit `new` alongside stop `held` is exactly what a working
+bracket looks like after its parent fills.
+
+Everything built on the other reading is removed: the `preclose` refusal,
+`positions_with_unconfirmed_stops()`, `CONFIRMED_STOP_STATUSES`, and the tests
+that encoded it. `held` stays in `ACTIVE_STATUSES` with the citation beside it
+and a test asserting it is there, because removing it would report every
+correctly-bracketed position as naked and session-close treats that as a
+flatten-or-fix event.
+
+### What this cost, and the part worth keeping
+
+DT was flattened at 58.10 against a 58.47 entry — **−$0.37, −0.139R, paid for
+a misreading.** The stop was working the whole time.
+
+The reasoning that led there was not unreasonable: Alpaca's docs say exit legs
+"won't be active until the first order is completely filled", `held` is absent
+from its documented status list, and the leg's `updated_at` never moved. Three
+true observations, and the inference from them was still wrong.
+
+**The lesson is about which kind of evidence was missing.** I had the vendor's
+reference documentation and reasoned from its silence. Silence in a reference
+is not evidence of anything — `held` being undocumented meant the docs were
+incomplete, not that the status was broken. The thing that settled it was an
+operator saying what the system does, and it existed the whole time behind a
+domain the environment blocked. When a control is about to act on an inference
+from absence, that is the moment to say so and go looking, rather than to
+harden the inference into code.
+
+A narrower version of the same point: yesterday's entry recorded the forum
+threads as "leads, not evidence" because they could not be read. That was the
+right instinct and the wrong response — the honest move was to treat the whole
+question as unresolved and NOT ship a refusal on it, rather than to ship the
+refusal and footnote the uncertainty.
+
+### Still open, and genuinely unresolved
+
+The second thread — https://forum.alpaca.markets/t/issues-with-bracket-orders-being-held/5023
+— has users reporting BOTH legs stuck `held` after a complete entry fill, where
+the limit should read `new`. Alpaca staff asked for order numbers and no
+resolution was recorded, across reports from March to September 2021. That is a
+different shape from what we saw and remains unexplained. Not worth a control
+until it is observed here.
+
+**Verified:** 229 tests. Live `preclose` exits 0 against the flat book.
+
+**Status:** active. Supersedes the 2026-09-23 entry above it.
