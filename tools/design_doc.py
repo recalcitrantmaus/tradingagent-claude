@@ -608,6 +608,23 @@ BUGS = [
   "Regression test B-22.",
   "2026-09-15 00:00", "2026-09-24 00:00", "2026-09-24 00:00", "9", "", "Fixed"),
 
+ ("B-31", "Reporting", "Medium",
+  "`tools/status.py` printed state['realized_pnl'], a field state.EMPTY "
+  "initialises to 0.0 and which NO live path ever writes — engine/portfolio.py "
+  "maintains its own in-memory counter that never reaches the ledger. The "
+  "screen CLAUDE.md names as the read before forming any market opinion "
+  "therefore reported realized P&L $0.00 on 2026-09-24 with a closed -$0.37 "
+  "DT trade in the fill log, which reads as 'the loss is unrealized'. Nothing "
+  "gated on it, so it cost no dollars; it cost the accuracy of the one screen "
+  "a human checks first. Same shape as the saturated metrics in T-8: a number "
+  "that cannot vary with what it claims to measure.",
+  "Derived from tools.review.closed_trades over the fill log, which is the "
+  "canonical record and already drops dry-run rows. The screen also now "
+  "prints the closed-trade count and measured expectancy against the Phase 2 "
+  "exit criterion (30+ at >= +0.10R), because expectancy on 1 trade read "
+  "without its n is the same kind of misleading. Regression test B-31.",
+  "2026-09-15 00:00", "2026-09-24 00:00", "2026-09-24 00:00", "9", "", "Fixed"),
+
  ("B-18", "Permissions", "High",
   "`python3 -m tools.paper_session --submit` is refused by the permission "
   "classifier as a real-world transaction, so the live session path cannot "

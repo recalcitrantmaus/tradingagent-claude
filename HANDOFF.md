@@ -5,129 +5,124 @@ every rule is committed here, and a new cloud session clones it and reads
 `CLAUDE.md` automatically. You do not need the old conversation to continue;
 you need this file and the docs it points at.
 
-Last updated: 2026-09-15, end of the Phase 2 preflight session.
+Last updated: **2026-09-24**, end of the Thursday build session.
+Develop on `claude/trading-agent-robinhood-cb9xo7`.
 
 ## Where we are
 
 | | |
 |---|---|
-| Phase | **2 preflight complete. Day 1 is Wed 2026-09-16, attended.** |
-| Account | $300 paper, **verified against the broker**. Never traded. Risk state `NORMAL`. |
-| Network | **Open.** Custom allowlist applied and verified. |
-| Broker | **Alpaca paper keys verified.** `/v2/account` returns equity $300.00, cash $300.00. |
-| Tests | 49 passing |
-| Live orders | **None, ever.** Nothing has touched a real or paper broker yet. |
-| Routines | **None created.** Deliberate — see "How day 1 runs" below. |
+| Phase | **2, week 2. Live paper trading.** |
+| Account | **$299.62** paper, flat, risk state `NORMAL`. Verified against the broker 2026-09-24. |
+| Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
+| Tests | **423 passing**, incl. an e2e spine and one regression test per shipped defect |
+| Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
+| Routines | **None scheduled.** Friday 2026-09-25 is unarmed. |
+| Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
 
-## First three commands in a new session
+**Run this first, and believe it over this file:**
 
 ```bash
-python3 -m tools.preflight_phase2      # network, keys, model, tests, state, data
-python3 -m tools.trading_day open      # reconcile, mark, halt check
-python3 -m tools.model_check           # what this session is cleared to do
+python3 -m tools.preflight_phase2    # network, keys, model, tests, state, data
+python3 -m tools.status              # equity, realized P&L, expectancy, stops
+python3 -m tools.trading_day open    # non-zero means DO NOT TRADE
 ```
 
-If `preflight_phase2` exits non-zero, fix what it names before anything else.
+## The two things a fresh session cannot work out for itself
 
-## What the preflight session settled
+**1. You do not know which model you are.** `TRADING_AGENT_MODEL` is an
+environment default — one value for every session here — and preflight says so
+out loud. For any **blocking** task (weekly-review, rule-promotion,
+post-halt-review, unlock-authorization) read the real value from the session
+record (`get_session` → `session_context.model` and
+`external_metadata.last_served_model`) and pass it with `--model`.
 
-All of this was verified on 2026-09-15 after the close. It is evidence, not
-assumption — re-run anything you doubt.
+**2. You may never write your own `--authorization`.** That string is the
+authorising human's, in their own words, and it is appended to
+`state/authorizations.jsonl` with the session id. The gate is **attributable,
+not enforceable** — nothing in-process can establish that a human is present,
+and the first attempt at detecting one read an environment variable and never
+once bound (M-22/M-26). A trivial or previously-used string is refused, so it
+cannot be baked into a Routine prompt. If nobody is there to type it, leave the
+task for a session where somebody is.
 
-1. **The Alpaca paper keys work.** This was the top open question at the end of
-   Phase 1 and it is now closed. `ALPACA_API_KEY_ID` and
-   `ALPACA_API_SECRET_KEY` are both present and authenticate against
-   `paper-api.alpaca.markets`. The account reads $300.00 equity, matching the
-   deliberate reset — Alpaca's $100k default would have invalidated every
-   sizing decision Phase 2 is meant to measure.
-2. **The risk gates fire correctly at $300.** Synthetic proposals were pushed
-   through `RiskOfficer.evaluate` read-only:
+## What the live week actually produced
 
-   | Case | Result |
-   |---|---|
-   | Equity, 5% stop | approved, 6 shares, risking $3.60 = 1.20% of equity |
-   | No stop supplied | rejected — "every entry must define its exit" |
-   | Stop above entry | rejected — "stop is not below entry" |
-   | Option, 30 DTE, defined risk | rejected — below the $1,500 option floor |
-   | SPY at $757.44 | rejected — size rounds to zero |
+**One fill, and it was instructive.** DT filled at $58.47 on 2026-09-23 and was
+flattened at $58.10 — **−$0.37, −0.139R**. The flatten was a mistake of mine,
+not a stop: I had shipped a pre-close refusal on Alpaca order status `held`,
+reading it as "the stop never went live". Alpaca staff confirm the opposite —
+`held` means the broker is monitoring the stop and has not routed it to an
+exchange yet, which is the **normal working state** for a resting stop. DT
+never traded below 57.39 that day, so holding would have been −0.075R; the
+flatten cost about 0.064R. Reverted in full; five tests now pin `held` as
+valid, and `ACTIVE_STATUSES` carries the staff quotes inline so nobody
+re-litigates it.
 
-3. **SPY is untradeable at $300, and so is anything like it.** One share costs
-   more than twice the account. The tradeable universe at this capital level is
-   low-priced names, which is a real constraint on what the trade-plan skill
-   can propose — not a bug to route around.
-4. **The pipeline runs end to end.** `tools.paper_session --dry-run` reconciled
-   against the broker and returned no proposals. An empty plan is a valid
-   outcome and should not be treated as a failure to find something.
-5. **The model-routing env var did not match the model the session actually
-   ran.** `model_check` reports whatever `TRADING_AGENT_MODEL` says, and
-   nothing in the environment lets a script verify that claim independently —
-   `current_model()` reads only that variable or `ANTHROPIC_MODEL`. Effort is
-   verifiable (`CLAUDE_EFFORT` exists and agreed); model is not. The variable
-   is left as-is because it is correct for the daily-loop Routine specified in
-   `docs/07-deployment.md`. **Do not trust `model_check`'s model line in an
-   ad-hoc session** — confirm the session's real model out of band and record
-   that in the journal. This failed safe here (it under-claimed, blocking
-   Opus-tier tasks rather than permitting them), but a binding control that
-   cannot verify its own input is the weakest link in the routing policy.
+The transferable part is the epistemics: I reasoned from **silence in a
+reference**. `held` is absent from Alpaca's own documented status list, and I
+read absence as malfunction. Silence in a reference means the reference is
+incomplete. The right response to an unreadable source was to treat the
+question as unresolved and **not ship a refusal on it**.
 
-   > **Correction, 2026-09-21 close: the effort half is no longer true.**
-   > `engine/model_policy.py:127` reads `TRADING_AGENT_EFFORT`, not
-   > `CLAUDE_EFFORT`, and nothing in the repository reads `CLAUDE_EFFORT` at
-   > all. On 2026-09-21 they disagreed — `TRADING_AGENT_EFFORT=xhigh` while the
-   > harness reported `CLAUDE_EFFORT=high` — so `model_check` and
-   > `preflight_phase2` both cleared "at effort xhigh" on an unverified
-   > declaration. **Both inputs to the routing gate are now operator
-   > declarations, and both fail in the over-claiming direction.** Do not read
-   > the sentence above as licence to trust the effort line either. Finding and
-   > proposed fix: `state/reviews/2026-09-21-eod-queue.md` item 17. Not fixed —
-   > it needs a test and a session cleared to touch `engine/`.
+## Rules added this week (all tested, all in `engine/`)
 
-## How the first week runs
+- **Aggregate open risk ≤ 4% of equity**, measured from the current price
+  across the whole book. Without it, 4 positions × 2% put 8% at risk — twice
+  the daily breaker — and the breakers cannot help, because they stop *new*
+  trades and cannot unwind stops already resting.
+- **Size tapers across concurrent positions**: 2.00%, 1.00%, 0.50%, 0.25%
+  (`correlated_risk_decay = 0.5`). This is "conservative on most, let one run"
+  expressed as **size** rather than as targets — a target controls upside while
+  size and the stop control loss, so trimming targets on the also-rans would
+  forfeit their winners and keep their full downside. Swept at 3000 seeds:
+  worst drawdown 20.9% → 17.8%, locked accounts 15/3000 → 0.
+- **Diversification is not available to this book.** Measured 2026-09-22,
+  60-day return correlation across the day's own signals ran **0.45–0.83**,
+  including a space name and a broad-market ETF. Limit the total; do not expect
+  picking different names to do it. Known side effect: whole-share rounding
+  means the tapered 2nd and 3rd budgets can only afford low-volatility names
+  (open as T-7).
+- **Trading dates key on America/New_York**, not UTC.
+- **Opus floor at the open, pre-close and close.** The risk engine protects
+  against bad decisions; it cannot protect against bad *data*, and a proposal
+  built on a wrong number passes every gate because size, stop and expected R
+  are all computed correctly from it.
 
-**Wednesday 2026-09-16 traded nothing.** The 09:45 firing came up in an empty
-container — a Routine created through `create_trigger` carries no git source —
-and the salvaged session was dry-run only. Read
-`docs/10-runtime-requirements.md` before touching the schedule, and
-`state/rehearsals/2026-09-16.md` for what that rehearsal found: three controls
-that were not controls, now fixed and tested.
+## Six years of data now sit behind the entry rule
 
-**Thursday 2026-09-17 is the first session that will ever submit a live order.**
-The originally-planned Thursday review was scrapped in favour of trading it.
-Friday is armed with the same shape; a human reviews between them.
+`tools/pit_study.py --fetch` caches 2,472 symbols from 2020-07 (51 MB, the IEX
+feed's start). `tools.multiyear` and `tools.multiproxy` re-run the entry and
+proxy studies year by year off one cache load.
 
-| When (ET) | Thu 09-17 | Fri 09-18 |
-|---|---|---|
-| 09:45 | preflight, open, brief, news, plan, dry run, **submit** | same |
-| 12:30 | manage — trail, scale out, exit broken theses. No new entries. | same |
-| 15:30 | manage + explicit carry-or-flatten per position | + **weekend** carry decision |
-| 16:05 | close, journal, plain-language summary for a human | + `trading_day week` |
+**The headline: chase beats retest, and my one-year "correction" was noise.**
+2026 alone said retest won; six years say the opposite, and 2026 is the single
+year that behaved differently. Quote the **year-level** t, never the pooled
+one — pooling 13,912 trades pretends they are 13,912 independent draws when
+trades inside one year share a market.
 
-Each day has its **own** runner session with the repository attached
-(`create_session(source_url=…, outcome_branch=…)`, then triggers bound with
-`persistent_session_id`). One runner per trading day, never one spanning a
-week — context accumulates within a session, and each day's judgement should
-come from the committed record rather than from yesterday's conversation.
+No signal-time feature separates the breakouts that never pull back from the
+ones that do. `breakout_%` predicts the *label* strongly and the *return* not
+at all, because within the no-pullback group it predicts return negatively and
+the two effects cancel.
 
-Verified end to end on 2026-09-16: trigger delivery into a repo-attached
-session succeeds, and the source and state survive a container re-provision.
+## Testing is now a binding cadence, not a habit
 
-### Where the outcomes are
+See **CLAUDE.md → Verification → "When to run what"**. In short: module edit →
+the tests naming it; `engine/` edit → whole suite + sim; major update → whole
+suite + the e2e spine; **any defect → a regression test first**; before a
+commit → the suite **as its own command**, never chained into `&&` (that is how
+a commit went out over a red suite on 2026-09-23).
 
-Every session commits and pushes before it ends, so **the repository is the
-record** — `state/briefs/`, `state/news/`, `state/plans/`, `state/reports/`,
-`state/rehearsals/`, `state/ledger.json`, `state/fills.jsonl`. The close
-session also writes `state/reports/<date>-summary.md` in plain language for
-someone who has not been watching.
+```bash
+python3 -m unittest discover -s tests -t .   # the -t . is load-bearing
+```
 
-Two limits of this shape, both deliberate:
-
-- **No push or email notifications.** The server rejects `notifications` on a
-  `persistent_session_id` Routine; only fresh-session-per-fire Routines accept
-  them, and those cannot carry a repo. Rebuilding the Routines in the claude.ai
-  Routines UI gets fresh sessions, notifications, *and* the connectors Phase 3
-  needs — it remains the better long-term home.
-- **A failed session is silent.** Nothing pushed means nothing ran. Check the
-  broker directly before assuming a quiet day was an uneventful one.
+**Without `-t .`** unittest imports test modules as top-level modules,
+`tests/__init__.py` never runs, and the suite writes to the **real** `state/`
+directory. A test wrote a phantom BUY into `state/fills.jsonl` that way on
+2026-09-24. One test now fails loudly if the sandbox was not in force, and a
+repo-wide invariant test refuses any invocation missing the flag.
 
 ## The universe, and why two sessions found nothing
 
@@ -195,48 +190,32 @@ They now name the working ones explicitly. **Building a capability and wiring
 it into the skill that needs it are two separate jobs**, and only the second
 one changes what a session actually does.
 
-## After Friday: a second week, and what it has to answer
+## What is still unproven
 
-Week one produced almost no trading data. Wednesday was lost to a scheduling
-defect, Thursday was a deliberate `RISK_OFF`, and Friday is the first session
-with a real universe, working sources and a proven order path. **Zero closed
-trades is zero evidence about the only question Phase 2 exists to answer** —
-whether model-generated theses have positive expectancy. The week's real
-output was infrastructure, and infrastructure is not the exit criterion.
-
-The plan is a second full week of testing before any deployment planning. It
-should be designed around what is still unproven rather than repeated as-is:
+The only question Phase 2 exists to answer is whether model-generated theses
+have positive expectancy, and **one closed trade is not evidence**. Also still
+unproven:
 
 - the posture gate blocking a **real** order (only the `RISK_OFF` tightening
   path has run)
-- an empty plan binding against a scanner that **disagrees** (both times so
-  far, the scanner agreed by coincidence)
-- an engine-sized order reaching a **fill** — the smoke test proved the
-  broker accepts a bracket, not that the whole chain works on an order
-  somebody wanted
-- the management path actually **managing** something: trailing, scaling out,
-  an overnight carry decision with a position on
-- whether the strategy or the R >= 1.5 threshold, rather than the plumbing, is
+- an empty plan binding against a scanner that **disagrees**
+- the management path actually managing: trailing, scaling out, an overnight
+  carry with a position on
+- whether the strategy or the R ≥ 1.5 threshold, rather than the plumbing, is
   what keeps the plan empty
 
-### The Routine shape has to change for a week
+## Open queue, carried into Friday
 
-This week's triggers are one-shots bound to a **per-day runner session**. That
-does not scale to five days:
-
-- context accumulates inside a session, so one runner cannot span a week;
-  each trading day needs its own, which means creating them by hand
-- `notifications` are rejected on a `persistent_session_id` Routine, so
-  reports land in the session rather than on a phone
-- Routines created in-session store **no MCP connectors**, which is inert for
-  Alpaca over HTTPS but disqualifying for Robinhood over MCP in Phase 3
-
-**Recurring Routines created in the claude.ai Routines UI with the repository
-attached** solve all three: fresh session per firing, notifications, and the
-connectors Phase 3 needs. That is the recommended shape for week two, and it
-is the same setup Phase 3 requires, so it is worth doing once properly.
-See `docs/10-runtime-requirements.md` for why the repo must be attached at
-session start and cannot be cloned on demand.
+| | |
+|---|---|
+| **T-7** | the size taper biases the 2nd and 3rd slots to low-volatility names (whole-share rounding) |
+| **T-10** | `recheck()` is written, tested and **parked, uncalled** — activate at a session END, never mid-day |
+| **T-15** | preflight reports declared, not harness-verified, effort |
+| **T-16** | Yahoo cross-check rate-limits under load; must never gate a trading day |
+| **W-1..W-3** | the day-trade budget has never counted anything |
+| **M-7** | short entry bypasses the risk gate |
+| **M-8 / M-18 / M-9** | see `state/reviews/2026-09-23-wednesday-close-queue.md` |
+| housekeeping | orphan branch `claude/wizardly-carson-5qjgn5` needs deleting — I get 403, a human must do it |
 
 ## Model routing in practice
 
@@ -298,7 +277,29 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-Phase 2 day 1, attended, Wednesday at the open — then the rest of the week.
+**Friday 2026-09-25 is unarmed — no Routines are scheduled.** Arming it is the
+first decision of the next session. The agreed shape:
+
+| When (ET) | Model | What |
+|---|---|---|
+| 09:45 | **Opus @ xhigh** | preflight, open, brief, news, plan, submit |
+| 12:30 | Sonnet @ xhigh | manage only — trail, scale out, exit broken theses. No new entries. |
+| 15:30 | **Opus @ xhigh** | pre-close: carry-or-flatten per position, overnight gap risk |
+| 16:05 | **Opus @ xhigh** | close, journal, summary in plain language |
+
+Two standing decisions about the schedule:
+
+- **If nothing trades at the open, cancel the rest of that day except the
+  close.** Until something fills, the extra firings produce no testing.
+- A Routine created through `create_trigger` **carries no git source** — it
+  inherits the environment, not the repo — and an unattended session cannot
+  clone its way out, because the repo is private and `git clone` needs an
+  approval nobody is there to give. Attach the repository at session start, or
+  build the Routine in the claude.ai Routines UI with the repo attached. See
+  `docs/10-runtime-requirements.md`. One-shot Routines do not appear in the UI
+  even when they exist; `list_triggers` is the truth.
+- A Routine's prompt can only be edited **from the session it posts into**.
+
 Runbook: `docs/09-phase2-runbook.md`. Exit criteria are in there and in
 `docs/07-deployment.md` — 30+ closed trades, positive expectancy, zero
 guardrail breaches, costs below gains. **Hitting +5% in a week is not one of

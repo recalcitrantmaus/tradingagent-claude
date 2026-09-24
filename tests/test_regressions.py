@@ -143,6 +143,28 @@ class TestShapeB_ChecksThatCouldNotFail(unittest.TestCase):
 
 class TestShapeC_DataThatMeantSomethingElse(unittest.TestCase):
 
+    def test_B31_realized_pnl_on_the_status_screen_can_actually_vary(self):
+        # tools/status.py printed state["realized_pnl"], which state.EMPTY
+        # sets to 0.0 and which NOTHING in any live path ever writes —
+        # engine/portfolio.py keeps its own in-memory counter that never
+        # reaches the ledger. The screen CLAUDE.md says to read before forming
+        # any market opinion therefore reported $0.00 with a closed -$0.37
+        # trade in the fill log: a loss that reads as unrealized.
+        from tools import state as _st, status as _status
+        fills = [{"symbol": "DT", "side": "buy", "qty": 1.0, "price": 58.47,
+                  "stop": 55.80, "ts": "2026-09-23T14:04:57Z"},
+                 {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 58.10,
+                  "ts": "2026-09-23T14:28:52Z"}]
+        led = dict(_st.EMPTY, realized_pnl=0.0)     # the dead field, as shipped
+        buf = io.StringIO()
+        with mock.patch.object(_st, "load", return_value=led), \
+             mock.patch.object(_st, "read_fills", return_value=fills), \
+             mock.patch.object(sys, "argv", ["status"]), \
+             contextlib.redirect_stdout(buf):
+            _status.main()
+        self.assertIn("-0.37", buf.getvalue())
+
+
     def test_M30_the_breakout_level_comes_from_bars_and_the_price_does_not(self):
         # IEX is one venue at ~3.8% of consolidated volume. It cannot misprice
         # a mean but it misprices an EXTREMUM, which is the only statistic the

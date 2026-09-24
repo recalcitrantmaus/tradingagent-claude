@@ -56,7 +56,8 @@ def run_main(fn, argv=None):
 class StatusTests(unittest.TestCase):
 
     def test_a_normal_account_exits_zero(self):
-        with mock.patch.object(state, "load", return_value=ledger()):
+        with mock.patch.object(state, "load", return_value=ledger()), \
+             mock.patch.object(state, "read_fills", return_value=[]):
             rc, out = run_main(status.main)
         self.assertEqual(rc, 0)
         self.assertIn("NORMAL", out)
@@ -87,6 +88,55 @@ class StatusTests(unittest.TestCase):
         self.assertIn("MISSING", out)
         self.assertIn("DT", out)
         self.assertIn("no stop", out.lower())
+
+    def test_realized_pnl_comes_from_the_fill_log_not_the_dead_ledger_field(self):
+        """state["realized_pnl"] is initialised to 0.0 and written by nothing.
+        On 2026-09-24 the screen read before every market opinion printed
+        $0.00 with a closed -$0.37 trade in the log, which reads as "the loss
+        is unrealized"."""
+        fills = [
+            {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 58.47,
+             "stop": 55.80, "ts": "2026-09-23T14:04:57Z"},
+            {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 58.10,
+             "ts": "2026-09-23T14:28:52Z"},
+        ]
+        with mock.patch.object(state, "load", return_value=ledger()), \
+             mock.patch.object(state, "read_fills", return_value=fills):
+            _, out = run_main(status.main)
+        self.assertIn("-0.37", out)
+        self.assertIn("1 closed trade", out)
+        self.assertNotIn("realized P&L    : $0.00", out)
+
+    def test_a_dry_run_fill_never_reaches_the_realized_number(self):
+        """closed_trades drops dry-run records; the screen must inherit that,
+        or a previewed ticket shows up as realized money."""
+        fills = [
+            {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 10.0,
+             "stop": 9.0, "ts": "2026-09-23T14:04:57Z", "dry_run": True},
+            {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 99.0,
+             "ts": "2026-09-23T14:28:52Z", "dry_run": True},
+        ]
+        with mock.patch.object(state, "load", return_value=ledger()), \
+             mock.patch.object(state, "read_fills", return_value=fills):
+            _, out = run_main(status.main)
+        self.assertIn("(0 closed trades)", out)
+        self.assertNotIn("expectancy", out)
+
+    def test_expectancy_is_reported_against_the_exit_criterion(self):
+        """30+ closed trades at >= +0.10R is the Phase 2 exit criterion and
+        the option unlock. Printing expectancy without it invites reading a
+        good number on 2 trades as progress."""
+        fills = [
+            {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 100.0,
+             "stop": 90.0, "ts": "2026-09-23T14:04:57Z"},
+            {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 110.0,
+             "ts": "2026-09-23T14:28:52Z"},
+        ]
+        with mock.patch.object(state, "load", return_value=ledger()), \
+             mock.patch.object(state, "read_fills", return_value=fills):
+            _, out = run_main(status.main)
+        self.assertIn("+1.000R", out)
+        self.assertIn("30+", out)
 
     def test_a_never_reconciled_ledger_says_do_not_trade(self):
         with mock.patch.object(state, "load",
