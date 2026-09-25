@@ -117,9 +117,16 @@ It checks the network policy, the broker keys, model routing, the risk-engine
 tests, the account's halt state and live data, and names the fix for anything
 that fails. Exit code 1 means do not trade.
 
-**Environment variables are snapshotted at session start.** The network policy
-is enforced at the proxy and applies to a running session immediately;
-environment variables are not. A session never sees a variable added after it
+**Environment variables are snapshotted at session start — with one exception
+that matters.** `CLAUDE_EFFORT` tracks the **turn**, not the session: measured
+`high` at 13:39Z and `medium` at 20:07Z inside one session on 2026-09-22. So a
+routing check taken at task start does not describe the turn that performs the
+write, which is why a blocking task re-checks its floor at the write
+(`model_check <task> --at-write`, T-10 in `docs/04-lessons.md`). Everything
+else below holds.
+
+The network policy is enforced at the proxy and applies to a running session
+immediately; environment variables are not. A session never sees a variable added after it
 started, so adding broker keys or changing `TRADING_AGENT_MODEL` always
 requires a **new session**, not `/model`. `/model sonnet` changes this
 session's model without picking up any environment change — which is exactly

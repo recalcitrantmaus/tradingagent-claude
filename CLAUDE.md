@@ -26,6 +26,11 @@ variables are snapshotted at session start: a variable added to the
 environment after this session began is invisible to it, and only a new
 session picks it up. The network policy is different — that applies live.
 
+**`CLAUDE_EFFORT` is the exception, and it matters.** It tracks the *turn*, not
+the session — measured `high` at 13:39Z and `medium` at 20:07Z inside one
+session on 2026-09-22. Anything that reads it once and treats the answer as a
+property of the session is wrong. See "Re-check the floor at the write" below.
+
 If the risk state is not `NORMAL`, you do not get a market opinion. You
 manage open positions, write the brief noting the halt, and stop. `LOCKED`
 can only be cleared by a human via `RiskOfficer.unlock(authorization)`.
@@ -143,6 +148,36 @@ appended to `state/authorizations.jsonl` with the session id and timestamp.
 python3 -m tools.model_check rule-promotion --model claude-opus-5 \
     --authorization "recalcitrantmaus: promote the 2% cap change, evidence in docs/04"
 ```
+
+### Re-check the floor at the write (binding, T-10)
+
+`model_check` clears a task **once, at its start.** Because `CLAUDE_EFFORT`
+tracks the turn, a blocking task that cleared at xhigh can perform its durable
+write several turns later at medium, with no signal at all — `session-close`
+ran two notches below its floor on 2026-09-22 and only the journal caught it. A
+point-in-time check on a per-turn value certifies **the turn it was taken in,
+not the write.**
+
+So for a blocking task — weekly-review, rule-promotion, post-halt-review,
+unlock-authorization — run this **immediately before each durable write**: the
+`engine/config.py` edit, the SKILL.md write, the `docs/04-lessons.md` entry.
+Not at task start. Where a downgrade would actually cost something.
+
+```
+python3 -m tools.model_check rule-promotion --at-write --started-at xhigh
+```
+
+**Exit 1 means abandon that write.** Do not finish "just this one" — a rule
+promoted below its floor is exactly the cost this priced. Say what you were
+about to write, and leave it for a session that holds the floor.
+
+This is a procedure, not an interlock, and is recorded as the weaker thing it
+is: the writes it guards are made with file tools, so there is no line of code
+to hook. The one blocking write that *is* a function call —
+`RiskOfficer.unlock()`, which re-arms an account the breakers took offline —
+re-checks the floor itself and raises `EffortFloorRefusal`. A locked account
+therefore cannot be cleared below `max` effort, and the lock stays on until a
+session that holds it runs the unlock.
 
 A trivial authorization ("ok", "approved") is refused, and so is one used
 before, verbatim — so it cannot be baked into a Routine prompt and fired on a

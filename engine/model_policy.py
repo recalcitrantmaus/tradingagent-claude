@@ -389,15 +389,10 @@ def check(task: str, model: Optional[str] = None,
 
 
 # ======================================================================
-# T-10 — PARKED, NOT WIRED IN. Activate at the end of a session, deliberately.
+# T-10 — ACTIVE since 2026-09-25. Two call sites, both at a durable write.
 # ======================================================================
 #
-# Nothing calls `recheck()` yet. That is on purpose: recalcitrantmaus asked for the fix
-# to be parked and incorporated at the end of a session rather than dropped
-# into a live trading day, and a gate that starts refusing mid-session
-# without anyone expecting it is its own incident.
-#
-# THE FINDING. CLAUDE.md says environment variables are snapshotted at session
+# THE FINDING. CLAUDE.md said environment variables are snapshotted at session
 # start. That is NOT true of `CLAUDE_EFFORT`. Measured within one session on
 # 2026-09-22:
 #
@@ -405,30 +400,36 @@ def check(task: str, model: Optional[str] = None,
 #     20:07Z  CLAUDE_EFFORT=medium
 #
 # It tracks the TURN. For M-17 that is good news — the value chosen as the
-# measurement really does measure. The problem is what it implies for the
-# gate: `check()` runs ONCE, at the start of a task, and nothing re-reads it.
-# A blocking task that clears at xhigh can perform its durable write at medium
-# with no signal at all. On 2026-09-22 `session-close` ran two notches below
-# its floor and only the journal recorded it.
+# measurement really does measure. The problem was what it implied for the
+# gate: `check()` runs ONCE, at the start of a task, and nothing re-read it.
+# A blocking task that cleared at xhigh could perform its durable write at
+# medium with no signal at all. On 2026-09-22 `session-close` ran two notches
+# below its floor and only the journal recorded it.
 #
 # A point-in-time check on a per-turn value certifies the turn it was taken
-# in, not the task. This is the third member of a family found in two days:
-# attendance is a property of the turn (M-22/M-26), effort is a property of
-# the turn, and both were being read as though they described a session.
+# in, not the task. Third member of a family found in two days: attendance is
+# a property of the turn (M-22/M-26), effort is a property of the turn, and
+# both were read as though they described a session.
 #
-# WHAT THIS DOES NOT DO. It does not re-verify the model. Passing `--model` is
-# a human's act and the authorization is already recorded and single-use; the
-# model does not silently change under a session the way effort does. Only the
-# value that actually moves is re-read.
+# WHERE IT BINDS.
+#   1. `engine/risk.py` -> `RiskOfficer.unlock()`. The only durable write a
+#      blocking task performs as a FUNCTION CALL, and the most consequential
+#      one in the system: it re-arms an account the breakers took offline.
+#      Refuses with EffortFloorRefusal; the lock stays until a session at the
+#      required effort runs it.
+#   2. `python3 -m tools.model_check <task> --at-write`. The other durable
+#      writes — the engine/config.py edit, the SKILL.md write, the
+#      docs/04-lessons.md entry — are made by the agent with file tools, so
+#      there is no line of Python to hook. The gate is a command the agent
+#      must run immediately before the write, and exit 1 means abandon it.
+#      That is weaker than (1) by construction: it is a procedure, not an
+#      interlock. It is recorded as such rather than dressed up.
 #
-# TO ACTIVATE, at the end of a session, not during one:
-#   1. Call `recheck(task, effort_floor_of(task))` immediately before each
-#      DURABLE WRITE in a blocking task — the `engine/config.py` edit, the
-#      SKILL.md write, the docs/04-lessons.md entry — not at task start.
-#      That is where a downgrade would actually cost something.
-#   2. On a False, abandon the write and say so. Do not finish "just this
-#      one" — a rule promoted at medium is exactly the cost M-17 priced.
-#   3. Delete this banner and add the call sites to the tests.
+# WHAT IT DOES NOT DO. It does not re-verify the model. Passing `--model` is a
+# human's act and the authorization is already recorded and single-use; the
+# model does not silently change under a session the way effort does. Adding
+# a second place to assert a model would add a second place to fabricate one
+# and detect nothing. Only the value that actually moves is re-read.
 
 
 def recheck(task: str, started_at_effort: Optional[str] = None

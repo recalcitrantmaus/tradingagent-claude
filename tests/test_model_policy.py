@@ -263,11 +263,10 @@ class TestOverrideMustBeAuthorised(unittest.TestCase):
         self.assertTrue(ok)
 
 
-class TestParkedEffortRecheck(unittest.TestCase):
-    """T-10, PARKED. Nothing calls recheck() yet — recalcitrantmaus asked for the fix to
-    be incorporated deliberately at the end of a session rather than dropped
-    into a live trading day. Tested anyway: parked is not the same as unproven,
-    and the activation should be a one-line change, not a debugging session.
+class TestEffortRecheck(unittest.TestCase):
+    """T-10, ACTIVE since 2026-09-25 (was parked at recalcitrantmaus's request so it
+    would be wired in deliberately rather than dropped into a live trading
+    day).
 
     The finding: CLAUDE_EFFORT tracks the TURN, not the session. Measured
     13:39Z high and 20:07Z medium inside one session on 2026-09-22, which
@@ -310,19 +309,21 @@ class TestParkedEffortRecheck(unittest.TestCase):
             ok, _ = recheck("execution", started_at_effort="xhigh")
         self.assertTrue(ok)
 
-    def test_it_is_still_parked(self):
-        """Fails the moment someone wires it in — the reminder to delete the
-        banner, add the call sites and test them.
+    def test_it_is_wired_in_at_both_durable_writes(self):
+        """The inverse of the guard this replaces, which asserted recheck()
+        was called NOWHERE and failed the moment it was activated. Now it
+        pins the activation: silently dropping either call site puts the
+        finding back with the code still present and still tested, which is
+        the most flattering way for a control to die.
 
-        Parsed, not grepped. The first version matched the string "recheck()"
-        anywhere in a .py file and went red on a PROSE mention inside
-        tools/design_doc.py's bug description. A grep for a name is not a
-        check for a call, which is the same mistake this module keeps
-        recording: measuring something adjacent to the thing you care about.
+        Parsed, not grepped. An earlier version matched the string "recheck()"
+        anywhere in a .py file and went red on a PROSE mention in
+        tools/design_doc.py's bug description. A grep for a name is not a check
+        for a call — the same mistake this module keeps recording.
         """
         import ast
         root = Path(__file__).resolve().parents[1]
-        live = []
+        sites = {}
         for path in list((root / "engine").rglob("*.py")) + \
                     list((root / "tools").rglob("*.py")):
             try:
@@ -336,5 +337,59 @@ class TestParkedEffortRecheck(unittest.TestCase):
                 name = (f.id if isinstance(f, ast.Name)
                         else f.attr if isinstance(f, ast.Attribute) else None)
                 if name == "recheck":
-                    live.append(f"{path.relative_to(root)}:{node.lineno}")
-        self.assertEqual(live, [], f"recheck() is wired in now: {live}")
+                    sites.setdefault(str(path.relative_to(root)), []).append(
+                        node.lineno)
+        self.assertIn("engine/risk.py", sites,
+                      "RiskOfficer.unlock() no longer re-checks the effort "
+                      "floor at the write — the account can be re-armed below "
+                      f"the unlock floor. Found: {sites}")
+        self.assertIn("tools/model_check.py", sites,
+                      "model_check --at-write no longer calls recheck(), so "
+                      f"the agent-side gate is inert. Found: {sites}")
+
+    def test_unlock_refuses_below_its_floor_and_leaves_the_lock_on(self):
+        """The interlock, end to end. unlock-authorization is Opus @ max, so
+        an xhigh turn must not be able to re-arm a locked account — and the
+        state must be UNCHANGED after the refusal, not half-cleared."""
+        from engine.config import DEFAULT
+        from engine.risk import EffortFloorRefusal, RiskOfficer, State
+        ro = RiskOfficer(DEFAULT)
+        ro.state = State.LOCKED
+        with env(CLAUDE_EFFORT="xhigh"):
+            with self.assertRaises(EffortFloorRefusal):
+                ro.unlock("recalcitrantmaus: reviewed the drawdown, resuming at half size")
+        self.assertEqual(ro.state, State.LOCKED)
+        self.assertEqual(ro.journal, [])
+
+    def test_unlock_succeeds_at_the_required_effort(self):
+        """The refusal has to be escapable by the legitimate route, or the
+        lock is permanent and the control is a bug."""
+        from engine.config import DEFAULT
+        from engine.risk import RiskOfficer, State
+        ro = RiskOfficer(DEFAULT)
+        ro.state = State.LOCKED
+        with env(CLAUDE_EFFORT="max"):
+            ro.unlock("recalcitrantmaus: reviewed the drawdown, resuming at half size")
+        self.assertEqual(ro.state, State.NORMAL)
+        self.assertTrue(any("by human" in m for m in ro.journal))
+
+    def test_an_empty_authorization_still_fails_before_the_effort_check(self):
+        """Order matters: a blank note is a bad ARGUMENT, not a policy
+        refusal, and must keep raising ValueError so callers can tell the two
+        apart.
+
+        Asserted at an effort BELOW the floor, where the two checks disagree.
+        The first version of this test ran at max, so both checks passed and
+        either ordering produced ValueError — it named the property and could
+        not distinguish it. Mutation-tested: swapping the two blocks scored
+        zero against that version.
+        """
+        from engine.config import DEFAULT
+        from engine.risk import EffortFloorRefusal, RiskOfficer, State
+        ro = RiskOfficer(DEFAULT)
+        ro.state = State.LOCKED
+        with env(CLAUDE_EFFORT="xhigh"):          # below the max floor
+            with self.assertRaises(ValueError) as caught:
+                ro.unlock("   ")
+        self.assertNotIsInstance(caught.exception, EffortFloorRefusal)
+        self.assertEqual(ro.state, State.LOCKED)

@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from engine.model_policy import (POLICY, check, model_and_source,
-                                 current_effort)
+from engine.model_policy import (POLICY, check, current_effort,
+                                 model_and_source, recheck)
 
 
 def main() -> int:
@@ -22,6 +22,16 @@ def main() -> int:
     ap.add_argument("task", nargs="?", help="task name; omit to list the policy")
     ap.add_argument("--model")
     ap.add_argument("--effort")
+    ap.add_argument("--at-write", action="store_true",
+                    help="re-check the EFFORT floor at a durable write, not "
+                         "at task start. Run this immediately before the "
+                         "config edit / SKILL.md write / lessons entry; exit 1 "
+                         "means abandon that write. CLAUDE_EFFORT tracks the "
+                         "turn, so a clearance taken at task start does not "
+                         "carry to a write several turns later.")
+    ap.add_argument("--started-at", default=None,
+                    help="the effort the task originally cleared at, so a "
+                         "move that stays above the floor is still reported")
     ap.add_argument("--authorization", default=None,
                     help="required with --model on a BLOCKING task: what is "
                          "being authorised and why, in the authorising "
@@ -55,6 +65,21 @@ def main() -> int:
               f"clearing a task nobody has defined a floor for.")
         print(f"     known tasks: {', '.join(sorted(POLICY))}")
         return 1
+
+    # --at-write is deliberately NOT a full check(). It re-reads only the
+    # value that actually moves between turns. The model does not silently
+    # change under a session, and --model is a human's act already recorded
+    # and single-use, so re-verifying it here would add a second place to
+    # fabricate an authorization and detect nothing.
+    if a.at_write:
+        ok, msgs = recheck(a.task, a.started_at)
+        for m in msgs or ["non-blocking task; nothing to re-check at the write"]:
+            print(("  ok: " if ok else "  !! ") + m)
+        if not ok:
+            print("  !! ABANDON THIS WRITE. Do not finish 'just this one' — a "
+                  "rule promoted below its floor is exactly the cost T-10 "
+                  "priced.")
+        return 0 if ok else 1
 
     ok, msgs = check(a.task, a.model, a.effort, a.authorization)
     for m in msgs:

@@ -85,7 +85,7 @@ name selection.
 ## Run it
 
 ```bash
-python3 -m unittest discover -s tests -t . # 419 tests — the constitution's teeth
+python3 -m unittest discover -s tests -t . # 426 tests — the constitution's teeth
 python3 -m sim.run_suite --seeds 300      # Monte Carlo the guardrails
 
 python3 -m tools.preflight_phase2         # network, keys, model, tests, state, data
@@ -101,6 +101,10 @@ python3 -m tools.paper_session            # real data, real gate, no orders
 python3 -m tools.paper_session --submit   # ...and actually send them
 python3 -m tools.smoke_submit             # live order path, self-cleaning
 python3 -m tools.model_check <task>       # model routing; exit 1 = do not proceed
+python3 -m tools.model_check <task> --at-write   # re-check the floor AT a durable
+                                          #   write — CLAUDE_EFFORT tracks the
+                                          #   turn, so task-start clearance
+                                          #   does not carry (T-10)
 python3 -m tools.netcheck                 # are the data sources reachable AND usable?
 python3 -m tools.review --week            # expectancy, win rate, costs
 python3 -m tools.design_doc               # regenerate the design spreadsheet

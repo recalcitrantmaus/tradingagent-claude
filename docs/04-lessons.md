@@ -2488,6 +2488,102 @@ assert that nothing computed at signal time moved.
 Twenty-one mutations, every one caught: 9 on the research suite (1–7 tests
 each) and 12 on the reporting suite (1–2 each).
 
-**Verified:** 419 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin.
+**Verified:** 426 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin.
+
+**Status:** active.
+
+## 2026-09-25 — T-10 activated: the floor is now re-read at the write
+
+Parked on 2026-09-22 at recalcitrantmaus's request, so it would be wired in deliberately
+rather than dropped into a live trading day. Activated at her instruction with
+the `rule-promotion` gate cleared on `claude-opus-5` at xhigh, model read from
+the session record rather than the environment default.
+
+### The finding, restated
+
+CLAUDE.md said environment variables are snapshotted at session start.
+**`CLAUDE_EFFORT` is the exception**: measured `high` at 13:39Z and `medium` at
+20:07Z inside one session on 2026-09-22. It tracks the turn.
+
+`check()` runs once, at task start, and nothing re-read it. So a blocking task
+could clear at xhigh and perform its durable write several turns later at
+medium with no signal at all — `session-close` did exactly that, two notches
+below its floor, and only the journal caught it. **A point-in-time check on a
+per-turn value certifies the turn it was taken in, not the write.**
+
+CLAUDE.md's blanket claim has been corrected in place. A doc that is wrong
+about the one variable that moves is worse than a doc that says nothing.
+
+### One thing I measured before wiring anything in
+
+`recheck()` fails closed when the harness effort value is unavailable — a
+*declared* value cannot move, so it cannot detect the thing this exists to
+detect. That means activating it into an environment without `CLAUDE_EFFORT`
+would refuse **every** blocking write, which is an outage, not a control. So I
+checked first: `CLAUDE_EFFORT=xhigh`, source `harness`. Activation was safe.
+
+Measuring the blast radius before arming a refusal is the step the `held`
+episode skipped two days ago, and it cost $0.37 then.
+
+### Two call sites, and they are not equally strong
+
+**`RiskOfficer.unlock()` — a real interlock.** The only durable write a
+blocking task performs as a function call, and the most consequential write in
+the system: it re-arms an account the breakers took offline. It now raises
+`EffortFloorRefusal`, a type of its own so it cannot be swallowed by an
+`except ValueError`. **A LOCKED account cannot be cleared below `max` effort**,
+and the lock stays on until a session that holds the floor runs the unlock.
+
+That is a new operational constraint on the recovery path and it is
+deliberate — the policy already said `unlock-authorization` is Opus @ max,
+blocking; this makes the procedural rule enforceable at the write. The escape
+is real and named in the refusal message: run the unlock from a max-effort
+session. Nothing is stranded permanently.
+
+**`model_check <task> --at-write` — a procedure, not an interlock.** The other
+durable writes (the `engine/config.py` edit, the SKILL.md write, the lessons
+entry) are made by the agent with file tools, so there is no line of Python to
+hook. Exit 1 means abandon that write. This is weaker by construction, and it
+is recorded as the weaker thing it is rather than described as a gate. An
+honest account of what a control can and cannot do is part of the control.
+
+It deliberately does **not** re-verify the model. `--model` is a human's act,
+already recorded and single-use, and the model does not silently drift under a
+session the way effort does. A second place to assert a model is a second place
+to fabricate one and detect nothing.
+
+### The guard test was inverted, not deleted
+
+The parked version asserted `recheck()` was called **nowhere** and failed the
+moment anyone wired it in. Deleting it at activation would have been the
+obvious move and the wrong one: it now asserts **both call sites are present**,
+so quietly dropping one fails the suite instead of silently restoring the
+finding with the code still there and still tested. That is the most flattering
+way for a control to die, and it is now the loudest.
+
+### Two of my own verification steps were wrong again
+
+Seven mutations, all now caught — but not at first.
+
+1. **A test that named a property it could not distinguish.** The blank-note
+   ordering test ran at `max` effort, where both checks pass, so either
+   ordering produced `ValueError`. It asserted the ordering and measured
+   nothing. Fixed by asserting it at an effort *below* the floor, where the two
+   checks disagree.
+2. **A mutation written against the wrong line.** The mutation meant to break
+   that ordering moved only the `recheck()` *call* above the blank-note check
+   and left the `raise` where it was — a no-op. It scored zero, and I briefly
+   read that as an escaped bug in the test rather than a flaw in the mutation.
+   The real bug shape required moving the whole block.
+
+Both are the same error in different clothing: **measuring something adjacent
+to the thing you care about.** That is now four instances in three days — the
+attendance gate, the invariant test that read grep lines, the ordering test,
+and the mutation. The pattern is not carelessness about tests; it is that a
+check is easy to write against a *description* of a bug and hard to write
+against the bug. Run it against the bug.
+
+**Verified:** 426 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin.
+`engine/` changed, so both were mandatory.
 
 **Status:** active.

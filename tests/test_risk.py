@@ -2,9 +2,11 @@
 trade until a human has looked at why.
 """
 import datetime as dt
+import os
 import sys
 from pathlib import Path
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -138,12 +140,18 @@ class TestCircuitBreakers(unittest.TestCase):
         self.assertEqual(ro.update(D, pf, {}), State.LOCKED)
 
     def test_locked_requires_a_human_note(self):
-        _, ro = fresh()
-        ro.state = State.LOCKED
-        with self.assertRaises(ValueError):
-            ro.unlock("   ")
-        ro.unlock("reviewed 2026-03-02, resuming at half size")
-        self.assertEqual(ro.state, State.NORMAL)
+        # Runs at max effort because unlock() also re-checks the T-10 effort
+        # floor at the write, and `unlock-authorization` is Opus @ max. This
+        # test is about the human NOTE, so it takes the legitimate route past
+        # the other gate rather than patching it out. The effort interlock
+        # itself is tested in tests/test_model_policy.py.
+        with mock.patch.dict(os.environ, {"CLAUDE_EFFORT": "max"}):
+            _, ro = fresh()
+            ro.state = State.LOCKED
+            with self.assertRaises(ValueError):
+                ro.unlock("   ")
+            ro.unlock("reviewed 2026-03-02, resuming at half size")
+            self.assertEqual(ro.state, State.NORMAL)
 
     def test_consecutive_losses_halt_the_day(self):
         pf, ro = fresh()

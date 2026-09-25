@@ -209,7 +209,6 @@ unproven:
 | | |
 |---|---|
 | **T-7** | the size taper biases the 2nd and 3rd slots to low-volatility names (whole-share rounding) |
-| **T-10** | `recheck()` is written, tested and **parked, uncalled** — activate at a session END, never mid-day |
 | **T-15** | preflight reports declared, not harness-verified, effort |
 | **T-16** | Yahoo cross-check rate-limits under load; must never gate a trading day |
 | **W-1..W-3** | the day-trade budget has never counted anything |
@@ -271,9 +270,17 @@ expensive to re-derive or to accidentally reverse:
    `python3 -m tools.model_check <task>`. See finding 5 above for its limit.
 6. **Reachable is not usable.** `stooq.com` answers 200 with a bot challenge.
    netcheck reports DEGRADED for that case.
-7. **Environment variables are snapshotted at session start.** The network
-   policy applies live; variables do not. Adding keys or changing
-   `TRADING_AGENT_MODEL` always needs a **new session**.
+7. **Environment variables are snapshotted at session start — except
+   `CLAUDE_EFFORT`.** The network policy applies live; variables do not, so
+   adding keys or changing `TRADING_AGENT_MODEL` always needs a **new
+   session**. `CLAUDE_EFFORT` is the exception: it tracks the TURN, measured
+   moving `high` → `medium` inside one session. Anything reading it once and
+   treating the answer as a property of the session is wrong, which is what
+   T-10 fixed.
+8. **A blocking task re-checks its effort floor at the durable write**, not
+   just at task start: `model_check <task> --at-write`, exit 1 means abandon
+   the write. `RiskOfficer.unlock()` enforces it in code, so a LOCKED account
+   cannot be cleared below `max` effort.
 
 ## The next thing to do
 

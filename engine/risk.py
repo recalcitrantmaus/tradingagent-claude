@@ -11,7 +11,14 @@ from typing import Dict, List, Optional
 import datetime as dt
 
 from .config import RiskConfig, DEFAULT
+from .model_policy import recheck
 from .portfolio import Portfolio
+
+
+class EffortFloorRefusal(RuntimeError):
+    """A durable write refused because its effort floor was not held AT the
+    write. Not a bad argument — a policy refusal, so it carries its own type
+    and cannot be swallowed by an `except ValueError`."""
 
 
 class State(str, Enum):
@@ -129,9 +136,24 @@ class RiskOfficer:
             self.state = new
 
     def unlock(self, authorization: str) -> None:
-        """Only a human may clear LOCKED. Recorded verbatim in the journal."""
+        """Only a human may clear LOCKED. Recorded verbatim in the journal.
+
+        This is the single most consequential durable write in the system —
+        it re-arms an account the breakers took offline — so it is also the
+        one place T-10 binds in code. `unlock-authorization` is blocking at
+        Opus @ max, and CLAUDE_EFFORT tracks the TURN, not the session: a task
+        that cleared the gate at max can reach this line several turns later
+        at medium. A point-in-time check certifies the turn it was taken in,
+        not the write, so the floor is re-read HERE, where it costs something.
+        """
         if not authorization.strip():
             raise ValueError("unlock requires a human authorization note")
+        ok, msgs = recheck("unlock-authorization")
+        if not ok:
+            raise EffortFloorRefusal(
+                "refusing to clear " + str(self.state) + ": " + " ".join(msgs)
+                + " Re-run the unlock from a session running at max effort; "
+                  "the lock stays until then.")
         self.journal.append(f"{self.state} -> NORMAL by human: {authorization}")
         self.state = State.NORMAL
 

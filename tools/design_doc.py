@@ -567,15 +567,25 @@ BUGS = [
   "below its floor that evening. Third member of a family found in two days: "
   "attendance is a property of the turn (B-23), effort is a property of the "
   "turn, and both were read as though they described a session.",
-  "PARKED, not wired in, at recalcitrantmaus's request — to be incorporated "
-  "deliberately at the end of a session rather than dropped into a live "
-  "trading day. recheck() re-reads effort at the DURABLE WRITE rather than "
-  "at task start, because that is where a downgrade costs something. It does "
-  "not re-verify the model: passing --model is a human's act, already "
-  "recorded and single-use. 6 tests, one of which fails the moment anyone "
-  "wires it in.",
-  "2026-09-20 00:00", "2026-09-22 20:07", "",
-  "2", "48353b4", "PARKED — activate at a session end"),
+  "ACTIVATED 2026-09-25, having been parked at recalcitrantmaus's request so it would "
+  "be wired in deliberately rather than dropped into a live trading day. "
+  "recheck() re-reads effort at the DURABLE WRITE rather than at task start, "
+  "because that is where a downgrade costs something. Two call sites: "
+  "RiskOfficer.unlock() raises EffortFloorRefusal, so a LOCKED account "
+  "cannot be re-armed below max effort and the lock stays until a session "
+  "that holds the floor clears it; and `model_check <task> --at-write` for "
+  "the writes the agent makes with file tools, where there is no line of "
+  "code to hook — a procedure, not an interlock, and recorded as the weaker "
+  "thing it is. It does not re-verify the model: passing --model is a "
+  "human's act, already recorded and single-use, and a second place to "
+  "assert one is a second place to fabricate one. The parked-guard test was "
+  "INVERTED rather than deleted: it asserted recheck() was called nowhere, "
+  "and now asserts both call sites are present, so dropping one fails "
+  "instead of silently restoring the finding. 7 mutations, all caught — "
+  "including one written against the wrong line, which scored zero until the "
+  "mutation itself was corrected.",
+  "2026-09-20 00:00", "2026-09-22 20:07", "2026-09-25 02:50",
+  "2", "", "Fixed"),
  ("B-29", "Controls", "High",
   "`tools/model_check.py` exited 0 for any task name absent from POLICY, "
   "printing 'no model policy; proceeding'. The routing gate is invoked by "
