@@ -1,5 +1,8 @@
 # Routine prompts — Monday 2026-09-21
 
+> Friday 2026-09-25's prompts, trigger ids and runner sessions are in
+> `docs/13a-routine-prompts-2026-09-25.md`.
+
 Routine prompts are operational configuration. They live here so they are
 versioned, reviewable and recoverable — a prompt that exists only in the
 claude.ai UI is lost the moment someone edits it.

@@ -17,7 +17,7 @@ Develop on `claude/trading-agent-robinhood-cb9xo7`.
 | Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
 | Tests | **423 passing**, incl. an e2e spine and one regression test per shipped defect |
 | Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
-| Routines | **None scheduled.** Friday 2026-09-25 is unarmed. |
+| Routines | **Friday 2026-09-25 is ARMED** (4 firings, 2 runner sessions, relay + 3 watchdogs). Ids and prompts: `docs/13a-routine-prompts-2026-09-25.md`. Monday 2026-09-28 is unarmed. |
 | Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
 
 **Run this first, and believe it over this file:**
@@ -284,8 +284,13 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-**Friday 2026-09-25 is unarmed — no Routines are scheduled.** Arming it is the
-first decision of the next session. The agreed shape:
+**Friday 2026-09-25 is armed** (done 2026-09-24 ~23:15 ET in an attended
+session). Do not arm it again. `list_triggers` is the truth, and
+`docs/13a-routine-prompts-2026-09-25.md` has the ids, the runner sessions and
+every prompt verbatim. Each firing posts its report back to the arming session
+through a relay trigger, and commits it as `state/reports/2026-09-25-relay-*.md`.
+**Monday 2026-09-28 is unarmed**, and arming it is the first decision of the
+next attended session. The agreed shape, reused for Friday:
 
 | When (ET) | Model | What |
 |---|---|---|
@@ -306,6 +311,10 @@ Two standing decisions about the schedule:
   `docs/10-runtime-requirements.md`. One-shot Routines do not appear in the UI
   even when they exist; `list_triggers` is the truth.
 - A Routine's prompt can only be edited **from the session it posts into**.
+- **A `create_session` runner comes up at effort `high`**, below the `xhigh`
+  floor. The MCP tool has no effort parameter. `.claude/settings.json` now
+  sets `"effortLevel": "xhigh"` as the repo default (docs/10 §6). Every firing
+  still reads `echo $CLAUDE_EFFORT` and reports it.
 
 Runbook: `docs/09-phase2-runbook.md`. Exit criteria are in there and in
 `docs/07-deployment.md` — 30+ closed trades, positive expectancy, zero

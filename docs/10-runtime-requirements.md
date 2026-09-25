@@ -89,6 +89,23 @@ Routines created in-session store no connectors. Alpaca is plain HTTPS through
 `urllib`, so Phase 2 does not care. Robinhood agentic trading is an MCP
 server, so Phase 3 does. See `docs/07-deployment.md` section 6.
 
+## 6. Effort — set by the repository, because `create_session` cannot
+
+Measured 2026-09-24 ET in the rehearsal for Friday 2026-09-25: two runner
+sessions created with `create_session` (one Opus, one Sonnet) both came up
+at `CLAUDE_EFFORT=high`, while `TRADING_AGENT_EFFORT` declared `xhigh`. The
+MCP tool has no effort parameter, and the CLI's default is `high`, which is
+below the `xhigh` floor on every trading task except news-intel. The session
+that created them was at `xhigh` from its own picker, and they do not inherit
+it.
+
+The CLI's settings schema carries a persisted `effortLevel` (`low`, `medium`,
+`high`, `xhigh`), and a project-level value becomes the default for a
+session that has no effort of its own. So `.claude/settings.json` sets
+`"effortLevel": "xhigh"`. A human's picker still overrides it in an attended
+session. **Confirm it in every firing with `echo $CLAUDE_EFFORT`.** The
+setting is an input, and the harness value is the measurement.
+
 ## The rule this produces
 
 **A session that cannot verify 1 through 3 must not trade.** It has no risk
