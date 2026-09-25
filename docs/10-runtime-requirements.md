@@ -89,7 +89,7 @@ Routines created in-session store no connectors. Alpaca is plain HTTPS through
 `urllib`, so Phase 2 does not care. Robinhood agentic trading is an MCP
 server, so Phase 3 does. See `docs/07-deployment.md` section 6.
 
-## 6. Effort — set by the repository, because `create_session` cannot
+## 6. Effort — `create_session` cannot set it, and neither can the repository
 
 Measured 2026-09-24 ET in the rehearsal for Friday 2026-09-25: two runner
 sessions created with `create_session` (one Opus, one Sonnet) both came up
@@ -108,6 +108,44 @@ So neither the repo setting nor the picker is confirmed to reach
 unresolved (T-15). The trading tasks are non-blocking, so a firing below the
 floor warns, continues and records it. Nothing blocking is scheduled
 unattended.
+
+## 7. Permissions — how an unattended command actually gets approved
+
+Found 2026-09-25, when the open was refused ("Modify Shared Resources").
+Full analysis: `state/reviews/2026-09-25-permissions-rca.md`.
+
+Runners run in **auto mode**, where a Bash command is approved in one of two
+ways:
+
+1. **An allow rule in `.claude/settings.json` matches the whole command.**
+   Auto mode strips rules that would allow arbitrary code
+   (`Bash(python3 -c:*)`, `Bash(python3:*)`), but keeps
+   `Bash(python3 -m tools.X:*)`.
+2. **Otherwise the auto-mode classifier judges it** against the intent in the
+   session's transcript. That is a judgment call made fresh each time, and
+   today it went the other way.
+
+Until 2026-09-25, every prompt sent compound commands
+(`REPO="$(…)"; cd "$REPO"; python3 -m …`) and `python3 -c` one-liners.
+Neither matches a rule, so **the classifier decided every firing of the
+week.** Rules that govern this:
+
+- **One command per Bash call, written exactly as the allowlist spells it.**
+  No `cd`, no `REPO=`, no `&&`, `;` or `|`, no `2>&1`. The session already
+  starts in the repository, and preflight verifies it. This replaces §2's
+  `cd "$REPO"` recipe. Each turn still checks where it is, with a single
+  `git rev-parse --show-toplevel`. If that is not the repository, the turn
+  stops and reports; it does not `cd` its way out.
+- **No `python3 -c`.** Broker state comes from `python3 -m tools.broker_check`.
+- **Never rehearse inside a session that will trade.** A "read-only, do not
+  trade" instruction stays in that session's transcript and is the likeliest
+  reason the classifier refused the open. Rehearse in a throwaway session,
+  and scope any restriction to "this turn only".
+- **`autoMode` settings cannot be set from the repository.** The CLI ignores
+  `autoMode` in project and local settings ("only user/flag/managed settings
+  may set classifier rules"; measured in the 2.1.282 binary). Standing
+  classifier context has to come from the environment or user settings,
+  outside this repo.
 
 ## The rule this produces
 

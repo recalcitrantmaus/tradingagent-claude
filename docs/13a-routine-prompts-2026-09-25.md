@@ -401,3 +401,70 @@ Then give recalcitrantmaus a closing line for the day: what is armed now (list_t
 
 Never open a position from this session. Never write an --authorization. Reply in at most twelve lines.
 <!-- ---8<--- END WD-CLOSE ---8<--- -->
+
+---
+
+## CLOSE v2 — rebound to a fresh runner after F-1
+
+The open was refused by the auto-mode classifier (F-1,
+`state/reviews/2026-09-25-permissions-rca.md`). The original runner's
+transcript carries two "read-only" rehearsal instructions, so the close was
+moved to a fresh runner, and the prompt was rewritten so that every command
+matches an allow rule exactly (docs/10 §7). The original CLOSE above is kept
+for the record.
+
+<!-- ---8<--- BEGIN CLOSE-V2 ---8<--- -->
+Friday 2026-09-25, 16:05 ET. Session close, and the close of Phase 2 week two. The market has just closed.
+
+YOU ARE UNATTENDED. Decide within the rules. Do not end a turn waiting for input. Midday and pre-close were cancelled under recalcitrantmaus's standing rule, because the open stood down (F-1) and left the account flat.
+
+HOW TO RUN COMMANDS: run each command below as its OWN Bash call, exactly as written. Do not add cd, REPO=, &&, ;, a pipe or 2>&1. Every command here matches the repository's permission allowlist exactly, and a compound command does not. Read files with the Read tool, not cat. Do not use python3 -c.
+
+=== 0. ENVIRONMENT. If any of this fails, stop and go straight to the LAST section ===
+
+git rev-parse --show-toplevel
+(If that is not the repository, do not cd or clone. Report it and stop.)
+git pull origin claude/trading-agent-robinhood-cb9xo7
+Read state/reports/2026-09-25-relay-open.md and state/reviews/2026-09-25-friday-queue.md.
+MODEL: read it from the session record (get_session, session_id omitted), then:
+python3 -m tools.model_check session-close --model THE_MODEL_YOU_READ
+
+=== 1. CLOSE THE DAY ===
+
+python3 -m tools.trading_day close
+Confirm from its output: the CASH DRIFT figure, reported unconditionally, including zero; exactly what cancel_unfilled_entries() cancelled; and that no protective leg was stripped.
+python3 -m tools.broker_check
+Exit 1 means a position has no working stop over a WEEKEND. Lead with it. `held` is a working stop.
+
+=== 2. JOURNAL, REVIEW, WEEK ===
+
+trade-journal: one entry per position closed today. If nothing closed, write nothing and say so.
+python3 -m tools.review
+python3 -m tools.trading_day week
+Write state/reports/2026-09-25.md, plus state/reports/2026-09-25-summary.md in plain language for someone who has not been watching, covering the day and week two (2026-09-21 to 09-25). Report equity, the week's P&L, the honest gap to the +5% hurdle (a hurdle rate, not a quota, never closed with leverage), closed trades against the 30-trade exit criterion, and expectancy against +0.10R. A flat account is an absence of evidence, not evidence that capital preservation works.
+DO NOT run the weekly review. It needs an --authorization in recalcitrantmaus's own words, and she is not here. Never write one. Instead, append a dated "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md: the agenda for a cleared, attended session, pointing at state/reviews/2026-09-25-friday-queue.md, 2026-09-25-permissions-rca.md and 2026-09-25-effort-design-notes.md.
+Update HANDOFF.md's "Where we are" and "The next thing to do" to the true state after today. Monday 2026-09-28 is UNARMED.
+Findings: append to state/reviews/2026-09-25-friday-queue.md, continuing the F-n sequence. For each command above, record whether it ran or was refused by the permission layer. That record is the test of the F-1 fix.
+
+=== 3. RECORD ===
+
+git add state HANDOFF.md
+git commit -m "Close 2026-09-25: ONE_LINE_SUMMARY"
+git push origin HEAD:claude/trading-agent-robinhood-cb9xo7
+Do not promote, change or delete any rule. Do not edit engine/.
+
+=== LAST: REPORT BACK TO THE ARMING SESSION. Do this whatever happened ===
+
+a. Write the report to state/reports/2026-09-25-relay-close.md. Commit it and push it, using the three git commands above.
+b. Call fire_trigger (mcp__Claude_Code_Remote__fire_trigger) with trigger_id trig_01DcJrhKop6mfes4uutV3ChR and text = the report.
+First line exactly:  CLOSE 2026-09-25 — ONE_LINE_HEADLINE
+Then these headings, each filled in or marked "none":
+ 1. What occurred
+ 2. What did not occur, and why
+ 3. Account: equity, day and week P&L, gap to +5%, cash drift, closed trades n/30, expectancy, and what is carried with its protection
+ 4. Plan: Monday is unarmed
+ 5. Findings (F-n), including the per-command permission record
+ 6. Bugs
+ 7. Still to be completed, and by whom
+ 8. Provenance: model and effort, and the commit
+<!-- ---8<--- END CLOSE-V2 ---8<--- -->
