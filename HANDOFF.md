@@ -311,10 +311,10 @@ Two standing decisions about the schedule:
   `docs/10-runtime-requirements.md`. One-shot Routines do not appear in the UI
   even when they exist; `list_triggers` is the truth.
 - A Routine's prompt can only be edited **from the session it posts into**.
-- **A `create_session` runner comes up at effort `high`**, below the `xhigh`
-  floor. The MCP tool has no effort parameter. `.claude/settings.json` now
-  sets `"effortLevel": "xhigh"` as the repo default (docs/10 §6). Every firing
-  still reads `echo $CLAUDE_EFFORT` and reports it.
+- **A `create_session` runner comes up below the `xhigh` effort floor**, and
+  neither a repo `effortLevel` setting nor the picker has been shown to change
+  what `CLAUDE_EFFORT` reads (docs/10 §6, T-15). Trading tasks warn and
+  continue. Every firing records the effort it read.
 
 Runbook: `docs/09-phase2-runbook.md`. Exit criteria are in there and in
 `docs/07-deployment.md` — 30+ closed trades, positive expectancy, zero

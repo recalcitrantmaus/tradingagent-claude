@@ -1,6 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "effortLevel": "xhigh",
   "permissions": {
     "allow": [
       "Bash(python3 -m tools.preflight_phase2:*)",

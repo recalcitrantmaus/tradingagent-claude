@@ -99,12 +99,15 @@ below the `xhigh` floor on every trading task except news-intel. The session
 that created them was at `xhigh` from its own picker, and they do not inherit
 it.
 
-The CLI's settings schema carries a persisted `effortLevel` (`low`, `medium`,
-`high`, `xhigh`), and a project-level value becomes the default for a
-session that has no effort of its own. So `.claude/settings.json` sets
-`"effortLevel": "xhigh"`. A human's picker still overrides it in an attended
-session. **Confirm it in every firing with `echo $CLAUDE_EFFORT`.** The
-setting is an input, and the harness value is the measurement.
+Tried and reverted the same night: `"effortLevel": "xhigh"` in
+`.claude/settings.json`. After pulling it, the Opus runner read
+`CLAUDE_EFFORT=medium` and the Sonnet runner read `high`. The Opus runner's
+session record showed `effort_level: xhigh` from the picker at the same time.
+So neither the repo setting nor the picker is confirmed to reach
+`CLAUDE_EFFORT`, and which of the two values is the served effort is
+unresolved (T-15). The trading tasks are non-blocking, so a firing below the
+floor warns, continues and records it. Nothing blocking is scheduled
+unattended.
 
 ## The rule this produces
 

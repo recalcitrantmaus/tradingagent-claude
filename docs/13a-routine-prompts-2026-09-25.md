@@ -56,9 +56,9 @@ prefix for the day avoids Wednesday's T-n/W-n split.
 repo, model, effort, preflight, model_check, then a post-back through the
 relay. The Sonnet runner's post-back worked. Both runners read
 `CLAUDE_EFFORT=high`, because `create_session` sets no effort and the CLI
-default is `high`. That is below the `xhigh` floor, so `.claude/settings.json`
-now sets `"effortLevel": "xhigh"` (docs/10 §6), and each runner is re-checked
-after pulling it.
+default is `high`. A repo `effortLevel` setting was tried and reverted: the
+runners then read `medium` (Opus) and `high` (Sonnet). See docs/10 §6. The
+firings warn, continue and record the effort they read.
 
 ---
 
