@@ -109,3 +109,32 @@ sample is still empty, and the week's output is again infrastructure.
 **Infrastructure is not the Phase 2 exit criterion.** The most useful thing a
 reviewer can decide is not which rule to change but what would have to happen
 for this system to take, and close, a trade.
+
+## Friday 2026-09-25 close — added by the unattended close runner
+
+**This is still not the weekly review.** Runner v2 (`session_01KEoB4VKvJSkpL6N5uqC3z1`) is unattended, and
+`model_check session-close` read harness effort **medium**, below xhigh. The weekly review also needs an
+`--authorization` in recalcitrantmaus's own words. No authorization was written. No rule was promoted, changed or deleted.
+`engine/` was not touched.
+
+**The week in one line:** $299.62, -0.12% (-$0.37) for the week, gap to +5% is -5.12%, 1/30 closed trades,
+-0.139R against +0.10R. Phase 2 exit criteria met: 3/5. The account is flat into the weekend with nothing unprotected.
+
+Read these first:
+
+- `state/reviews/2026-09-25-friday-queue.md`: F-1 (the open refused at step 0), F-2 (the live test: every
+  command ran) and F-3 (the close: every command ran, plus the smaller findings).
+- `state/reviews/2026-09-25-permissions-rca.md`: why the classifier, not the allowlist, decided F-1.
+- `state/reviews/2026-09-25-effort-design-notes.md`: how effort is read and gated for unattended runners.
+
+Decide, in this order:
+
+1. **Arm Monday 2026-09-28 or not.** The one-command-per-call form survived a full close. It has **not** yet survived an
+   open that submits an order. That order path is the part F-1 actually blocked.
+2. **Effort.** Both runner v2 checks today read `medium` against an xhigh floor, while the environment declares xhigh.
+   The open runner's record says xhigh. The declaration and the harness disagree, and the runners are below
+   the floor for the open and the close. See the effort design notes.
+3. **F-3 items:** `cmd_week`'s "costs below gains" passes as `$0.00 <= max(-$0.37, 0)` on a losing record. This is a
+   borderline vacuous pass, shape 2 in `docs/04-lessons.md`. Also, `trading_day close` says nothing when
+   `cancel_unfilled_entries()` cancels nothing, and `open` prints no cash-drift line.
+4. Carried from above and still open: item 2 (entry style), M-7 (short entry bypasses the gate), D-24.

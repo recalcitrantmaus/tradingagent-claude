@@ -5,7 +5,7 @@ every rule is committed here, and a new cloud session clones it and reads
 `CLAUDE.md` automatically. You do not need the old conversation to continue;
 you need this file and the docs it points at.
 
-Last updated: **2026-09-24**, end of the Thursday build session.
+Last updated: **2026-09-25**, by the Friday 16:05 ET close runner (unattended; "Where we are" and "The next thing to do" only).
 Develop on `claude/trading-agent-robinhood-cb9xo7`.
 
 ## Where we are
@@ -13,11 +13,12 @@ Develop on `claude/trading-agent-robinhood-cb9xo7`.
 | | |
 |---|---|
 | Phase | **2, week 2. Live paper trading.** |
-| Account | **$299.62** paper, flat, risk state `NORMAL`. Verified against the broker 2026-09-24. |
+| Account | **$299.62** paper, flat, no orders, risk state `NORMAL`. Verified against the broker at the 2026-09-25 close (`broker_check`: `UNPROTECTED []`). Cash drift $0.00. |
+| Week 2 | −$0.37 / **−0.12%**, gap to +5% is −5.12%. Phase 2 exit criteria met: 3/5. Friday did not trade: the open was refused by the permission layer (F-1). The one-command-per-call fix then ran the full F-2 test and the full close with no refusal. |
 | Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
 | Tests | **423 passing**, incl. an e2e spine and one regression test per shipped defect |
 | Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
-| Routines | **Friday 2026-09-25 is ARMED** (4 firings, 2 runner sessions, relay + 3 watchdogs). Ids and prompts: `docs/13a-routine-prompts-2026-09-25.md`. Monday 2026-09-28 is unarmed. |
+| Routines | Friday 2026-09-25 has run: the open stood down (F-1), midday and pre-close were cancelled, and the close is done. **Monday 2026-09-28 is UNARMED.** Friday's ids: `docs/13a-routine-prompts-2026-09-25.md`. |
 | Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
 
 **Run this first, and believe it over this file:**
@@ -285,13 +286,15 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-**Friday 2026-09-25 is armed** (done 2026-09-24 ~23:15 ET in an attended
-session). Do not arm it again. `list_triggers` is the truth, and
-`docs/13a-routine-prompts-2026-09-25.md` has the ids, the runner sessions and
-every prompt verbatim. Each firing posts its report back to the arming session
-through a relay trigger, and commits it as `state/reports/2026-09-25-relay-*.md`.
-**Monday 2026-09-28 is unarmed**, and arming it is the first decision of the
-next attended session. The agreed shape, reused for Friday:
+**Monday 2026-09-28 is UNARMED.** Deciding whether to arm it is the first decision of the next
+attended session. Start with `state/reviews/2026-W39-review-brief.md` → "Friday 2026-09-25
+close", then `state/reviews/2026-09-25-friday-queue.md` (F-1..F-3). Two facts should frame that decision.
+First, the one-command-per-call form cleared the permission layer for the whole close, but an
+**open that submits an order has not yet been tested under it**. Second, runner v2 read effort
+**medium** against the xhigh floor at both of its checks today (see
+`state/reviews/2026-09-25-effort-design-notes.md`). Friday's reports are
+`state/reports/2026-09-25*.md`. The weekly review has **not** run: it needs Opus @ xhigh plus recalcitrantmaus's
+own `--authorization`. The agreed daily shape, used for Friday:
 
 | When (ET) | Model | What |
 |---|---|---|

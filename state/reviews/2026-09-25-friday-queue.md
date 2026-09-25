@@ -48,3 +48,36 @@ Shared by all of today's firings. Continue the sequence; never renumber.
 - **Open items:** (a) the close firing will run at medium effort against an xhigh floor. This is non-blocking, but it
   must be journalled. (b) The effort declaration in the environment does not match the harness.
   (c) Confirm whether `trading_day open` should print a cash-drift line on a flat account, since none appeared.
+- **Addendum (after the report):** step 10's push first failed with "`! [rejected] ... (fetch first)`". This was not
+  a permission refusal: the arming session had pushed `ea291a0` after step 2. It was merged without a rebase and pushed
+  as `238913f`, which contains `942b388`.
+
+## F-3 — Close 2026-09-25: the full close ran with no refusal
+
+- **When:** 2026-09-25 ~20:06Z (16:06 ET), runner v2 `session_01KEoB4VKvJSkpL6N5uqC3z1`, CLOSE firing.
+- **Per-command permission record** (each command ran as its own call, exactly as written):
+  1. `git rev-parse --show-toplevel`: **ran**
+  2. `git pull origin claude/trading-agent-robinhood-cb9xo7`: **ran** (already up to date)
+  3. Read `2026-09-25-relay-open.md` and this file: **ran** (Read tool)
+  4. `get_session`: **ran**. The model is `claude-opus-5-5` (session_context, last_served, configured). There is no effort field.
+  5. `python3 -m tools.model_check session-close --model claude-opus-5-5`: **ran**. Harness effort is **medium**
+     against an xhigh floor, and the environment declares xhigh. The task is non-blocking and continued.
+  6. `python3 -m tools.trading_day close`: **ran**. Exit 0. Cash drift **$+0.0000** across 2 reconciliations.
+     Nothing was cancelled. No protective leg existed.
+  7. `python3 -m tools.broker_check`: **ran**. Flat, no orders, `UNPROTECTED: []`.
+  8. `python3 -m tools.review`: **ran**
+  9. `python3 -m tools.trading_day week`: **ran**. Exit 1, because the Phase 2 criteria are unmet (3/5). This is
+     expected and is not a fault.
+  10. Report, summary, W39 brief, HANDOFF and this entry: **ran** (Write and Edit tools)
+  11–14. `git add`, `git commit`, `git push` and `fire_trigger`: see the relay report `state/reports/2026-09-25-relay-close.md`.
+- **Refusals:** none, for steps 1–10. Together with F-2, this shows the one-command-per-call form clears the
+  permission layer for every command the close needs. It does **not** yet show that an open that submits an
+  order clears it.
+- **Smaller findings (not fixed; `engine/` and the rules untouched):**
+  - (a) `cmd_week` "costs below gains" evaluates `costs <= max(net, 0)`. With zero costs and net -$0.37 it reads
+    `[ok]` on a losing record. That is borderline vacuous (shape 2), and it needs a reviewer's call on the intended meaning.
+  - (b) `cmd_close` prints nothing about `cancel_unfilled_entries()` when it cancelled nothing. `cmd_preclose` prints
+    "none resting". Silence is ambiguous with "did not run".
+  - (c) `trading_day open` printed no cash-drift line (F-2 (c)). `close` reports drift unconditionally, including zero.
+  - (d) The effort downgrade persists: both runner v2 checks today read medium, although the relay-open report
+    recorded xhigh for the open runner.
