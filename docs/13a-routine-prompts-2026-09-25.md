@@ -81,7 +81,7 @@ PRE-CLOSE and REHEARSAL have no watchdog.
 
 4. OPEN only: apply recalcitrantmaus's standing rule. If the broker shows NO position AND NO open order, delete MIDDAY trig_01VQMv7HMhRVUBZqym2nsAsY, PRE-CLOSE trig_01RBYdpna33fdKvNet3GoMzn and WD-MIDDAY trig_01FRbJ8ysXYiP4ZKw8SecQ5M. CLOSE trig_01K8aKJt8rf2wDnVGpuoJsPU always runs. If anything filled, or an entry is resting that could still fill, keep all of them.
 
-5. If UNPROTECTED is not empty, lead with it. Use SendMessage to tell the runner session that owns the day's next firing (Opus session_01Xn54wA68nkt7KHDaoj53RL, Sonnet session_01AvBRnTBfaiGqP8DvKpjsd1) to fix it or flatten it through the execution skill now.
+5. If UNPROTECTED is not empty, lead with it. Message the runner that owns the day's next firing (Opus session_01Xn54wA68nkt7KHDaoj53RL, Sonnet session_01AvBRnTBfaiGqP8DvKpjsd1) with a one-shot trigger bound to it (create_trigger with persistent_session_id set to that session and run_once_at two minutes out). Tell it to fix it or flatten it through the execution skill now, and to report back through this relay. SendMessage cannot reach cloud sessions from this session.
 
 6. Reply in at most eight lines: which firing it was, whether it verified and any discrepancy, what you deleted, and anything that needs recalcitrantmaus.
 
@@ -371,7 +371,7 @@ Then:
 - If the report file is on the branch, the relay failed but the runner did not. Post the file's contents here as the open report.
 - If there is neither, the open did not run or died silently. Report what you found.
 - In either of the last two cases (never while the runner is still working), apply the standing rule: if the broker shows NO position AND NO open order, delete MIDDAY trig_01VQMv7HMhRVUBZqym2nsAsY, PRE-CLOSE trig_01RBYdpna33fdKvNet3GoMzn and WD-MIDDAY trig_01FRbJ8ysXYiP4ZKw8SecQ5M. CLOSE always runs. If anything filled or is resting, keep them.
-- If UNPROTECTED is not empty, that is the emergency, so lead with it. Use SendMessage to tell the runner to fix it or flatten it through the execution skill now and to report back through the relay. Only if the runner cannot be reached may you flatten that position from here, and only through the repo's execution path, never improvised against the broker API.
+- If UNPROTECTED is not empty, that is the emergency, so lead with it. Message the runner with a one-shot trigger bound to it (create_trigger with persistent_session_id session_01Xn54wA68nkt7KHDaoj53RL and run_once_at two minutes out; SendMessage cannot reach cloud sessions). Tell it to fix it or flatten it through the execution skill now, and to report back through the relay. Only if the runner cannot be reached may you flatten that position from here, and only through the repo's execution path, never improvised against the broker API.
 
 Never open a position from this session. Never write an --authorization. Reply in at most ten lines.
 <!-- ---8<--- END WD-OPEN ---8<--- -->
@@ -383,7 +383,7 @@ Otherwise diagnose, read-only: get_session session_01AvBRnTBfaiGqP8DvKpjsd1; git
 - If the runner is still working, say so in one line, schedule one re-check 45 minutes out with send_later, and stop.
 - If the report file is on the branch, post its contents here as the midday report.
 - If neither, report what you found. The 15:30 pre-close in the Opus runner still runs and will see the book.
-- If UNPROTECTED is not empty, lead with it. Use SendMessage to tell the Opus runner session_01Xn54wA68nkt7KHDaoj53RL to fix it or flatten it through the execution skill now. Only if no runner can be reached may you flatten from here, and only through the repo's execution path.
+- If UNPROTECTED is not empty, lead with it. Message the Opus runner with a one-shot trigger bound to it (create_trigger with persistent_session_id session_01Xn54wA68nkt7KHDaoj53RL and run_once_at two minutes out; SendMessage cannot reach cloud sessions). Tell it to fix it or flatten it through the execution skill now. Only if no runner can be reached may you flatten from here, and only through the repo's execution path.
 
 Never open a position from this session. Never write an --authorization. Reply in at most ten lines.
 <!-- ---8<--- END WD-MIDDAY ---8<--- -->
@@ -394,7 +394,7 @@ WATCHDOG — Friday 2026-09-25 CLOSE (the 16:05 ET firing in Opus runner session
 Otherwise diagnose, read-only: get_session session_01Xn54wA68nkt7KHDaoj53RL; git fetch origin claude/trading-agent-robinhood-cb9xo7 and look for state/reports/2026-09-25-relay-preclose.md, 2026-09-25-relay-close.md, 2026-09-25.md and 2026-09-25-summary.md; then the broker check (equity, positions, open orders with TIF and status, UNPROTECTED).
 - If the runner is still working, say so in one line, schedule one re-check 45 minutes out with send_later, and stop.
 - If the report files are on the branch, post the close report's contents here.
-- If the close did not run, use SendMessage to ask the Opus runner to run the CLOSE firing now: its prompt is in docs/13a-routine-prompts-2026-09-25.md between BEGIN CLOSE and END CLOSE. Report that you did so. Do not run the close from this session.
+- If the close did not run, create a one-shot trigger bound to the Opus runner (persistent_session_id session_01Xn54wA68nkt7KHDaoj53RL, run_once_at two minutes out) whose prompt is the CLOSE prompt, copied from docs/13a-routine-prompts-2026-09-25.md between BEGIN CLOSE and END CLOSE. SendMessage cannot reach cloud sessions. Report that you did so. Do not run the close from this session.
 - Anything carried over the weekend with UNPROTECTED not empty is the emergency. Lead with it, and handle it as the other watchdogs do.
 
 Then give recalcitrantmaus a closing line for the day: what is armed now (list_triggers should show nothing left enabled for 2026-09-25), and that Monday 2026-09-28 is unarmed.
