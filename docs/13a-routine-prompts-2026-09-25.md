@@ -21,7 +21,7 @@ session.
 | ET | UTC | firing | runner (model) | trigger |
 |---|---|---|---|---|
 | 09:45 | 13:45 | OPEN — preflight, open, brief, news, plan, submit | Opus `session_01Xn54wA68nkt7KHDaoj53RL` (claude-opus-5-5) | `trig_016ar4ZQpTzZjZLYdJjtJvFg` |
-| 12:30 | 16:30 | MIDDAY — manage only, no new entries | Sonnet `session_01AvBRnTBfaiGqP8DvKpjsd1` (claude-sonnet-5) | `trig_01VQMv7HMhRVUBZqym2nsAsY` |
+| 12:30 | 16:30 | MIDDAY — manage only, no new entries | `session_01AvBRnTBfaiGqP8DvKpjsd1`, created as Sonnet; **switched to Opus 5.5 at Extra high by recalcitrantmaus, 2026-09-25 ~00:40 ET** | `trig_01VQMv7HMhRVUBZqym2nsAsY` |
 | 15:30 | 19:30 | PRE-CLOSE — weekend carry-or-flatten, gap risk | Opus runner | `trig_01RBYdpna33fdKvNet3GoMzn` |
 | 16:05 | 20:05 | CLOSE — close, journal, week, summary | Opus runner | `trig_01K8aKJt8rf2wDnVGpuoJsPU` |
 

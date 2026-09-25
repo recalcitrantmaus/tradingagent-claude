@@ -214,6 +214,7 @@ unproven:
 | **W-1..W-3** | the day-trade budget has never counted anything |
 | **M-7** | short entry bypasses the risk gate |
 | **M-8 / M-18 / M-9** | see `state/reviews/2026-09-23-wednesday-close-queue.md` |
+| **EFFORT** | design/build item for Friday evening, 2026-09-25: how effort is read and gated for unattended runners. Notes and options: `state/reviews/2026-09-25-effort-design-notes.md` |
 | housekeeping | orphan branch `claude/wizardly-carson-5qjgn5` needs deleting — I get 403, a human must do it |
 
 ## Model routing in practice
