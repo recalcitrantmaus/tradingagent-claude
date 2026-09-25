@@ -468,3 +468,13 @@ Then these headings, each filled in or marked "none":
  7. Still to be completed, and by whom
  8. Provenance: model and effort, and the commit
 <!-- ---8<--- END CLOSE-V2 ---8<--- -->
+
+### State after the rebinding (2026-09-25 ~11:45 ET)
+
+| | |
+|---|---|
+| Deleted under the standing rule (flat after the open) | MIDDAY `trig_01VQMv7HMhRVUBZqym2nsAsY`, PRE-CLOSE `trig_01RBYdpna33fdKvNet3GoMzn`, WD-MIDDAY `trig_01FRbJ8ysXYiP4ZKw8SecQ5M` |
+| Deleted and replaced | CLOSE `trig_01K8aKJt8rf2wDnVGpuoJsPU`, whose runner's transcript was contaminated |
+| Runner v2 | `session_01KEoB4VKvJSkpL6N5uqC3z1`, Opus 5.5. First turn: F1-TEST, a live run of each command form, including `trading_day open` |
+| CLOSE v2 | `trig_01CL9eMLcRw4M3Qg8KoQF5jj`, 20:05Z, bound to runner v2 |
+| WD-CLOSE, relay | same ids, prompts updated to runner v2 and broker_check |
