@@ -149,6 +149,12 @@ python3 -m tools.model_check rule-promotion --model claude-opus-5 \
     --authorization "recalcitrantmaus: promote the 2% cap change, evidence in docs/04"
 ```
 
+**The picker is not the served effort** (E-1, 2026-09-26). The session
+record and the picker can show Extra high while turns are served lower. The
+gate reads the harness value, and that value wins over `--effort`. If a
+check refuses on effort: close any other client attached to the session,
+toggle the web picker away and back, send a new message, and re-check.
+
 ### Re-check the floor at the write (binding, T-10)
 
 `model_check` clears a task **once, at its start.** Because `CLAUDE_EFFORT`

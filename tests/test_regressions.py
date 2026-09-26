@@ -416,3 +416,55 @@ class TestW1_W3_TheDayTradeBudgetCountsAndBinds(unittest.TestCase):
         d = ro.evaluate(self._entry(), pf, {"F": 10.0}, dt.date(2026, 9, 24))
         self.assertFalse(d.approved)
         self.assertIn("day-trade budget", d.reasons[-1])
+
+
+class TestE1_AnExplicitEffortCannotOutvoteTheHarness(unittest.TestCase):
+    """E-1, shape A, found 2026-09-26 during the attended weekly review.
+    `check()` took `--effort` as given whenever it was passed, and only read
+    CLAUDE_EFFORT when it was not. With the harness serving the turn at medium,
+    `model_check rule-promotion --effort xhigh` CLEARED a blocking task: a
+    declaration beat a measurement, which is the shape M-17 was meant to close.
+    The at-write re-check would have caught it one step later. The gate itself
+    should not need rescuing."""
+
+    def _check(self, env, **kw):
+        import tempfile, pathlib
+        log = pathlib.Path(tempfile.mkdtemp()) / "auth.jsonl"
+        with mock.patch.dict("os.environ", env, clear=True):
+            ok, msgs = check(kw.pop("task", "rule-promotion"),
+                             model="claude-opus-5-5", auth_log=log, **kw)
+        return ok, msgs, log
+
+    def test_E1_explicit_xhigh_cannot_clear_a_blocking_task_served_at_medium(self):
+        ok, msgs, log = self._check(
+            {"CLAUDE_EFFORT": "medium"}, effort="xhigh",
+            authorization="E-1 probe: explicit effort against a medium harness")
+        self.assertFalse(ok, msgs)
+        self.assertFalse(log.exists(), "a refused check must not record the authorization")
+
+    def test_E1_the_refusal_says_how_to_fix_it(self):
+        # On 2026-09-26 three turns were lost because the picker DISPLAYED
+        # Extra high while turns were served at medium. The refusal must name
+        # the remedy that worked, not just the number.
+        _, msgs, _ = self._check(
+            {"CLAUDE_EFFORT": "medium"},
+            authorization="E-1 probe: remedy text for a medium harness")
+        text = " ".join(msgs)
+        self.assertIn("picker", text)
+
+    def test_E1_explicit_effort_still_works_when_the_harness_is_silent(self):
+        # No harness value means there is nothing to contradict. A blocking
+        # task is still refused on a mere declaration (M-17), but a
+        # non-blocking task may take the explicit value.
+        ok, _, _ = self._check({}, task="execution", effort="xhigh")
+        self.assertTrue(ok)
+
+    def test_E1_agreement_clears_and_records_where_it_actually_wrote(self):
+        ok, msgs, log = self._check(
+            {"CLAUDE_EFFORT": "xhigh"}, effort="xhigh",
+            authorization="E-1 probe: harness and explicit agree at xhigh")
+        self.assertTrue(ok, msgs)
+        self.assertTrue(log.exists())
+        self.assertTrue(any(str(log) in m for m in msgs),
+                        "the message named state/authorizations.jsonl whatever "
+                        "file it wrote to")

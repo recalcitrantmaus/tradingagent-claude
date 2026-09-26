@@ -72,3 +72,33 @@ authorization.
   `get_session`.
 - Whether any firing's behaviour looked degraded, which is the real question
   the floor exists for.
+
+---
+
+## Decision, 2026-09-26 (attended, authorized by recalcitrantmaus)
+
+Option D, measure first, was answered by today's own session:
+
+| observation | value |
+|---|---|
+| session record `effort_level` | xhigh throughout |
+| harness `CLAUDE_EFFORT`, three turns | **medium** |
+| `flag_settings_seq` during those turns | 14, unchanged |
+| a second client (VS Code) attached, set to | medium |
+| after closing it and toggling the web picker | seq **923**, `CLAUDE_EFFORT=xhigh` |
+
+**The harness value is the served value. The session record and the picker
+can be stale.** That rejects option A, which would read effort from the
+session record: it would have cleared the review at medium. The gate that
+refused was right, and it stays the source of truth.
+
+Built (engine, E-1 in `docs/04-lessons.md`):
+1. The harness value outranks an explicit `--effort`. A contradicting
+   `--effort` is refused on a blocking task. Before this, it cleared one.
+2. Every below-floor refusal now carries the remedy that actually worked
+   (close other clients, toggle the picker, re-send).
+3. Option B holds as already built: trading tasks warn and continue, and
+   each firing reports the effort it read.
+
+Not built, and why: an effort log file. Each firing already reports its
+effort in the committed relay report, and a second copy would only be noise.

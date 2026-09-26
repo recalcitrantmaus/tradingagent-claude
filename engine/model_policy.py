@@ -283,6 +283,22 @@ def record_authorization(task: str, model: Optional[str], text: str,
         fh.write(json.dumps(row) + "\n")
 
 
+# E-1 (2026-09-26): what actually cleared a below-floor turn, measured. For
+# three turns the session record read effort_level xhigh and the picker showed
+# Extra high, while the harness served each turn at medium and
+# flag_settings_seq sat at 14. A second client (VS Code) attached to the same
+# session was set to medium. Closing it and toggling the web picker away and
+# back moved flag_settings_seq 14 -> 923, and the next turn read xhigh. The
+# displayed setting was never the served value, and the gate was right to
+# refuse. The refusal now says so.
+EFFORT_REMEDY = (
+    "The picker can SHOW Extra high while turns are served lower. Measured "
+    "2026-09-26: close any other client attached to this session (VS Code, "
+    "the CLI), toggle the web picker away from Extra high and back, send a "
+    "new message, then re-run this check. Do not pass --effort to get past "
+    "it; the harness value wins.")
+
+
 def check(task: str, model: Optional[str] = None,
           effort: Optional[str] = None, authorization: Optional[str] = None,
           auth_log=None) -> tuple[bool, List[str]]:
@@ -343,9 +359,31 @@ def check(task: str, model: Optional[str] = None,
                     "environment default, not a measurement of this session)")
 
     # --- effort, same treatment ---
-    eff_src = "explicit" if effort else None
-    if not effort:
-        effort, eff_src = effort_and_source()
+    #
+    # E-1 (2026-09-26). An explicit --effort used to win whenever it was
+    # passed; CLAUDE_EFFORT was read only when it was not. With the harness
+    # serving the turn at medium, `--effort xhigh` cleared a blocking task. A
+    # declaration beat a measurement, the shape M-17 existed to close. So the
+    # harness value, when present, is THE effort. An explicit value that
+    # disagrees is refused for a blocking task and overruled (loudly) for a
+    # non-blocking one. An explicit value is used only when the harness is
+    # silent, and M-17 below still refuses a blocking task on that.
+    measured, measured_src = effort_and_source()
+    if effort and measured_src == "harness" and effort != measured:
+        if p.blocking:
+            return False, [
+                f"'{task}' is blocking and --effort {effort!r} contradicts the "
+                f"harness, which is serving this turn at {measured!r}. The "
+                "harness measures the turn; --effort is a claim about it. "
+                "Refusing rather than taking the claim.",
+                EFFORT_REMEDY]
+        msgs.append(f"--effort {effort!r} overruled: the harness is serving "
+                    f"this turn at {measured!r}")
+        effort, eff_src = measured, measured_src
+    elif effort:
+        eff_src = "explicit"
+    else:
+        effort, eff_src = measured, measured_src
     declared = os.environ.get("TRADING_AGENT_EFFORT")
     if eff_src == "harness" and declared and declared != effort:
         msgs.append(f"EFFORT MISMATCH: harness reports {effort!r}, "
@@ -378,11 +416,14 @@ def check(task: str, model: Optional[str] = None,
         msgs.append(f"'{task}' cleared on {model} at effort {effort or 'unknown'}")
         if p.blocking and source == "explicit" and authorization:
             record_authorization(task, model, authorization, auth_log)
-            msgs.append("authorization recorded to state/authorizations.jsonl")
+            msgs.append("authorization recorded to "
+                        f"{Path(auth_log) if auth_log else AUTH_LOG}")
         return True, msgs
     if p.blocking:
         msgs.append("BLOCKING: do not perform this task. Re-run it in a "
                     "session configured with the required model.")
+        if effort in EFFORTS and EFFORTS.index(effort) < EFFORTS.index(p.min_effort):
+            msgs.append(EFFORT_REMEDY)
         return False, msgs
     msgs.append("non-blocking: proceed, and record the downgrade in the journal.")
     return True, msgs

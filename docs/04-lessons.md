@@ -2687,3 +2687,47 @@ separate decision for recalcitrantmaus, and it matters most for Phase 3 on Robin
 It was not bundled into a counting fix.
 
 **Status:** active.
+
+## 2026-09-26 — E-1: the harness measures the turn, and a flag cannot outvote it
+
+Authorized by recalcitrantmaus, 2026-09-26 ("…the effort gate design"). Cleared as
+`rule-promotion` on claude-opus-5-5 at xhigh, with the effort re-checked at
+each write.
+
+### What today measured
+
+The attended weekly review was refused three times. The session record and
+the picker both said Extra high, while the harness served each turn at
+`medium`. A second client attached to the same session (VS Code) was set to
+medium. Closing it and toggling the web picker moved `flag_settings_seq`
+14 -> 923, and the next turn read `xhigh`. **The gate was right every time,
+and the displayed setting was wrong.** Design notes and the decision:
+`state/reviews/2026-09-25-design-effort.md`.
+
+### The defect found on the way (shape A)
+
+`check()` took an explicit `--effort` whenever one was passed, and read
+`CLAUDE_EFFORT` only when none was. Probed with the harness at medium:
+`check("rule-promotion", effort="xhigh", …)` **cleared**, and would have
+recorded the authorization. The T-10 re-check would have caught it at the
+write. The gate should not need rescuing by its own backstop.
+
+### The rule, as code
+
+- The harness value, when present, **is** the effort. A contradicting
+  `--effort` is refused on a blocking task and overruled (loudly) on a
+  non-blocking one. `--effort` counts only when the harness is silent, and
+  M-17 still refuses a blocking task on a declaration.
+- A below-floor refusal carries `EFFORT_REMEDY`: the steps that actually
+  worked.
+- The "authorization recorded" message names the file actually written. It
+  used to name `state/authorizations.jsonl` whatever path was used.
+
+### Verification
+
+Four regression tests (`TestE1_…`). Three failed first. The fourth pins that
+an explicit effort still works when the harness is silent, for a
+non-blocking task. 449 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin,
+output identical to the previous commit.
+
+**Status:** active.
