@@ -5,7 +5,7 @@ every rule is committed here, and a new cloud session clones it and reads
 `CLAUDE.md` automatically. You do not need the old conversation to continue;
 you need this file and the docs it points at.
 
-Last updated: **2026-09-25**, by the Friday 16:05 ET close runner (unattended; "Where we are" and "The next thing to do" only).
+Last updated: **2026-09-26**, by the attended weekly-review session (recalcitrantmaus present, Opus @ xhigh).
 Develop on `claude/trading-agent-robinhood-cb9xo7`.
 
 ## Where we are
@@ -16,7 +16,7 @@ Develop on `claude/trading-agent-robinhood-cb9xo7`.
 | Account | **$299.62** paper, flat, no orders, risk state `NORMAL`. Verified against the broker at the 2026-09-25 close (`broker_check`: `UNPROTECTED []`). Cash drift $0.00. |
 | Week 2 | −$0.37 / **−0.12%**, gap to +5% is −5.12%. Phase 2 exit criteria met: 3/5. Friday did not trade: the open was refused by the permission layer (F-1). The one-command-per-call fix then ran the full F-2 test and the full close with no refusal. |
 | Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
-| Tests | **423 passing**, incl. an e2e spine and one regression test per shipped defect |
+| Tests | **452 passing**, incl. an e2e spine and one regression test per shipped defect |
 | Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
 | Routines | Friday 2026-09-25 has run: the open stood down (F-1), midday and pre-close were cancelled, and the close is done. **Monday 2026-09-28 is UNARMED.** Friday's ids: `docs/13a-routine-prompts-2026-09-25.md`. |
 | Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
@@ -205,17 +205,19 @@ unproven:
 - whether the strategy or the R ≥ 1.5 threshold, rather than the plumbing, is
   what keeps the plan empty
 
-## Open queue, carried into Friday
+## Open queue, after the 2026-09-26 weekly review
 
 | | |
 |---|---|
 | **T-7** | the size taper biases the 2nd and 3rd slots to low-volatility names (whole-share rounding) |
-| **T-15** | preflight reports declared, not harness-verified, effort |
+| ~~T-15~~ | **fixed**: the harness value wins, and after E-1 (`c047690`) an explicit `--effort` cannot outvote it |
 | **T-16** | Yahoo cross-check rate-limits under load; must never gate a trading day |
-| **W-1..W-3** | the day-trade budget has never counted anything |
-| **M-7** | short entry bypasses the risk gate |
+| ~~W-1, W-2~~ | **fixed 2026-09-26** (`f1ebe38`): counted from the fill log over 5 business days; binds entries of every asset class |
+| **W-3** | open decision: `assume_pdt_regime` models a margin rule; this is a cash account. Matters most for Phase 3 |
+| ~~M-7~~ | **fixed 2026-09-26** (`d0b83f8`): a sell must reduce a held long; shorts and unknown sides are refused |
 | **M-8 / M-18 / M-9** | see `state/reviews/2026-09-23-queue-w.md` |
-| **EFFORT** | design/build item for Friday evening, 2026-09-25: how effort is read and gated for unattended runners. Notes and options: `state/reviews/2026-09-25-design-effort.md` |
+| ~~EFFORT~~ | **decided 2026-09-26** (E-1): the harness value is the served effort; the picker can be stale. Remedy in CLAUDE.md. `state/reviews/2026-09-25-design-effort.md` |
+| **D-24** | target treatment: infrastructure built (`9490d1c`), the 300- and 3000-seed ablation is in `sim/results/target_ablation*.json`, and the rule is unchanged pending recalcitrantmaus's decision. See the weekly review |
 | **RELAY** | `fire_trigger` starts a new session instead of delivering into the bound one. Report back with a scheduled one-shot trigger instead. `state/reviews/2026-09-26-rca-relay.md` |
 | **NAMING** | `state/reviews/` files are `YYYY-MM-DD-TYPE[-TOPIC].md` (queue, rca, design, weekly-review). See `state/reviews/README.md` |
 | housekeeping | orphan branch `claude/wizardly-carson-5qjgn5` needs deleting — I get 403, a human must do it |

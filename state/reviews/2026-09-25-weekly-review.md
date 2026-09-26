@@ -268,3 +268,19 @@ Still unproven:
 Arm it, with the scheduled-post-back fix and the one-command-per-call prompts.
 **Rehearse in a throwaway session only.** The first new thing Monday can prove
 is an open that submits under the new form. recalcitrantmaus's decision.
+
+### Engine changes made in this review (each authorized separately by recalcitrantmaus)
+
+For each: a regression test first (seen failing), the fix, the whole suite,
+`sim.run_suite --seeds 300`, and a `docs/04-lessons.md` entry. The effort
+floor was re-checked at every write.
+
+| item | commit | what changed | sim (300 seeds) |
+|---|---|---|---|
+| M-7 short entry | `d0b83f8` | a sell must reduce a held long. Shorts and unknown sides are refused. An existing test had been approving a short while LOCKED | unchanged (the sim only sends entries) |
+| W-1, W-2 day-trade budget | `f1ebe38` | counted from the fill log over 5 business days (not calendar days), and binds entries of every asset class. The screens now show 1/3 (DT, 09-23), where they showed 0 | momentum median 304.34 -> 304.56, ruin 0% |
+| E-1 effort gate | `c047690` | the harness value wins over `--effort` (a probe showed `--effort xhigh` clearing a blocking task served at medium). Refusals carry the remedy that worked today | unchanged |
+| D-24 target treatment | `9490d1c` (infrastructure only) | time stop, exit accounting, paired ablation. **Rule not changed**, see below | default suite byte-identical |
+
+W-3 (whether the PDT assumption fits a cash account) is deliberately left open
+for recalcitrantmaus. 452 tests, green.
