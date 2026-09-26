@@ -18,7 +18,7 @@ Develop on `claude/trading-agent-robinhood-cb9xo7`.
 | Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
 | Tests | **452 passing**, incl. an e2e spine and one regression test per shipped defect |
 | Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
-| Routines | Friday 2026-09-25 has run: the open stood down (F-1), midday and pre-close were cancelled, and the close is done. **Monday 2026-09-28 is UNARMED.** Friday's ids: `docs/13a-routine-prompts-2026-09-25.md`. |
+| Routines | **Monday 2026-09-28 is ARMED** (armed 2026-09-26): one Opus runner `session_013eAnYvR3gjvfcQY6u7dip1`, 4 firings, 3 watchdogs, and reports back to the arming session by scheduled trigger. Ids and prompts: `docs/13b-routine-prompts-2026-09-28.md`. Tuesday 2026-09-29 is unarmed. |
 | Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
 
 **Run this first, and believe it over this file:**
@@ -290,44 +290,20 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-**Monday 2026-09-28 is UNARMED.** Deciding whether to arm it is the first decision of the next
-attended session. Start with `state/reviews/2026-09-25-weekly-review.md` → "Friday 2026-09-25
-close", then `state/reviews/2026-09-25-queue-f.md` (F-1..F-3). Two facts should frame that decision.
-First, the one-command-per-call form cleared the permission layer for the whole close, but an
-**open that submits an order has not yet been tested under it**. Second, runner v2 read effort
-**medium** against the xhigh floor at both of its checks today (see
-`state/reviews/2026-09-25-design-effort.md`). Friday's reports are
-`state/reports/2026-09-25*.md`. The weekly review has **not** run: it needs Opus @ xhigh plus recalcitrantmaus's
-own `--authorization`. The agreed daily shape, used for Friday:
+**Monday 2026-09-28 is ARMED** (2026-09-26, attended). Do not arm it again. The
+schedule, the ids and every prompt are in `docs/13b-routine-prompts-2026-09-28.md`.
+Each firing reports back into the arming session
+(`session_01YGq4H9eezU7hawFM3bRgE2`) by scheduled trigger, and commits
+`state/reports/2026-09-28-relay-*.md`. **Tuesday 2026-09-29 is unarmed.**
 
-| When (ET) | Model | What |
-|---|---|---|
-| 09:45 | **Opus @ xhigh** | preflight, open, brief, news, plan, submit |
-| 12:30 | Sonnet @ xhigh | manage only — trail, scale out, exit broken theses. No new entries. |
-| 15:30 | **Opus @ xhigh** | pre-close: carry-or-flatten per position, overnight gap risk |
-| 16:05 | **Opus @ xhigh** | close, journal, summary in plain language |
+The W39 weekly review ran on 2026-09-26: `state/reviews/2026-09-25-weekly-review.md`.
+Decided in it:
+- M-7, W-1/W-2 and E-1 were fixed.
+- W-3: the PDT budget is off for this cash account.
+- D-24 was declined: the 2R target stays mandatory.
 
-Two standing decisions about the schedule:
-
-- **If nothing trades at the open, cancel the rest of that day except the
-  close.** Until something fills, the extra firings produce no testing.
-- A Routine created through `create_trigger` **carries no git source** — it
-  inherits the environment, not the repo — and an unattended session cannot
-  clone its way out, because the repo is private and `git clone` needs an
-  approval nobody is there to give. Attach the repository at session start, or
-  build the Routine in the claude.ai Routines UI with the repo attached. See
-  `docs/10-runtime-requirements.md`. One-shot Routines do not appear in the UI
-  even when they exist; `list_triggers` is the truth.
-- A Routine's prompt can only be edited **from the session it posts into**.
-- **A `create_session` runner comes up below the `xhigh` effort floor**, and
-  neither a repo `effortLevel` setting nor the picker has been shown to change
-  what `CLAUDE_EFFORT` reads (docs/10 §6, T-15). Trading tasks warn and
-  continue. Every firing records the effort it read.
-
-Runbook: `docs/09-phase2-runbook.md`. Exit criteria are in there and in
-`docs/07-deployment.md` — 30+ closed trades, positive expectancy, zero
-guardrail breaches, costs below gains. **Hitting +5% in a week is not one of
-them.**
+The first thing Monday can prove is an **open that submits under the
+one-command-per-call form**. It has never happened.
 
 ## Open questions carried forward
 
