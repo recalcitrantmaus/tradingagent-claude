@@ -405,6 +405,14 @@ def cmd_open(args) -> int:
 
     print(f"=== OPEN {today} ===")
     print(f"equity        ${snap['equity']:,.2f}   cash ${snap['cash']:,.2f}")
+    # F-3: state the drift unconditionally, as close does. A line that appears
+    # only above the note threshold makes "clean" and "unchecked" look alike.
+    if snap.get("cash_drift") is None:
+        print("cash drift    no anchor yet (recorded now)")
+    else:
+        print(f"cash drift    {snap['cash_drift']:+.4f} now, "
+              f"{snap.get('cash_drift_today') or 0.0:+.4f} today across "
+              f"{snap.get('drift_readings_today') or 0} reading(s)")
     for n in notes:
         print(f"  ! {n}")
     if not ok:
@@ -539,8 +547,9 @@ def cmd_close(args) -> int:
             cancelled = broker.cancel_unfilled_entries()
         except Exception as e:                # never let cleanup kill the report
             notes.append(f"could not cancel resting entries: {str(e)[:120]}")
-        if cancelled:
-            notes.append(f"cancelled resting entry orders: {cancelled}")
+        # F-3: say so when nothing was cancelled, as preclose does. Silence
+        # read the same as "the cancel never ran".
+        notes.append(f"cancelled resting entry orders: {cancelled or 'none'}")
         # Re-check AFTER cancelling: if that call stripped a stop by mistake,
         # the report must say so tonight, not discover it tomorrow.
         try:
@@ -748,7 +757,12 @@ def cmd_week(args) -> int:
          has_days,
          f"{sum(len(d.get('escalations', [])) for d in ledger.get('days', []))} "
          f"escalations over {len(ledger.get('days', []))} session(s)"),
-        ("costs below gains", has_trades and costs <= max(net, 0), has_trades,
+        # F-3: "gains" are GROSS (net P&L plus the costs already taken out of
+        # it). The old test, costs <= max(net, 0), read $0.00 <= $0.00 and
+        # passed on a record whose only trade lost money. With no gains,
+        # costs cannot be below them.
+        ("costs below gains", has_trades and (net + costs) > 0
+         and costs < (net + costs), has_trades,
          f"${costs:,.2f} vs ${net:,.2f}" if has_trades else "no trade has cost anything yet"),
         ("never LOCKED", all(d.get("risk_state") != "LOCKED"
                              for d in ledger.get("days", [])), has_days,

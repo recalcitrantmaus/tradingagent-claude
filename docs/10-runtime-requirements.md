@@ -112,7 +112,7 @@ unattended.
 ## 7. Permissions — how an unattended command actually gets approved
 
 Found 2026-09-25, when the open was refused ("Modify Shared Resources").
-Full analysis: `state/reviews/2026-09-25-permissions-rca.md`.
+Full analysis: `state/reviews/2026-09-25-rca-permissions.md`.
 
 Runners run in **auto mode**, where a Bash command is approved in one of two
 ways:
@@ -146,6 +146,15 @@ week.** Rules that govern this:
   may set classifier rules"; measured in the 2.1.282 binary). Standing
   classifier context has to come from the environment or user settings,
   outside this repo.
+
+## 8. Reporting back — schedule it, never force-run it
+
+`fire_trigger` on a trigger bound to a session does **not** deliver into that
+session. It starts a new, repo-less one (`origin: force_run_trigger`). Measured
+2026-09-26: `state/reviews/2026-09-26-rca-relay.md`. To post a message into
+another session, create a one-shot trigger bound to it (`create_trigger` with
+`persistent_session_id` and `run_once_at` a couple of minutes out). Record the
+result of that call in the committed report.
 
 ## The rule this produces
 

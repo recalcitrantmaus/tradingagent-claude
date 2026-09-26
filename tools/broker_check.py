@@ -6,7 +6,7 @@ Routine prompts used to carry. Those could not be covered by a permission
 rule: auto mode strips `Bash(python3 -c:*)`, because it would allow any code
 at all. That sent every call to the auto-mode classifier. A named module can
 be allow-listed exactly (`Bash(python3 -m tools.broker_check:*)`). See
-state/reviews/2026-09-25-permissions-rca.md.
+state/reviews/2026-09-25-rca-permissions.md.
 
 Exit 1 when a position has no working stop. That is the one condition every
 caller must act on, so it is signalled in the status as well as printed.

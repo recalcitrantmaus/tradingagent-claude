@@ -1,4 +1,18 @@
-# What a cleared reviewer should look at — written 2026-09-21, 16:15 ET
+# Weekly review — week ending Friday 2026-09-25 (ISO 2026-W39)
+
+**Status: agenda only. The review itself has not been run yet.** It runs in an
+attended session, cleared by `model_check weekly-review` with the model read
+from the session record and an `--authorization` in recalcitrantmaus's own words. Its
+decisions are appended below as a dated section.
+
+Everything under "Agenda" was written by unattended sessions that were not
+cleared to run the review. That is why they call it "not the weekly review".
+That still holds for any unattended session, and it is accurate for when each
+section was written.
+
+---
+
+## Agenda — Monday 2026-09-21, 16:15 ET (unattended close session)
 
 **This is not the weekly review.** It is the agenda for one, assembled by the
 Monday close session, which is unattended and **not cleared** to run it.
@@ -110,7 +124,7 @@ sample is still empty, and the week's output is again infrastructure.
 reviewer can decide is not which rule to change but what would have to happen
 for this system to take, and close, a trade.
 
-## Friday 2026-09-25 close — added by the unattended close runner
+## Agenda — Friday 2026-09-25 close (unattended close runner)
 
 **This is still not the weekly review.** Runner v2 (`session_01KEoB4VKvJSkpL6N5uqC3z1`) is unattended, and
 `model_check session-close` read harness effort **medium**, below xhigh. The weekly review also needs an
@@ -122,10 +136,10 @@ for this system to take, and close, a trade.
 
 Read these first:
 
-- `state/reviews/2026-09-25-friday-queue.md`: F-1 (the open refused at step 0), F-2 (the live test: every
+- `state/reviews/2026-09-25-queue-f.md`: F-1 (the open refused at step 0), F-2 (the live test: every
   command ran) and F-3 (the close: every command ran, plus the smaller findings).
-- `state/reviews/2026-09-25-permissions-rca.md`: why the classifier, not the allowlist, decided F-1.
-- `state/reviews/2026-09-25-effort-design-notes.md`: how effort is read and gated for unattended runners.
+- `state/reviews/2026-09-25-rca-permissions.md`: why the classifier, not the allowlist, decided F-1.
+- `state/reviews/2026-09-25-design-effort.md`: how effort is read and gated for unattended runners.
 
 Decide, in this order:
 

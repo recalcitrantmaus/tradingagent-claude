@@ -2,7 +2,7 @@
 
 Written by the arming session, 2026-09-25 ~11:10 ET, at recalcitrantmaus's request. It is
 input to the Friday-evening design session, alongside
-`2026-09-25-effort-design-notes.md`.
+`2026-09-25-design-effort.md`.
 
 ## What happened
 

@@ -19,7 +19,7 @@ OPEN 2026-09-25 — STOOD DOWN AT STEP 0: the auto-mode permission check refused
 - The standing rule applies if the broker confirms no position and no open order: cancel MIDDAY and PRE-CLOSE. CLOSE still runs, but will probably hit the same permission refusal (F-1).
 
 5. Findings
-- F-1 (state/reviews/2026-09-25-friday-queue.md): unattended runners cannot run the trading spine under auto mode. The refusal came from the harness permission layer, not from engine/.
+- F-1 (state/reviews/2026-09-25-queue-f.md): unattended runners cannot run the trading spine under auto mode. The refusal came from the harness permission layer, not from engine/.
 
 6. Bugs
 - None in the repo. The block is session configuration: permission rules for the runner's Bash commands.

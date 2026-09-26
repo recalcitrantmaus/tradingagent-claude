@@ -214,8 +214,10 @@ unproven:
 | **T-16** | Yahoo cross-check rate-limits under load; must never gate a trading day |
 | **W-1..W-3** | the day-trade budget has never counted anything |
 | **M-7** | short entry bypasses the risk gate |
-| **M-8 / M-18 / M-9** | see `state/reviews/2026-09-23-wednesday-close-queue.md` |
-| **EFFORT** | design/build item for Friday evening, 2026-09-25: how effort is read and gated for unattended runners. Notes and options: `state/reviews/2026-09-25-effort-design-notes.md` |
+| **M-8 / M-18 / M-9** | see `state/reviews/2026-09-23-queue-w.md` |
+| **EFFORT** | design/build item for Friday evening, 2026-09-25: how effort is read and gated for unattended runners. Notes and options: `state/reviews/2026-09-25-design-effort.md` |
+| **RELAY** | `fire_trigger` starts a new session instead of delivering into the bound one. Report back with a scheduled one-shot trigger instead. `state/reviews/2026-09-26-rca-relay.md` |
+| **NAMING** | `state/reviews/` files are `YYYY-MM-DD-TYPE[-TOPIC].md` (queue, rca, design, weekly-review). See `state/reviews/README.md` |
 | housekeeping | orphan branch `claude/wizardly-carson-5qjgn5` needs deleting — I get 403, a human must do it |
 
 ## Model routing in practice
@@ -287,12 +289,12 @@ expensive to re-derive or to accidentally reverse:
 ## The next thing to do
 
 **Monday 2026-09-28 is UNARMED.** Deciding whether to arm it is the first decision of the next
-attended session. Start with `state/reviews/2026-W39-review-brief.md` → "Friday 2026-09-25
-close", then `state/reviews/2026-09-25-friday-queue.md` (F-1..F-3). Two facts should frame that decision.
+attended session. Start with `state/reviews/2026-09-25-weekly-review.md` → "Friday 2026-09-25
+close", then `state/reviews/2026-09-25-queue-f.md` (F-1..F-3). Two facts should frame that decision.
 First, the one-command-per-call form cleared the permission layer for the whole close, but an
 **open that submits an order has not yet been tested under it**. Second, runner v2 read effort
 **medium** against the xhigh floor at both of its checks today (see
-`state/reviews/2026-09-25-effort-design-notes.md`). Friday's reports are
+`state/reviews/2026-09-25-design-effort.md`). Friday's reports are
 `state/reports/2026-09-25*.md`. The weekly review has **not** run: it needs Opus @ xhigh plus recalcitrantmaus's
 own `--authorization`. The agreed daily shape, used for Friday:
 

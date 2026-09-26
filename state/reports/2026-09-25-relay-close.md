@@ -5,7 +5,7 @@ CLOSE 2026-09-25 — flat into the weekend, no trades; the full close ran with n
 - `trading_day close` exited 0 and wrote state/reports/2026-09-25.md. Cash drift was $+0.0000 across 2 reconciliations. `cancel_unfilled_entries()` cancelled nothing: no orders existed, so no protective leg could be stripped.
 - `broker_check`: equity 299.62, cash 299.62, no positions, no orders, UNPROTECTED []. Nothing is exposed over the weekend.
 - `review` and `trading_day week` ran. `week` exited 1 because the Phase 2 criteria are unmet (3/5). That is expected and is not a fault.
-- Wrote state/reports/2026-09-25-summary.md (plain language, day plus week two). Appended a "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md. Updated HANDOFF "Where we are" and "The next thing to do". Added F-3 to the Friday queue.
+- Wrote state/reports/2026-09-25-summary.md (plain language, day plus week two). Appended a "Friday 2026-09-25 close" section to state/reviews/2026-09-25-weekly-review.md. Updated HANDOFF "Where we are" and "The next thing to do". Added F-3 to the Friday queue.
 
 2. What did not occur, and why
 - No trades today. The open was refused at step 0 (F-1), and midday and pre-close were cancelled under the standing rule.
@@ -22,7 +22,7 @@ CLOSE 2026-09-25 — flat into the weekend, no trades; the full close ran with n
 - Monday 2026-09-28 is UNARMED. Arming it is the next attended session's first decision.
 
 5. Findings
-- F-3 (state/reviews/2026-09-25-friday-queue.md), the per-command record: git rev-parse RAN, git pull RAN, file reads RAN, get_session RAN, model_check session-close RAN, trading_day close RAN, broker_check RAN, review RAN, trading_day week RAN (exit 1, criteria), report writes RAN, git add/commit/push RAN (f57c59e). Refusals: none.
+- F-3 (state/reviews/2026-09-25-queue-f.md), the per-command record: git rev-parse RAN, git pull RAN, file reads RAN, get_session RAN, model_check session-close RAN, trading_day close RAN, broker_check RAN, review RAN, trading_day week RAN (exit 1, criteria), report writes RAN, git add/commit/push RAN (f57c59e). Refusals: none.
 - Together with F-2, the one-command-per-call fix clears the permission layer for everything the close needs. It has not yet been tested on an open that submits an order.
 - F-2 addendum: step 10's earlier push failure was a non-fast-forward, not a refusal. It was merged and pushed as 238913f.
 - Effort: model_check read harness effort MEDIUM against the xhigh floor for session-close (non-blocking, continued). The environment declares xhigh.

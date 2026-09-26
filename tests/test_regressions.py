@@ -244,3 +244,49 @@ class TestShapeD_ControlsThatNeverReceivedTheirState(unittest.TestCase):
         self.assertEqual(len(written), 1)
         self.assertAlmostEqual(written[0]["stop"], 55.80)   # or R is None
         self.assertEqual(explained, {"DT"})
+
+
+# --- Friday 2026-09-25, F-3: found by the close runner, fixed the next day --
+from tests.test_e2e_trading_day import _Day
+
+
+class TestF3_FridayClose(_Day):
+
+    def test_F3a_costs_below_gains_does_not_pass_on_a_losing_record(self):
+        # Shape B. The criterion read `costs <= max(net, 0)`, which is
+        # $0.00 <= $0.00 on a record whose only trade LOST $0.37: a
+        # commission-free account "passed" costs-below-gains with no gains.
+        import argparse
+        trades = [{"R": -0.139, "pnl": -0.37, "fees": 0.0}]
+        buf = io.StringIO()
+        with mock.patch.object(td, "closed_trades", lambda fills: trades), \
+             contextlib.redirect_stdout(buf):
+            td.cmd_week(argparse.Namespace(offline=True))
+        out = buf.getvalue()
+        line = [l for l in out.splitlines() if "costs below gains" in l][0]
+        self.assertIn("[XX]", line, out)
+
+    def test_F3a_costs_below_gains_passes_when_gains_exceed_costs(self):
+        import argparse
+        trades = [{"R": 1.0, "pnl": 2.00, "fees": 0.10}]
+        buf = io.StringIO()
+        with mock.patch.object(td, "closed_trades", lambda fills: trades), \
+             contextlib.redirect_stdout(buf):
+            td.cmd_week(argparse.Namespace(offline=True))
+        line = [l for l in buf.getvalue().splitlines()
+                if "costs below gains" in l][0]
+        self.assertIn("[ok]", line)
+
+    def test_F3b_close_says_so_when_it_cancels_nothing(self):
+        # Shape B. cmd_preclose printed "none resting", while cmd_close was
+        # silent, so "nothing cancelled" and "the cancel never ran" read the same.
+        self._cmd(td.cmd_open)
+        _, out = self._cmd(td.cmd_close)
+        self.assertIn("cancelled resting entry orders: none", out)
+
+    def test_F3c_open_states_the_cash_drift_unconditionally(self):
+        # Shape B. The open printed drift only above the note threshold, so a
+        # clean reading and an unchecked one were indistinguishable.
+        self._cmd(td.cmd_open)            # records the anchor
+        _, out = self._cmd(td.cmd_open)   # now there is something to compare
+        self.assertIn("cash drift", out)

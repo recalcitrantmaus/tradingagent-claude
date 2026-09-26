@@ -1292,7 +1292,7 @@ re-check every test that depends on how that request is refused.**
 **Status:** active.
 
 ### 2026-09-22 — Three gates that trusted a declaration, and one that ran too late
-**Evidence and changes**, from Monday's live session (`state/reviews/2026-09-21-eod-queue.md`):
+**Evidence and changes**, from Monday's live session (`state/reviews/2026-09-21-queue-m.md`):
 
 **M-17, the effort gate.** `model_policy` read `TRADING_AGENT_EFFORT`, an
 operator declaration set once per environment. The harness exports
@@ -1474,7 +1474,7 @@ cannot vary with the thing it claims to measure.** Every one of them failed
 permissive, and every one of them printed `ok` while doing it.
 
 **Status:** no `engine/` change, no rule changed. D-17 confirmed. M-26, M-27
-and M-28 opened in `state/reviews/2026-09-22-queue.md`; M-28 fixed there.
+and M-28 opened in `state/reviews/2026-09-22-queue-m.md`; M-28 fixed there.
 
 ---
 
@@ -2337,7 +2337,7 @@ exited by our own plumbing measures the plumbing. It is not evidence about
 Nothing was promoted or altered. `model_check rule-promotion` exited 1 for want
 of an authorization; none was written. Loosening a protection on one
 observation, unattended, is the change this project least wants made. Filed as
-T-17 in `state/reviews/2026-09-23-wednesday-queue.md` with the test that would
+T-17 in `state/reviews/2026-09-23-queue-t.md` with the test that would
 settle it.
 
 ---
