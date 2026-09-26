@@ -178,3 +178,93 @@ re-check refuses one step later. It would also burn the authorization, which
 is single-use. The authorizations are held here until a turn reads `xhigh`.
 This is the same disagreement as `2026-09-25-design-effort.md` #4, now
 observed in an attended session with the picker confirmed at Extra high.
+
+---
+
+## THE WEEKLY REVIEW — run 2026-09-26, attended
+
+Cleared by `model_check weekly-review --model claude-opus-5-5` at effort xhigh,
+with recalcitrantmaus's authorization recorded in `state/authorizations.jsonl`
+(2026-09-26T19:32:17Z). The effort floor was re-checked immediately before
+this write (`--at-write`, exit 0).
+
+**How the effort block cleared (evidence for the effort-gate design).** For
+three turns the session record read `effort_level: xhigh`, while the harness
+served each turn at `CLAUDE_EFFORT=medium`, and the session's
+`flag_settings_seq` stayed at 14. recalcitrantmaus closed a VS Code client attached to the
+session and toggled the web picker away from Extra high and back.
+`flag_settings_seq` then moved to 923, and the next turn read `xhigh`. The
+picker's *displayed* value was never the served value. A fresh write of the
+setting was what reached the turns.
+
+### The seven questions (trade-journal skill)
+
+`python3 -m tools.review --week`: 1 trade, 0W / 1L, net -$0.37, costs $0.00,
+expectancy -0.139R.
+
+1. **Weekly return against the 5% hurdle:** -0.12% (-$0.37 on $299.99). The gap is
+   **-5.12 points**. It is a hurdle, not a quota. Nothing is closed with leverage.
+2. **Win rate, average win/loss in R, profit factor:** 0%, no wins, -0.139R, 0.0.
+   One trade measures nothing.
+3. **Costs as a percentage of starting equity:** 0.00% (commission-free paper).
+   Costs did not exceed gains. There were no gains, and after F-3 the exit
+   criterion now says so instead of passing.
+4. **Largest drawdown:** 0.13% from the $300.00 peak. Its cause was the DT
+   flatten on 2026-09-23. **That was a process error, not a stop.** `held` was
+   misread as "stop not live". Holding would have cost about -0.075R instead
+   of -0.139R.
+5. **Trades graded bad-process:** one, the DT exit (T-17). The common factor
+   is reasoning from **silence in a reference**: `held` was absent from
+   Alpaca's status list, and absence was read as malfunction. The entry was
+   on-plan.
+6. **Rules promoted or deleted this week**, from `state/authorizations.jsonl`:
+   M-22 (the attendance gate became a recorded authorization), T-1 (a 4%
+   aggregate open-risk cap), the model schedule (Opus floors at the open, the
+   pre-close and the close), the size taper (`correlated_risk_decay` 0.5),
+   T-9 (trading dates keyed to ET), T-10 (the effort re-check at the write),
+   and the `held` correction (reverted in full on 2026-09-24). Today's four
+   engine items are recorded below as each one lands. **None was deleted.**
+7. **Is the measured edge positive?** No: -0.139R. But n = 1, and the
+   skill's size-cut rule starts at 20 trades. **The edge is unmeasured, not
+   negative.** Phase 2 has produced one closed trade in two weeks. That, not
+   any single rule, is the week's finding.
+
+### The agenda, item by item
+
+| # | item | status after this week | evidence |
+|---|---|---|---|
+| 1 | `outcome_branch` on Routines | **resolved**: runners are created with `outcome_branch` set | 2026-09-22 onward; no new orphans; `claude/wizardly-carson-5qjgn5` deleted by recalcitrantmaus 2026-09-26 |
+| 2 | `cancel_unfilled_entries()` timing | **resolved**: `trading_day preclose` cancels entries before the auction | `054567d` (M-16), live 2026-09-23 |
+| 3 | effort gate over-claims | **partly**: the harness value is preferred and T-10 re-checks at the write. The *which reading is served* question is open | engine item "effort gate" below |
+| 4 | week window and calendar | **open**: `cmd_week` still uses `days[-5:]`; no calendar endpoint | `tools/trading_day.py` `cmd_week` |
+| 5 | B-16 (a leg promoted from `held`) | **partly verified**: on DT's fill the take-profit leg promoted to `new` with `gtc`. The stop stayed `held`, its normal working state | 2026-09-23 broker read, `c2cd559` |
+| 6 | leg-safety of `cancel_unfilled_entries()` live | **still unproven**: it has never run with a position open | F-3: it cancelled nothing, vacuously |
+| 7 | D-17 fractional probe | **resolved**: both halves HTTP 422, the $75 ceiling stands | `071a501` |
+| 8 | pullback entry vs chase | **evidence changed**: six years say chase beats retest (retest won only in 2026). Live path still rests at the level | `docs/16-entry-study.md`, `803a6b1`. **Decision for recalcitrantmaus** |
+| 9 | D-24 target treatment | engine item below | |
+| 10 | short entry bypasses the gate (M-7) | engine item below | |
+| 11 | "carry only what you'd put on fresh" | **precedent, not rule**: now in the pre-close prompt, not in code | |
+| F-1 | open refused by the classifier | **fixed and proven** for the close path; an open that submits is still unproven | F-2, F-3, `d2ea9f9` |
+| relay | reports never arrived | **root-caused**: `fire_trigger` spawns a new session | `2026-09-26-rca-relay.md` |
+| F-3 | three small bugs | **fixed** with regression tests | `a9f276f` |
+
+### What the week actually proved and did not
+
+Proved against reality:
+- an engine-sized order reaching a fill (DT, 2026-09-23)
+- B-15, fills recovered from the broker
+- the pre-close entry cancel
+- the one-command-per-call permission path, through a full close
+
+Still unproven:
+- the posture gate blocking a real order
+- an empty plan binding against a scanner that disagrees
+- trailing and scaling out
+- any carry held overnight with a position on
+- an open that submits under the new command form
+
+### Recommendation on Monday 2026-09-28
+
+Arm it, with the scheduled-post-back fix and the one-command-per-call prompts.
+**Rehearse in a throwaway session only.** The first new thing Monday can prove
+is an open that submits under the new form. recalcitrantmaus's decision.
