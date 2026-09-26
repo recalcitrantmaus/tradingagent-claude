@@ -2731,3 +2731,62 @@ non-blocking task. 449 tests, green. `sim.run_suite --seeds 300`: 0.0% ruin,
 output identical to the previous commit.
 
 **Status:** active.
+
+## 2026-09-26 — D-24: the target ablation, measured. PROPOSED, not promoted
+
+Authorized by recalcitrantmaus, 2026-09-26 ("…design/build/test efforts … for the
+target treatment"). The authorization covered design, build and test.
+**Changing what the agent trades is left to her decision**, because the
+evidence below does not point one way.
+
+### What was built (`9490d1c`)
+
+`max_holding_days` (default 0, off), sim exit accounting, `WithoutTarget`, and
+`sim/target_ablation.py`: the same entries with and without the 2R target,
+**paired on the same synthetic market per seed**. The default suite output is
+byte-identical.
+
+### Evidence, 3000 seeds (`sim/results/target_ablation_3000.json`)
+
+**momentum_breakout**, the analogue of the live 20-day breakout screen:
+
+| arm | median | vs 2R, paired t | worst DD | locked (exact) | ruin |
+|---|---|---|---|---|---|
+| target 2R (today) | $303.92 | — | 17.8% | 0/3000 | 0% |
+| no target, 10-day stop | $305.95 | +9.6 | 19.9% | **0/3000** | 0% |
+| no target, 20-day stop | $307.04 | +17.3 | 20.2% | **1/3000** | 0% |
+| no target, 40-day stop | $308.62 | +21.2 | 20.7% | 2/3000 | 0% |
+| no target, no time stop | $308.84 | +21.1 | 23.2% | 0.9% | 0% |
+
+**trend_pullback**: removing the target makes the **median worse at every
+horizon** (302.19 -> 301.27 / 301.65 / 302.09).
+
+**Real data, 2026** (`docs/14`, `docs/15`): no target ranks best (strongest at
+20 days), but it is **not significant** after survivorship is removed (t 1.1).
+Every exit rule tested is negative in Q3.
+
+### Against the bar ("better median without a worse ruin rate")
+
+- **Only "no target + 10-day time stop" on breakouts passes cleanly**: median
+  +$2.03 a year on $300 (+0.7%), with ruin and locked both 0. Its tail is
+  thinner: worst drawdown 17.8% -> 19.9%, against a 20% lock.
+- 20 and 40 days lock accounts that the 2R target never locks. By the
+  standard the size taper was decided on (locked accounts), that is a worse
+  ruin rate.
+- Removing targets hurts the pullback strategy, so this is not a general
+  truth about targets. It belongs to breakouts.
+
+### What adopting it would still require (not built)
+
+A live time stop. The live path does not track how long a position has been
+held, so `trading_day preclose` would need to flag positions at N business
+days from the fill log, and the pre-close would exit them. `paper_session`'s
+candidate targets and the trade-plan skill's "Expected R >= 1.5 or not
+proposed" would need to change. The adapter already handles a missing target
+(far placeholder take-profit). A missing target also removes the R >= 1.5
+gate for those entries, which is plausibly part of why plans have been empty.
+That cuts both ways.
+
+**Status:** PROPOSED. Awaiting recalcitrantmaus's decision among: keep the 2R target;
+no target + 10-day stop (meets the bar); no target + 20-day stop (the
+real-data favourite, which fails the lock criterion by 1/3000).

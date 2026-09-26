@@ -284,3 +284,14 @@ floor was re-checked at every write.
 
 W-3 (whether the PDT assumption fits a cash account) is deliberately left open
 for recalcitrantmaus. 452 tests, green.
+
+### D-24 result (3000 seeds), and the decision it leaves
+
+Full table and reasoning: `docs/04-lessons.md`, "2026-09-26 — D-24". In one
+line: on breakouts, **no target + 10-day time stop** is the only arm that
+beats the 2R target on median (+$2.03, t +9.6) with no worse ruin or lock rate
+(0/3000). 20 days is better on median, but locks 1 account in 3000 that 2R
+never does. On pullbacks, removing the target is worse at every horizon. The
+real-data edge is not significant. **The rule is unchanged. The decision is
+recalcitrantmaus's**, and adopting any no-target arm needs a live time-stop exit built
+first.
