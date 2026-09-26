@@ -15,6 +15,27 @@ from .model_policy import recheck
 from .portfolio import Portfolio
 
 
+def _in_day_trade_window(day: dt.date, today: dt.date) -> bool:
+    """True if `day` is one of the 5 business days ending `today`.
+
+    W-1: the prune used `(today - day).days < 5`, which is five CALENDAR days
+    and drops a Friday day trade by the following Wednesday, a business day
+    early. Weekends are skipped. Exchange holidays are not: there is no
+    calendar source yet (review agenda item 4), so across a holiday the window
+    ends one business day early. That is the one known leak, and it is written
+    down here rather than hidden.
+    """
+    if day > today:
+        return False
+    weekdays = 0
+    d = day
+    while d < today:
+        d += dt.timedelta(days=1)
+        if d.weekday() < 5:
+            weekdays += 1
+    return weekdays <= 4
+
+
 class EffortFloorRefusal(RuntimeError):
     """A durable write refused because its effort floor was not held AT the
     write. Not a bad argument — a policy refusal, so it carries its own type
@@ -86,7 +107,7 @@ class RiskOfficer:
             self.state = State.NORMAL
         self.consecutive_losses = 0
         self.day_trades = [d for d in self.day_trades
-                           if (date - d).days < 5]
+                           if _in_day_trade_window(d, date)]
 
     def update(self, date: dt.date, portfolio: Portfolio,
                prices: Dict[str, float]) -> State:
@@ -123,6 +144,16 @@ class RiskOfficer:
 
     def record_day_trade(self, date: dt.date) -> None:
         self.day_trades.append(date)
+
+    def set_day_trades(self, dates: List[dt.date]) -> None:
+        """Feed the day trades in. W-1: `record_day_trade` had no caller in
+        production, so the list was always empty and the budget never counted
+        anything. Production now derives the dates from the fill log
+        (`tools.review.day_trade_dates`) and passes them here."""
+        self.day_trades = sorted(dates)
+
+    def day_trades_in_window(self, date: dt.date) -> int:
+        return sum(1 for d in self.day_trades if _in_day_trade_window(d, date))
 
     def set_track_record(self, closed_trades: int, expectancy_R: float) -> None:
         """Feed measured performance in. Call from tools.review before trading."""
@@ -231,8 +262,23 @@ class RiskOfficer:
                 return d.reject(
                     f"only {p.minutes_since_open} min since the open; "
                     f"observe {c.option_observe_open_minutes}")
-            if c.assume_pdt_regime and len(self.day_trades) >= c.max_day_trades_per_5d:
-                d.reasons.append("at day-trade budget: this must be held overnight")
+
+        # --- day-trade budget, every asset class (W-2, 2026-09-26) ---
+        # This used to sit inside the option branch, which is locked, so it
+        # could not reach an equity entry. It also APPENDED "this must be held
+        # overnight" rather than refusing, and that note never reached an
+        # operator. Holding overnight is not a promise the agent can keep
+        # anyway: a stop fires intraday, and a same-day stop-out is a day trade
+        # whatever was intended. So at the budget, the only enforceable form
+        # is to refuse the new entry. Exits are never affected; they returned
+        # above.
+        if c.assume_pdt_regime:
+            n_dt = self.day_trades_in_window(date)
+            if n_dt >= c.max_day_trades_per_5d:
+                return d.reject(
+                    f"at day-trade budget: {n_dt} day trades in the last 5 "
+                    f"business days (max {c.max_day_trades_per_5d}); a same-day "
+                    "stop-out on a new entry would be one more")
 
         # --- reward to risk, in code rather than in a skill file ---
         if c.require_target and p.target is None:

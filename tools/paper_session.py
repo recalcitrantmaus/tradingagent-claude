@@ -32,7 +32,7 @@ from engine.market import Bar, atr
 from engine.portfolio import Portfolio, Position
 from engine.risk import RiskOfficer, OrderProposal, State
 from tools import state
-from tools.review import closed_trades
+from tools.review import closed_trades, day_trade_dates
 
 # How long to wait for a marketable limit to resolve before calling it
 # resting. Long enough for a normal fill, short enough that a session is
@@ -171,7 +171,10 @@ def main() -> int:
 
     print(f"broker equity  : ${acct['equity']:,.2f}")
     print(f"buying power   : ${acct['buying_power']:,.2f}")
-    print(f"day trades     : {acct['daytrade_count']}"
+    # The broker's count, as reported. This account's payload carries no
+    # daytrade_count, so it reads 0 regardless (W-3). The budget the engine
+    # enforces is counted from the fill log, below.
+    print(f"day trades     : {acct['daytrade_count']} (broker-reported)"
           f"{'  (flagged PDT)' if acct['pattern_day_trader'] else ''}")
     if acct["trading_blocked"]:
         print("!! broker reports trading_blocked — stop here")
@@ -204,9 +207,12 @@ def main() -> int:
 
     ro = RiskOfficer(DEFAULT)
     ro.start_day(today, acct["equity"])
-    trades = closed_trades(state.read_fills())
+    fills = state.read_fills()
+    trades = closed_trades(fills)
     rs = [t["R"] for t in trades if t["R"] is not None]
     ro.set_track_record(len(rs), sum(rs) / len(rs) if rs else 0.0)
+    # W-1: the budget is fed from the fill log. Nothing else ever fed it.
+    ro.set_day_trades(day_trade_dates(fills))
     print(f"track record   : {len(rs)} closed trades, "
           f"expectancy {(sum(rs)/len(rs) if rs else 0):+.3f}R")
 

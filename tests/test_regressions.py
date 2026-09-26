@@ -332,3 +332,87 @@ class TestM7_ASellIsOnlyAnExitIfThereIsSomethingToExit(unittest.TestCase):
         d = RiskOfficer(DEFAULT).evaluate(p, self._book(), {"TEC": 50.0},
                                           dt.date(2026, 9, 24))
         self.assertFalse(d.approved)
+
+
+class TestW1_W3_TheDayTradeBudgetCountsAndBinds(unittest.TestCase):
+    """W-1: `record_day_trade` had no callers, so the budget never counted.
+    W-2: the check sat inside the option branch and appended a note instead of
+    refusing, so it could not bind an equity entry either. Shape D twice: a
+    control that never received the state that makes it bind."""
+
+    # The real 2026-09-23 round trip, as the fill log recorded it, plus the
+    # dry-run preview rows that must NOT count.
+    DT_LOG = [
+        {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 58.47,
+         "ts": "2026-09-23T13:54:29.680352+00:00", "dry_run": True},
+        {"symbol": "DT", "side": "buy", "qty": 1.0, "price": 58.47,
+         "ts": "2026-09-23T14:04:57.795587Z"},
+        {"symbol": "DT", "side": "sell", "qty": 1.0, "price": 58.10,
+         "ts": "2026-09-23T14:28:52.755614Z"},
+    ]
+
+    def _entry(self):
+        return OrderProposal(symbol="F", asset_class="equity", side="buy",
+                             price=10.0, stop=9.5, target=11.0)
+
+    def test_W1_the_real_DT_round_trip_counts_as_one_day_trade(self):
+        from tools.review import day_trade_dates
+        self.assertEqual(day_trade_dates(self.DT_LOG), [dt.date(2026, 9, 23)])
+
+    def test_W1_a_carry_is_not_a_day_trade(self):
+        from tools.review import day_trade_dates
+        log = [dict(self.DT_LOG[1]),
+               dict(self.DT_LOG[2], ts="2026-09-24T14:28:52Z")]
+        self.assertEqual(day_trade_dates(log), [])
+
+    def test_W1_the_window_is_five_business_days_not_five_calendar_days(self):
+        ro = RiskOfficer(DEFAULT)
+        ro.set_day_trades([dt.date(2026, 9, 23)])
+        # Monday 09-28: the window is 22, 23, 24, 25, 28, so it still counts.
+        # Five CALENDAR days would already have dropped it.
+        self.assertEqual(ro.day_trades_in_window(dt.date(2026, 9, 28)), 1)
+        # Wednesday 09-30: the window is 24, 25, 28, 29, 30, so it has aged out.
+        self.assertEqual(ro.day_trades_in_window(dt.date(2026, 9, 30)), 0)
+
+    def test_W2_an_equity_entry_at_the_budget_is_refused(self):
+        ro = RiskOfficer(DEFAULT)
+        ro.set_day_trades([dt.date(2026, 9, 21), dt.date(2026, 9, 22),
+                           dt.date(2026, 9, 23)])
+        d = ro.evaluate(self._entry(), Portfolio(300.0), {"F": 10.0},
+                        dt.date(2026, 9, 24))
+        self.assertFalse(d.approved)
+        self.assertIn("day-trade budget", d.reasons[-1])
+
+    def test_W2_below_the_budget_the_entry_is_sized_normally(self):
+        ro = RiskOfficer(DEFAULT)
+        ro.set_day_trades([dt.date(2026, 9, 23)])
+        d = ro.evaluate(self._entry(), Portfolio(300.0), {"F": 10.0},
+                        dt.date(2026, 9, 24))
+        self.assertTrue(d.approved, d.reasons)
+
+    def test_W2_exits_are_never_blocked_by_the_budget(self):
+        ro = RiskOfficer(DEFAULT)
+        ro.set_day_trades([dt.date(2026, 9, 21), dt.date(2026, 9, 22),
+                           dt.date(2026, 9, 23)])
+        pf = Portfolio(300.0)
+        pf.buy(dt.date(2026, 9, 24), "F", "equity", 2.0, 10.0, 0.0)
+        d = ro.evaluate(OrderProposal(symbol="F", asset_class="equity",
+                                      side="sell", price=10.0),
+                        pf, {"F": 10.0}, dt.date(2026, 9, 24))
+        self.assertTrue(d.approved)
+
+    def test_W1_the_production_engine_receives_the_count(self):
+        # Shape D is only fixed if build_engine hands the count to the officer.
+        # A unit test on RiskOfficer alone would pass with the wiring missing.
+        log = []
+        for day in ("2026-09-21", "2026-09-22", "2026-09-23"):
+            log += [{"symbol": "F", "side": "buy", "qty": 1.0, "price": 10.0,
+                     "stop": 9.5, "ts": f"{day}T14:00:00Z"},
+                    {"symbol": "F", "side": "sell", "qty": 1.0, "price": 10.1,
+                     "ts": f"{day}T15:00:00Z"}]
+        snap = {"cash": 300.0, "equity": 300.0, "positions": []}
+        with mock.patch.object(td.state, "read_fills", lambda: log):
+            pf, ro = td.build_engine(snap, {}, dt.date(2026, 9, 24))
+        d = ro.evaluate(self._entry(), pf, {"F": 10.0}, dt.date(2026, 9, 24))
+        self.assertFalse(d.approved)
+        self.assertIn("day-trade budget", d.reasons[-1])

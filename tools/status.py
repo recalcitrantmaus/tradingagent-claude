@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Account status. Run this before forming any market opinion."""
 import datetime as dt
+from zoneinfo import ZoneInfo
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from engine.config import DEFAULT
 from tools import state
-from tools.review import closed_trades
+from tools.review import closed_trades, day_trade_dates
 
 
 def main() -> int:
@@ -43,7 +44,15 @@ def main() -> int:
     print(f"peak / drawdown : ${peak:,.2f} / {dd:.2%} "
           f"(lock at {DEFAULT.max_drawdown_lock_pct:.0%})")
     print(f"risk state      : {d['risk_state']}")
-    print(f"day trades (5d) : {len(d['day_trades'])} / {DEFAULT.max_day_trades_per_5d}")
+    # W-1: this read ledger["day_trades"], which nothing writes. The fill log
+    # is the record, and the window is 5 business days, as the engine uses.
+    from engine.risk import RiskOfficer
+    ro = RiskOfficer(DEFAULT)
+    ro.set_day_trades(day_trade_dates(state.read_fills()))
+    today = dt.datetime.now(dt.timezone.utc).astimezone(
+        ZoneInfo("America/New_York")).date()
+    print(f"day trades (5d) : {ro.day_trades_in_window(today)} / "
+          f"{DEFAULT.max_day_trades_per_5d}  (fill log, 5 business days)")
     unlocked = ("yes" if equity >= DEFAULT.option_min_equity
                 else f"no (needs ${DEFAULT.option_min_equity:,.0f})")
     print(f"options unlocked: {unlocked}")

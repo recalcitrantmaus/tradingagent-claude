@@ -2629,3 +2629,61 @@ the fix blocks no exit. 438 tests, green. `sim.run_suite --seeds 300`:
 baseline, because the simulator only ever evaluates entries.
 
 **Status:** active.
+
+## 2026-09-26 — W-1..W-3: the day-trade budget now counts, and binds
+
+Authorized by recalcitrantmaus, 2026-09-26 ("…the day-trade budget counting fix").
+Cleared as `rule-promotion` on claude-opus-5-5 at xhigh, with the effort
+re-checked at each write.
+
+### The defect, three layers deep (all shape D)
+
+1. **Nothing counted.** `record_day_trade` had no callers.
+   `ledger["day_trades"]` was never written. The screens read the broker's
+   `daytrade_count`, which this account's payload does not carry. All three
+   read 0 through the real DT round trip on 2026-09-23.
+2. **Nothing could bind.** The check sat inside the option branch, which is
+   locked, so no equity entry ever reached it.
+3. **Nothing was enforced.** It appended "must be held overnight" instead of
+   refusing, and that note never reached an operator.
+
+Also found while fixing it: the window pruned on **five calendar days**, not
+five business days, so a Friday day trade aged out a business day early.
+
+### The rule, as code
+
+- **Count** from the fill log (`tools.review.day_trade_dates`): a live sell
+  after a live buy of the same symbol on the same ET date. Dry runs are
+  excluded. A split exit counts per sell, which errs toward the limit. The
+  count is derived on every read and never maintained beside the log.
+- **Window**: the 5 business days ending today (`_in_day_trade_window`).
+  Weekends are skipped. Holidays are not, because there is no calendar
+  source (agenda item 4). That one known leak is written in the code.
+- **Bind**: with `assume_pdt_regime`, an entry of **any** asset class at the
+  budget is refused. "Hold it overnight" is not a promise the agent can keep,
+  because a stop fires intraday. Exits are never affected.
+- **Wired** into `build_engine`, `paper_session` and the simulator (a
+  same-day exit is recorded). The screens now show the engine's count:
+  **1 / 3** today, for DT on 09-23.
+
+### Evidence and verification
+
+This is a defect fix to an existing constitutional limit (3 per 5 days since
+Phase 1), not a new strategy rule. Seven regression tests
+(`TestW1_W3_…`) failed or errored first. They include one that goes through
+`build_engine` itself, because a unit test on `RiskOfficer` alone would pass
+with the wiring missing: that is exactly how this defect survived. 445
+tests, green. `sim.run_suite --seeds 300`, now counting same-day exits:
+momentum_breakout median $304.34 -> $304.56, mean max drawdown
+6.43% -> 6.42%, ruin 0.0% -> 0.0%. The rule binds rarely, and it did not
+worsen median or ruin.
+
+### Left open, deliberately: W-3
+
+`assume_pdt_regime = True` models a margin-account rule. This paper account
+is a cash account, where the binding constraint is T+1 settled cash (already
+gated by `settled_cash`). Whether to relax the regime assumption is a
+separate decision for recalcitrantmaus, and it matters most for Phase 3 on Robinhood.
+It was not bundled into a counting fix.
+
+**Status:** active.

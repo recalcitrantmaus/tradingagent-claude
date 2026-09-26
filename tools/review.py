@@ -53,6 +53,52 @@ def closed_trades(fills):
     return trades
 
 
+def day_trade_dates(fills):
+    """The exchange date of every day trade in the fill log, oldest first.
+
+    W-1 (2026-09-26). The budget used to be fed by `record_day_trade`, which
+    nothing called, and by `ledger["day_trades"]`, which nothing wrote, so it
+    read 0 through a real same-day round trip on 2026-09-23. The fill log is
+    the canonical record of what traded, so the count is derived from it on
+    every read rather than maintained beside it.
+
+    A day trade is a live sell of a symbol after a live buy of that symbol on
+    the same America/New_York trading date. A sell with no earlier same-day
+    buy is a carry closing, not a day trade. Dry-run rows are previews and are
+    dropped, as in `closed_trades`. A row whose timestamp cannot be read is
+    dropped rather than guessed into a day.
+
+    Counted conservatively: every live sell that follows a same-day buy of the
+    symbol is one day trade, so a same-day scale-out in two pieces counts
+    twice. How a regulator counts a split exit is not settled in this repo,
+    and a count that errs high errs toward the limit, never past it.
+    """
+    from zoneinfo import ZoneInfo
+    et = ZoneInfo("America/New_York")
+    by_day = {}
+    for f in fills:
+        if f.get("dry_run"):
+            continue
+        raw = f.get("ts")
+        try:
+            when = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=dt.timezone.utc)
+        key = (f.get("symbol"), when.astimezone(et).date())
+        by_day.setdefault(key, []).append((when, f.get("side")))
+    out = []
+    for (_, day), rows in by_day.items():
+        bought = False
+        for _, side in sorted(rows, key=lambda r: r[0]):
+            if side == "buy":
+                bought = True
+            elif side == "sell" and bought:
+                out.append(day)
+    return sorted(out)
+
+
 def report(trades, label):
     if not trades:
         print(f"{label}: no closed trades")

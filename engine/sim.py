@@ -176,6 +176,12 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
             elif ro.state in (State.WEEK_HALT, State.LOCKED):
                 reason, exit_px = "halt", px
 
+            # W-1: an exit on the day of entry is a day trade. The simulator
+            # never counted them, so the budget could not bind here either and
+            # the Monte Carlo measured a book without the rule.
+            if reason and pos.opened_at == date:
+                ro.record_day_trade(date)
+
             if reason == "target" and cfg.scale_out_fraction < 1.0 and pos.qty > 1:
                 qty = max(1.0, round(pos.qty * cfg.scale_out_fraction))
                 risk = (pos.avg_price - (pos.stop or 0)) * qty * pos.multiplier

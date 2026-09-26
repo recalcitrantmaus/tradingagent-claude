@@ -31,7 +31,7 @@ from engine.config import DEFAULT
 from engine.portfolio import Portfolio, Position
 from engine.risk import RiskOfficer, State
 from tools import state
-from tools.review import closed_trades
+from tools.review import closed_trades, day_trade_dates
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORTS = ROOT / "state" / "reports"
@@ -384,8 +384,11 @@ def build_engine(snapshot: Dict, ledger: Dict, today: dt.date
     except ValueError:
         ro.state = State.NORMAL
 
-    rs = [t["R"] for t in closed_trades(state.read_fills()) if t["R"] is not None]
+    fills = state.read_fills()
+    rs = [t["R"] for t in closed_trades(fills) if t["R"] is not None]
     ro.set_track_record(len(rs), statistics.mean(rs) if rs else 0.0)
+    # W-1: the budget is fed from the fill log. Nothing else ever fed it.
+    ro.set_day_trades(day_trade_dates(fills))
     return pf, ro
 
 
@@ -458,7 +461,11 @@ def cmd_open(args) -> int:
     print(f"risk state    {st.value}")
     print(f"track record  {ro.closed_trades} closed trades, "
           f"expectancy {ro.expectancy_R:+.3f}R")
-    print(f"day trades    {snap['daytrades']} / {DEFAULT.max_day_trades_per_5d}")
+    # W-1: this printed the broker's daytrade_count, which this account's
+    # payload does not carry, so it read 0 through a real day trade. The
+    # count is now the officer's own, from the fill log.
+    print(f"day trades    {ro.day_trades_in_window(today)} / "
+          f"{DEFAULT.max_day_trades_per_5d} in 5 business days (fill log)")
     print(f"options       {'unlocked' if ro.closed_trades >= DEFAULT.option_min_closed_trades and ro.expectancy_R >= DEFAULT.option_min_expectancy_R and snap['equity'] >= DEFAULT.option_min_equity else 'LOCKED'}")
     if snap["positions"]:
         print("\nopen positions:")
