@@ -86,6 +86,11 @@ class RiskConfig:
     option_take_profit_pct: float = 0.60     # scale out at +60% premium
     scale_out_fraction: float = 0.50         # take half off at the first target
     trail_after_r: float = 1.0               # trail the rest once +1R is banked
+    # Exit an equity position after this many business days held. 0 = off,
+    # which is the rule today. Added 2026-09-26 for D-24: the no-target arm
+    # exits only on its stop or on a time stop, and the simulator had no time
+    # stop, so the arm could not be tested inside the engine.
+    max_holding_days: int = 0
 
     # --- circuit breakers (state machine in risk.py) ---
     daily_loss_halt_pct: float = 0.04        # -4% on the day  -> stop for the day

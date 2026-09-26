@@ -45,6 +45,10 @@ class SimResult:
     realized_R: List[float] = field(default_factory=list)
     zero_size_rejections: int = 0
     option_trades: int = 0
+    # D-24: how exits happened, and the longest any position was held (in
+    # business days), so a time stop can be verified rather than assumed.
+    exit_reasons: Dict[str, int] = field(default_factory=dict)
+    max_days_held: int = 0
 
     @property
     def total_return(self) -> float:
@@ -165,16 +169,27 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
                 low, high, px = bar.low, bar.high, bar.close
                 expiring = False
 
+            held = _business_days_held(pos.opened_at, date)
+            timed_out = (cfg.max_holding_days > 0
+                         and pos.asset_class != "option"
+                         and held >= cfg.max_holding_days)
+
             reason = None
             exit_px = px
             if pos.stop is not None and low <= pos.stop:
                 reason, exit_px = "stop", pos.stop      # pessimistic: stop first
             elif pos.target is not None and high >= pos.target:
                 reason, exit_px = "target", pos.target
-            elif expiring:
+            elif expiring or timed_out:
                 reason, exit_px = "time", px
             elif ro.state in (State.WEEK_HALT, State.LOCKED):
                 reason, exit_px = "halt", px
+            if reason:
+                res.max_days_held = max(res.max_days_held, held)
+                key = ("scale_out" if reason == "target"
+                       and cfg.scale_out_fraction < 1.0 and pos.qty > 1
+                       else reason)
+                res.exit_reasons[key] = res.exit_reasons.get(key, 0) + 1
 
             # W-1: an exit on the day of entry is a day trade. The simulator
             # never counted them, so the budget could not bind here either and
@@ -216,6 +231,17 @@ def run(strategy: Strategy, mkt: SyntheticMarket, cfg: RiskConfig = DEFAULT,
     res.end_state = ro.state.value
     res.halts = list(ro.journal)
     return res
+
+
+def _business_days_held(opened: dt.date, today: dt.date) -> int:
+    """Weekdays from the entry date to today, exclusive of the entry day.
+    The synthetic market has no holidays, so weekdays are its business days."""
+    n, d = 0, opened
+    while d < today:
+        d += dt.timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return n
 
 
 def _option_price_from_meta(prop: OrderProposal, mkt: SyntheticMarket, i: int) -> float:

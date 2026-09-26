@@ -160,5 +160,24 @@ class TargetChaser(Strategy):
         return out
 
 
+class WithoutTarget(Strategy):
+    """D-24 study wrapper: the same entries, with the target removed.
+
+    Exits then come only from the stop, a halt, or `max_holding_days`. Used by
+    sim/target_ablation.py to compare against the same strategy's own 2R
+    target on identical markets. Not in ALL, so the default suite is unchanged.
+    """
+
+    def __init__(self, base: Strategy):
+        self.base = base
+        self.name = f"{base.name}_no_target"
+
+    def propose(self, mkt, i, portfolio, cfg):
+        out = self.base.propose(mkt, i, portfolio, cfg)
+        for p in out:
+            p.target = None
+        return out
+
+
 ALL = {s.name: s for s in [TrendPullback(), MomentumBreakout(), OptionSwing(),
                            GraduatedSwing(), TargetChaser()]}

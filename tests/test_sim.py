@@ -151,3 +151,36 @@ class TestTheGuardrailsBindInsideTheSimulator(unittest.TestCase):
                 for s in range(10)]
         self.assertLess(min(wild), min(tight),
                         "unconstrained sizing must produce a worse worst case")
+
+
+class TestTheTimeStopForTheTargetStudy(unittest.TestCase):
+    """D-24 (2026-09-26). The no-target arm exits only on its stop or on a
+    holding-period time stop. The sim had no time stop for equities, so the
+    arm could not be tested inside the engine at all."""
+
+    def _run(self, strat, cfg, seed=0, days=260):
+        return run(strat, SyntheticMarket(UNIVERSE, days, seed=seed), cfg)
+
+    def test_the_time_stop_is_inert_by_default(self):
+        a = self._run(ALL["momentum_breakout"], DEFAULT)
+        b = self._run(ALL["momentum_breakout"],
+                      replace(DEFAULT, max_holding_days=0))
+        self.assertEqual(a.equity_curve, b.equity_curve)
+
+    def test_no_position_outlives_the_time_stop(self):
+        from engine.strategies import WithoutTarget
+        cfg = replace(DEFAULT, require_target=False, max_holding_days=5)
+        held, timed = 0, 0
+        for seed in range(5):
+            r = self._run(WithoutTarget(ALL["momentum_breakout"]), cfg, seed)
+            held = max(held, r.max_days_held)
+            timed += r.exit_reasons.get("time", 0)
+        self.assertLessEqual(held, 5)
+        self.assertGreater(timed, 0, "the time stop must actually fire")
+
+    def test_without_target_really_removes_the_target(self):
+        from engine.strategies import WithoutTarget
+        cfg = replace(DEFAULT, require_target=False, max_holding_days=20)
+        r = self._run(WithoutTarget(ALL["momentum_breakout"]), cfg)
+        self.assertEqual(r.exit_reasons.get("target", 0), 0)
+        self.assertEqual(r.exit_reasons.get("scale_out", 0), 0)
