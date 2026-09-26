@@ -152,3 +152,29 @@ Decide, in this order:
    borderline vacuous pass, shape 2 in `docs/04-lessons.md`. Also, `trading_day close` says nothing when
    `cancel_unfilled_entries()` cancels nothing, and `open` prints no cash-drift line.
 4. Carried from above and still open: item 2 (entry style), M-7 (short entry bypasses the gate), D-24.
+
+---
+
+## Attended session, 2026-09-26: authorizations given, not yet used
+
+recalcitrantmaus, verbatim, in `session_01YGq4H9eezU7hawFM3bRgE2`:
+
+1. "I authorize you, Claude, to run the weekly review on Opus 5 Extra"
+2. "I authorize the design/build/test efforts to be executed in the engine for the effort gate design"
+3. "I authorize the design/build/test efforts to be executed in the engine for the day-trade budget counting fix"
+4. "I authorize the design/build/test efforts to be executed in the engine for the short entry fix"
+5. "I authorize the design/build/test efforts to be executed in the engine for the target treatment"
+
+**None of them has been passed to `model_check` yet, so none is recorded in
+`state/authorizations.jsonl`.** The gate cannot clear in this session:
+
+- the session record reads `effort_level: xhigh` (the picker is at Extra high)
+- the harness reports this turn at `CLAUDE_EFFORT=medium`
+- `model_check weekly-review --at-write --started-at xhigh` exits 1
+  ("requires effort >= xhigh; this turn is running medium")
+
+Using an authorization now would record a clearance that the at-write
+re-check refuses one step later. It would also burn the authorization, which
+is single-use. The authorizations are held here until a turn reads `xhigh`.
+This is the same disagreement as `2026-09-25-design-effort.md` #4, now
+observed in an attended session with the picker confirmed at Extra high.
