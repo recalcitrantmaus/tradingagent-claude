@@ -2587,3 +2587,45 @@ against the bug. Run it against the bug.
 `engine/` changed, so both were mandatory.
 
 **Status:** active.
+
+## 2026-09-26 — M-7: a sell is an exit only if there is something to exit
+
+Authorized by recalcitrantmaus, 2026-09-26, recorded in `state/authorizations.jsonl`
+("…the short entry fix"). Cleared as `rule-promotion` on claude-opus-5-5 at
+xhigh, with the effort re-checked at the write.
+
+### The defect
+
+`RiskOfficer.evaluate` opened with `if p.side != "buy": return approved`. Any
+non-buy was approved **before** the state check, the stop requirement and
+every cap, on the premise that every sell is an exit. The premise was true
+only because nothing had yet sent a sell for a symbol it did not hold. The
+gate never looked at the portfolio, which is the one piece of state that
+decides whether a sell is an exit or a short. **Shape D**: a control that is
+correct in isolation and never receives the state that makes it bind.
+
+The existing test `test_exits_are_always_allowed_even_when_locked` encoded
+the bug. It sold TEC with **nothing held** and asserted approval: a short,
+approved while LOCKED. The test now holds a position first.
+
+### The rule, as code
+
+- `sell`, with a long held, and qty at most the held qty (or unspecified):
+  **approved in every state**, sized to the position. An exit must never be
+  blocked.
+- `sell` with nothing held, or more than is held: **refused**. The excess
+  would open a short, and the account is long-only (no short permission at
+  the broker).
+- Any other `side`: **refused**. An unknown side is not an exit.
+
+### Evidence and verification
+
+Nothing about strategy changed, so the evidence bar is the one for defects: a
+regression test that fails first. Four tests in
+`tests/test_regressions.py::TestM7_…`: three failed before the fix, and the
+fourth (a real exit while LOCKED) passed before and after, which pins that
+the fix blocks no exit. 438 tests, green. `sim.run_suite --seeds 300`:
+0.0% ruin, and `sim/results/suite.json` is byte-identical to the committed
+baseline, because the simulator only ever evaluates entries.
+
+**Status:** active.

@@ -33,7 +33,7 @@ from adapters.alpaca import AlpacaAdapter
 from engine.config import DEFAULT
 from engine.model_policy import check
 from engine.portfolio import Portfolio
-from engine.risk import OrderProposal, RiskOfficer
+from engine.risk import OrderProposal, RiskOfficer, State
 from tools.screen import breakout_now, completed
 
 
@@ -290,3 +290,45 @@ class TestF3_FridayClose(_Day):
         self._cmd(td.cmd_open)            # records the anchor
         _, out = self._cmd(td.cmd_open)   # now there is something to compare
         self.assertIn("cash drift", out)
+
+
+class TestM7_ASellIsOnlyAnExitIfThereIsSomethingToExit(unittest.TestCase):
+    """M-7, shape D. `evaluate` returned APPROVED for any non-buy before the
+    state check, the stop requirement and every cap, on the premise that every
+    sell is an exit. It never looked at the portfolio, which is the one piece
+    of state that decides whether a sell is an exit or a short."""
+
+    def _sell(self, sym="TEC", qty=None):
+        return OrderProposal(symbol=sym, asset_class="equity", side="sell",
+                             price=50.0, qty=qty)
+
+    def _book(self):
+        pf = Portfolio(300.0)
+        pf.buy(dt.date(2026, 9, 24), "TEC", "equity", 2.0, 50.0, 0.0)
+        return pf
+
+    def test_M7_a_sell_with_nothing_held_is_refused(self):
+        d = RiskOfficer(DEFAULT).evaluate(self._sell(), Portfolio(300.0),
+                                          {"TEC": 50.0}, dt.date(2026, 9, 24))
+        self.assertFalse(d.approved)
+        self.assertIn("short", d.reasons[-1])
+
+    def test_M7_a_sell_larger_than_the_position_is_refused(self):
+        d = RiskOfficer(DEFAULT).evaluate(self._sell(qty=3.0), self._book(),
+                                          {"TEC": 50.0}, dt.date(2026, 9, 24))
+        self.assertFalse(d.approved)
+
+    def test_M7_a_real_exit_is_still_permitted_even_when_locked(self):
+        ro = RiskOfficer(DEFAULT)
+        ro.state = State.LOCKED
+        for qty in (None, 1.0, 2.0):
+            d = ro.evaluate(self._sell(qty=qty), self._book(), {"TEC": 50.0},
+                            dt.date(2026, 9, 24))
+            self.assertTrue(d.approved, (qty, d.reasons))
+
+    def test_M7_an_unknown_side_is_refused_not_treated_as_an_exit(self):
+        p = OrderProposal(symbol="TEC", asset_class="equity", side="sell_short",
+                          price=50.0, stop=55.0)
+        d = RiskOfficer(DEFAULT).evaluate(p, self._book(), {"TEC": 50.0},
+                                          dt.date(2026, 9, 24))
+        self.assertFalse(d.approved)

@@ -164,9 +164,28 @@ class RiskOfficer:
                  prices: Dict[str, float], date: dt.date) -> Decision:
         c, d = self.cfg, Decision(approved=True)
 
-        if p.side != "buy":
+        # M-7 (2026-09-26). This used to approve ANY non-buy here, before the
+        # state check, the stop requirement and every cap, on the premise that
+        # every sell is an exit. It never looked at the portfolio, which is the
+        # only thing that decides whether a sell is an exit or a short. The
+        # account is long-only and has no short permission, so a sell is an
+        # exit only if it reduces a long this book actually holds.
+        if p.side == "sell":
+            held = portfolio.positions.get(p.symbol)
+            if held is None or held.qty <= 0:
+                return d.reject(
+                    f"sell {p.symbol} with no long position: that would open a "
+                    "short, and this account is long-only")
+            if p.qty is not None and p.qty > held.qty + 1e-9:
+                return d.reject(
+                    f"sell {p.qty:g} {p.symbol} exceeds the {held.qty:g} held: "
+                    "the excess would open a short, and this account is long-only")
+            d.qty = held.qty if p.qty is None else p.qty
             d.reasons.append("exits are always permitted")
             return d
+        if p.side != "buy":
+            return d.reject(f"unknown side {p.side!r}: only buy and sell are "
+                            "defined, and an unknown side is not an exit")
 
         if self.state != State.NORMAL:
             return d.reject(f"account state is {self.state.value}; no new risk")

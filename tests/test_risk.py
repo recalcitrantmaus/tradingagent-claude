@@ -74,10 +74,15 @@ class TestEntryGate(unittest.TestCase):
         self.assertFalse(d.approved)
 
     def test_exits_are_always_allowed_even_when_locked(self):
+        # Until M-7 (2026-09-26) this sold TEC with NOTHING held and expected
+        # approval, which is the short the fix refuses. An exit needs a
+        # position to exit.
         pf, ro = fresh()
+        pf.buy(TS, "TEC", "equity", 2, 50.0, 0.0)
         ro.state = State.LOCKED
         d = ro.evaluate(equity_order(side="sell"), pf, {"TEC": 50.0}, D)
         self.assertTrue(d.approved)
+        self.assertEqual(d.qty, 2)
 
 
 class TestOptionsGate(unittest.TestCase):
