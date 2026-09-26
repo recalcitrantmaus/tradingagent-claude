@@ -122,10 +122,15 @@ class RiskConfig:
     option_min_expectancy_R: float = 0.10    # measured, in the real account
 
     # --- day-trade governance ---
-    # FINRA replaced the PDT $25k regime with intraday margin standards
-    # effective 2026-06-04, with broker phase-in allowed until 2027-10-20.
-    # Until we confirm Robinhood's implementation we model the strict case.
-    assume_pdt_regime: bool = True
+    # W-3 (2026-09-26, recalcitrantmaus): "The pattern day trader rule should not apply
+    # to the cash account at all, nor will it be flagged in Robinhood." Both
+    # accounts are cash accounts. The broker payload shows multiplier 1, no
+    # shorting, and no daytrade_count field. A cash account's intraday
+    # constraint is settlement, and `cash_account_settlement_days` plus
+    # `Portfolio.settled_cash` already gate that. Day trades are still COUNTED
+    # (W-1) and shown. Setting this True restores the 3-in-5 budget if a
+    # margin account is ever used.
+    assume_pdt_regime: bool = False
     max_day_trades_per_5d: int = 3
     cash_account_settlement_days: int = 1    # T+1
 

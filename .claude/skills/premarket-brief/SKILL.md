@@ -43,7 +43,7 @@ Pull the rate, spread and vol inputs from `adapters.fred` rather than from a
 headline — each reading arrives with its observation date:
 
 ```
-python3 -c "from adapters.fred import snapshot; import json; print(json.dumps(snapshot(), indent=2))"
+python3 -m tools.macro
 ```
 
 `DGS10`, `T10Y2Y`, `BAMLH0A0HYM2`, `VIXCLS`, `ICSA`, `CPIAUCSL`, `UNRATE`.

@@ -2787,6 +2787,27 @@ proposed" would need to change. The adapter already handles a missing target
 gate for those entries, which is plausibly part of why plans have been empty.
 That cuts both ways.
 
-**Status:** PROPOSED. Awaiting recalcitrantmaus's decision among: keep the 2R target;
-no target + 10-day stop (meets the bar); no target + 20-day stop (the
-real-data favourite, which fails the lock criterion by 1/3000).
+**Status:** DECLINED, 2026-09-26. recalcitrantmaus: "Let's stick with the 2R target -
+a $2 median improvement is not worth the 2% additional drawdown potential."
+`require_target` stays True. The infrastructure stays, off by default, so
+the question can be re-run cheaply when there is real trade evidence.
+
+## 2026-09-26 — W-3: the margin day-trade rule does not apply to a cash account
+
+Authorized by recalcitrantmaus, 2026-09-26: "The pattern day trader rule should not
+apply to the cash account at all, nor will it be flagged in Robinhood."
+Cleared as `rule-promotion` at xhigh, with the effort re-checked at the write.
+
+`assume_pdt_regime` True -> **False**. Both the Alpaca paper account and the
+Robinhood agentic account are cash accounts, and a cash account's intraday
+constraint is T+1 settlement, which `Portfolio.settled_cash` already gates.
+Day trades are still **counted** (W-1) and shown on every screen. The 3-in-5
+budget machinery is intact and still tested with the flag on, so it can be
+restored for a margin account.
+
+Test: `test_W3_a_cash_account_is_not_held_to_the_margin_day_trade_rule`
+failed first. The W-2 mechanism tests now set the flag explicitly. 454 tests,
+green. `sim.run_suite --seeds 300`: momentum median 304.56 -> 304.34 (the
+exact pre-W-1 figure, since the budget no longer binds), ruin 0.0%.
+
+**Status:** active.

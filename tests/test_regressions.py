@@ -375,7 +375,9 @@ class TestW1_W3_TheDayTradeBudgetCountsAndBinds(unittest.TestCase):
         self.assertEqual(ro.day_trades_in_window(dt.date(2026, 9, 30)), 0)
 
     def test_W2_an_equity_entry_at_the_budget_is_refused(self):
-        ro = RiskOfficer(DEFAULT)
+        # The mechanism, with the margin (PDT) regime switched on. W-3 turned
+        # it off for this cash account; the machinery must still work if on.
+        ro = RiskOfficer(replace(DEFAULT, assume_pdt_regime=True))
         ro.set_day_trades([dt.date(2026, 9, 21), dt.date(2026, 9, 22),
                            dt.date(2026, 9, 23)])
         d = ro.evaluate(self._entry(), Portfolio(300.0), {"F": 10.0},
@@ -384,14 +386,14 @@ class TestW1_W3_TheDayTradeBudgetCountsAndBinds(unittest.TestCase):
         self.assertIn("day-trade budget", d.reasons[-1])
 
     def test_W2_below_the_budget_the_entry_is_sized_normally(self):
-        ro = RiskOfficer(DEFAULT)
+        ro = RiskOfficer(replace(DEFAULT, assume_pdt_regime=True))
         ro.set_day_trades([dt.date(2026, 9, 23)])
         d = ro.evaluate(self._entry(), Portfolio(300.0), {"F": 10.0},
                         dt.date(2026, 9, 24))
         self.assertTrue(d.approved, d.reasons)
 
     def test_W2_exits_are_never_blocked_by_the_budget(self):
-        ro = RiskOfficer(DEFAULT)
+        ro = RiskOfficer(replace(DEFAULT, assume_pdt_regime=True))
         ro.set_day_trades([dt.date(2026, 9, 21), dt.date(2026, 9, 22),
                            dt.date(2026, 9, 23)])
         pf = Portfolio(300.0)
@@ -413,9 +415,20 @@ class TestW1_W3_TheDayTradeBudgetCountsAndBinds(unittest.TestCase):
         snap = {"cash": 300.0, "equity": 300.0, "positions": []}
         with mock.patch.object(td.state, "read_fills", lambda: log):
             pf, ro = td.build_engine(snap, {}, dt.date(2026, 9, 24))
-        d = ro.evaluate(self._entry(), pf, {"F": 10.0}, dt.date(2026, 9, 24))
-        self.assertFalse(d.approved)
-        self.assertIn("day-trade budget", d.reasons[-1])
+        self.assertEqual(ro.day_trades_in_window(dt.date(2026, 9, 24)), 3)
+
+    def test_W3_a_cash_account_is_not_held_to_the_margin_day_trade_rule(self):
+        # W-3 (2026-09-26, recalcitrantmaus): "The pattern day trader rule should not
+        # apply to the cash account at all, nor will it be flagged in
+        # Robinhood." Three day trades must not block a fourth entry. The
+        # cash-account constraint, T+1 settled cash, is gated separately.
+        self.assertFalse(DEFAULT.assume_pdt_regime)
+        ro = RiskOfficer(DEFAULT)
+        ro.set_day_trades([dt.date(2026, 9, 21), dt.date(2026, 9, 22),
+                           dt.date(2026, 9, 23)])
+        d = ro.evaluate(self._entry(), Portfolio(300.0), {"F": 10.0},
+                        dt.date(2026, 9, 24))
+        self.assertTrue(d.approved, d.reasons)
 
 
 class TestE1_AnExplicitEffortCannotOutvoteTheHarness(unittest.TestCase):
