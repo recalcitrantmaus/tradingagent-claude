@@ -29,7 +29,15 @@ before it can size a position.
 | Primary source | SEC EDGAR (`www.sec.gov`, and `data.sec.gov` for XBRL facts as JSON), Fed, BLS, BEA, Treasury, NY Fed SOFR, CFTC COT, and **FRED via `adapters.fred`** for any macro series |
 | Crypto-native | CoinDesk (`www.coindesk.com/markets`), Cointelegraph RSS (`cointelegraph.com/rss`), Decrypt RSS (`decrypt.co/feed`), protocol blogs and governance forums |
 
+**Fetch every RSS row above with `python3 -m tools.news`** (`--lane left`,
+`--limit 20`), not `WebFetch`. `WebFetch` refuses `feeds.bbci.co.uk` and
+`www.theguardian.com` under its own domain policy even though the container
+reaches both (G-3, 2026-09-28). `tools.news` prints each feed ok or UNAVAILABLE
+and exits 1 when a whole lane came back empty: say so in the brief rather than
+calling the lane covered.
+
 `WebSearch` works and is the general-purpose fallback for anything above.
+`WebFetch` is still fine for article pages and primary sources it does serve.
 
 **Do not reach for Reuters, AP, CNBC, MarketWatch, The Block, Bloomberg, WSJ,
 FT, Barron's or NYT.** Every one of them either serves this agent a JavaScript

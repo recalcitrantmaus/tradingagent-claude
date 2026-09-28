@@ -15,6 +15,7 @@
       "Bash(python3 -m tools.smoke_submit:*)",
       "Bash(python3 -m tools.broker_check:*)",
       "Bash(python3 -m tools.macro:*)",
+      "Bash(python3 -m tools.news:*)",
       "Bash(date:*)",
       "mcp__Claude_Code_Remote__create_trigger",
       "mcp__Claude_Code_Remote__get_session",
