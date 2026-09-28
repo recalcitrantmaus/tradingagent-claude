@@ -1,6 +1,6 @@
 {
   "broker_cash": 299.62,
-  "broker_cash_at": "2026-09-28T13:46:31.923517+00:00",
+  "broker_cash_at": "2026-09-28T20:06:40.601340+00:00",
   "broker_equity": 299.62,
   "cancelled_entries": [
     {
@@ -87,6 +87,13 @@
       "equity": 299.62,
       "escalations": [],
       "risk_state": "NORMAL"
+    },
+    {
+      "date": "2026-09-28",
+      "day_pnl": 0.0,
+      "equity": 299.62,
+      "escalations": [],
+      "risk_state": "NORMAL"
     }
   ],
   "equity_curve": [
@@ -128,6 +135,10 @@
     ],
     [
       "2026-09-25",
+      299.62
+    ],
+    [
+      "2026-09-28",
       299.62
     ]
   ],
@@ -242,6 +253,11 @@
     },
     {
       "at": "2026-09-28T13:46:31.923517+00:00",
+      "broker_cash": 299.62,
+      "drift": 0.0
+    },
+    {
+      "at": "2026-09-28T20:06:40.601340+00:00",
       "broker_cash": 299.62,
       "drift": 0.0
     }

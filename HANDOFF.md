@@ -5,20 +5,20 @@ every rule is committed here, and a new cloud session clones it and reads
 `CLAUDE.md` automatically. You do not need the old conversation to continue;
 you need this file and the docs it points at.
 
-Last updated: **2026-09-26**, by the attended weekly-review session (recalcitrantmaus present, Opus @ xhigh).
+Last updated: **2026-09-28 close**, by the unattended Monday runner (Opus, harness effort medium — G-4). "Where we are" and "The next thing to do" reflect Monday; the rest is as of 2026-09-26.
 Develop on `claude/trading-agent-robinhood-cb9xo7`.
 
 ## Where we are
 
 | | |
 |---|---|
-| Phase | **2, week 2. Live paper trading.** |
-| Account | **$299.62** paper, flat, no orders, risk state `NORMAL`. Verified against the broker at the 2026-09-25 close (`broker_check`: `UNPROTECTED []`). Cash drift $0.00. |
-| Week 2 | −$0.37 / **−0.12%**, gap to +5% is −5.12%. Phase 2 exit criteria met: 3/5. Friday did not trade: the open was refused by the permission layer (F-1). The one-command-per-call fix then ran the full F-2 test and the full close with no refusal. |
+| Phase | **2, week 3 (2026-W40). Live paper trading.** |
+| Account | **$299.62** paper, flat, no orders, risk state `NORMAL`. Verified against the broker at the 2026-09-28 close (`broker_check`: `UNPROTECTED []`). Cash drift $0.0000 across 2 reconciliations. |
+| Week 3 | Mon 2026-09-28: **+0.00%**, no trade. Gap to +5% is −5.00%. The open ran the full chain through `paper_session --submit` under one-command-per-call with no refusal, but it had nothing to send: the screen found 0 of 149 at the open and 0 of 149 at the close, and the empty plan bound (G-2, G-4). Midday and pre-close were cancelled by the standing rule. |
 | Closed trades | **1** — DT, −$0.37, **−0.139R**. Exit criterion is 30+ at ≥ +0.10R. |
-| Tests | **452 passing**, incl. an e2e spine and one regression test per shipped defect |
+| Tests | **454 passing** at the 2026-09-28 preflight; `tests/test_news.py` was added later that day (not re-counted by the close) |
 | Sim | `sim.run_suite --seeds 300` → 0.0% ruin |
-| Routines | **Monday 2026-09-28 is ARMED** (armed 2026-09-26): one Opus runner `session_013eAnYvR3gjvfcQY6u7dip1`, 4 firings, 3 watchdogs, and reports back to the arming session by scheduled trigger. Ids and prompts: `docs/13b-routine-prompts-2026-09-28.md`. Tuesday 2026-09-29 is unarmed. |
+| Routines | **Nothing is armed.** Monday 2026-09-28 ran (open and close; midday and pre-close cancelled). **Tuesday 2026-09-29 is UNARMED.** Findings: `state/reviews/2026-09-28-queue-g.md` (G-1 to G-4). |
 | Options | Locked (needs $1,500 **and** 30 closed trades at ≥ +0.10R) |
 
 **Run this first, and believe it over this file:**
@@ -290,11 +290,22 @@ expensive to re-derive or to accidentally reverse:
 
 ## The next thing to do
 
-**Monday 2026-09-28 is ARMED** (2026-09-26, attended). Do not arm it again. The
-schedule, the ids and every prompt are in `docs/13b-routine-prompts-2026-09-28.md`.
-Each firing reports back into the arming session
-(`session_01YGq4H9eezU7hawFM3bRgE2`) by scheduled trigger, and commits
-`state/reports/2026-09-28-relay-*.md`. **Tuesday 2026-09-29 is unarmed.**
+**Monday 2026-09-28 has run.** It was flat all day and traded nothing: the screen
+was empty at the open and at the close, and the empty plan bound. Reports:
+`state/reports/2026-09-28*.md`. **Tuesday 2026-09-29 is UNARMED**: nothing trades
+unless a human arms it (the pattern is `docs/13b-routine-prompts-2026-09-28.md`).
+
+Before or at the next open:
+1. **G-4 screen check.** Run `python3 -m tools.screen --base-rate 90`. 2026-09-28
+   is now a completed bar. If it shows no signal for 09-28, the live and
+   historical paths agree and Monday's zero was a real quiet day. If it shows
+   signals on 09-28, the live path has a defect. Write a regression test before
+   trusting either.
+2. **G-1/G-4 effort.** Both Opus-floor firings on Monday were served at harness
+   `medium`, not xhigh. Fix the runner's effort before arming another Opus day,
+   or accept the downgrade on the record.
+3. Still unproven: a SUBMITTED open under one-command-per-call, the posture gate
+   blocking a real order, and an empty plan binding against a scanner that disagrees.
 
 The W39 weekly review ran on 2026-09-26: `state/reviews/2026-09-25-weekly-review.md`.
 Decided in it:
