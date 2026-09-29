@@ -295,15 +295,22 @@ was empty at the open and at the close, and the empty plan bound. Reports:
 `state/reports/2026-09-28*.md`. **Tuesday 2026-09-29 is UNARMED**: nothing trades
 unless a human arms it (the pattern is `docs/13b-routine-prompts-2026-09-28.md`).
 
+**Order of work (recalcitrantmaus, 2026-09-29).** First set: effort (G-5,
+`state/reviews/2026-09-29-design-managed-agent.md`), the stage roadmap
+(`docs/17-roadmap.md`), and the Managed Agents POC (`tools/ma_poc.py`, blocked
+on an API key). **Then** the Wednesday 2026-09-30 runners, which must carry
+item 1 below: **PINNED for Wednesday**.
+
 Before or at the next open:
-1. **G-4 screen check.** Run `python3 -m tools.screen --base-rate 90`. 2026-09-28
+1. **G-4 screen check (PINNED to the Wednesday runners).** Run `python3 -m tools.screen --base-rate 90`. 2026-09-28
    is now a completed bar. If it shows no signal for 09-28, the live and
    historical paths agree and Monday's zero was a real quiet day. If it shows
    signals on 09-28, the live path has a defect. Write a regression test before
    trusting either.
-2. **G-1/G-4 effort.** Both Opus-floor firings on Monday were served at harness
-   `medium`, not xhigh. Fix the runner's effort before arming another Opus day,
-   or accept the downgrade on the record.
+2. **G-1/G-4 effort: root cause found (G-5).** Opus 5.5 defaults to `medium`.
+   `.claude/settings.json` now pins `xhigh` per model (`modelSettings`), which is
+   being tested. If that fails, the fallback is `CLAUDE_CODE_EFFORT_LEVEL=xhigh`
+   in the environment.
 3. Still unproven: a SUBMITTED open under one-command-per-call, the posture gate
    blocking a real order, and an empty plan binding against a scanner that disagrees.
 
