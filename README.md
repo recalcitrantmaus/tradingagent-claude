@@ -10,27 +10,36 @@ correct action is to record the rejection and move on — never to reshape the
 order until it passes. That behaviour is the failure mode this whole system
 exists to prevent.
 
-## Status — Phase 2, day 3 of live paper trading
+## Status — paused 2026-09-29
+
+Built over two weeks, 2026-09-15 to 2026-09-29, and paused after the Monday
+2026-09-28 session. Nothing is armed and the paper account is flat.
+
+**Why it is paused.** At this account size, running and maintaining an
+autonomous agent cost more than it returned compared with working through
+market questions directly with Claude. The repository stays up as the record
+of the design, the evidence and the lessons.
+
+**Who built it.** Designed and directed by recalcitrantmaus ; the code was
+written with Claude Code. Every rule change she approved is logged, dated and
+signed in [`state/authorizations.jsonl`](state/authorizations.jsonl).
 
 | | |
 |---|---|
-| Account | $300 Alpaca **paper**, equity $299.99, flat, risk state NORMAL |
-| Sessions run | 7, autonomously, on a scheduled Routine |
-| Orders placed | yes — bracket orders accepted by the broker, plus smoke tests |
-| **Fills** | **zero, ever** |
-| Tests | 206 |
+| Account | $300 Alpaca **paper** account, flat at $299.62, risk state NORMAL |
+| Live paper trading | 2026-09-15 to 2026-09-28, sessions fired unattended on scheduled Claude Code routines |
+| Closed trades | **1** (DT, −$0.37, −0.139R). Most sessions found nothing that cleared the gate and stood down, which is the design working. Phase 2 exit needs 30+ closed trades at ≥ +0.10R. |
+| Tests | 469. In a fresh environment 467 pass; the other 2 expect Alpaca paper keys to be set. |
 | Simulation | 300-seed Monte Carlo per arm; sweeps up to 3,000 seeds |
-| Network | open since 2026-09-15 |
-| Live market data | yes — 2,472 symbols, daily bars 2021–2026, consolidated tape |
+| Live market data | 2,472 symbols, daily bars 2021–2026, consolidated tape |
 
-**The headline number is the zero.** Three days of autonomous sessions have
-produced no fills, so the paths that record a fill, promote a bracket leg from
-`held` to `new`, and cancel resting entries before the close are all still
-unverified against reality. A flat account is an absence of evidence, not
-evidence that the guardrails work — `trading_day week` now says so explicitly
-rather than printing `[ok]` on criteria nothing has tested.
+**One closed trade is not evidence.** The live edge is unmeasured, and the
+paths that only a steady flow of fills would exercise are still thinly tested
+against reality. A flat account is an absence of evidence, not evidence that
+the guardrails work — `trading_day week` says so explicitly rather than
+printing `[ok]` on criteria nothing has tested.
 
-**New session? Start with [`HANDOFF.md`](HANDOFF.md), then `CLAUDE.md`.**
+**Picking it back up? Start with [`HANDOFF.md`](HANDOFF.md), then `CLAUDE.md`.**
 
 ## Read these first
 
@@ -85,7 +94,7 @@ name selection.
 ## Run it
 
 ```bash
-python3 -m unittest discover -s tests -t . # 426 tests — the constitution's teeth
+python3 -m unittest discover -s tests -t . # 469 tests — the constitution's teeth
 python3 -m sim.run_suite --seeds 300      # Monte Carlo the guardrails
 
 python3 -m tools.preflight_phase2         # network, keys, model, tests, state, data
@@ -134,7 +143,7 @@ tools/            the daily spine (trading_day, paper_session, screen),
                   research (pit_study, multiyear, multiproxy, entry_study,
                   proxy_study, target_study), design_doc
 sim/              Monte Carlo suite, capital sweep, universe, results
-tests/            206 tests
+tests/            469 tests
 data/             universe.json — the committed, reproducible screen input
 state/            ledger, fills, plans, briefs, journal, reports, reviews,
                   authorizations.jsonl (every human override, dated and signed)
@@ -143,18 +152,18 @@ docs/             01-16 plus the generated design spreadsheet
 
 ## Honest limitations
 
-- **Zero fills.** Everything about execution past "the broker accepted it" is
-  untested against reality.
+- **One closed trade.** Execution past "the broker accepted it" has been
+  exercised once, which is not enough to trust.
 - **Nothing is significant yet.** Six years of bars put the edge at t ≈ 1.4.
-  Zero closed trades put the *live* edge at no measurement at all.
+  One closed trade puts the *live* edge at no measurement at all.
 - **Survivorship bias remains.** The universe is built from the broker's asset
   list as it stands today, so names delisted before today are absent. Every
   backtested year is biased upward and the early years most.
 - **Fractional shares cannot carry a bracket** at this broker, so whole-share
   sizing caps a single position near $75 at this account size.
-- **A `.claude/settings.json` allowlist is still missing** — the permission
-  classifier blocks the agent from writing it, correctly. A human must install
-  it (`docs/11-autonomous-permissions.md`).
+- **The `.claude/settings.json` allowlist is a human decision.** The
+  permission classifier blocks the agent from writing its own, correctly
+  (`docs/11-autonomous-permissions.md`).
 - **The gate is attributable, not enforceable.** Nothing in-process can
   establish that a human is present; `state/authorizations.jsonl` makes a false
   claim permanent and signed, which is a different thing from preventing it.
