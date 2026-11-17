@@ -20,7 +20,7 @@ autonomous agent cost more than it returned compared with working through
 market questions directly with Claude. The repository stays up as the record
 of the design, the evidence and the lessons.
 
-**Who built it.** Designed and directed by recalcitrantmaus ; the code was
+**Who built it.** Designed and directed by recalcitrantmaus; the code was
 written with Claude Code. Every rule change she approved is logged, dated and
 signed in [`state/authorizations.jsonl`](state/authorizations.jsonl).
 
