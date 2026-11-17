@@ -278,20 +278,22 @@ class TestNetcheckHonesty(unittest.TestCase):
             "https://example.gov/x", 401, "Unauthorized", {}, io.BytesIO(b"{}")))
         self.assertTrue(ok)
 
-    def test_user_agent_always_carries_a_contact(self):
-        """SEC, BLS and DOL refuse any UA without an address in parentheses.
+    def test_user_agent_without_a_contact_names_the_repo_and_no_address(self):
+        """SEC and BLS refuse any UA without an address in parentheses.
 
-        They check only the shape — a fake address is accepted — so this
-        asserts a contact is present, and the choice of a real one is a
-        separate, deliberate commitment recorded in DEFAULT_CONTACT.
+        The address is the operator's to choose and is never committed, so
+        unset must mean no address at all, not a fake one: a dead letterbox
+        would get past the WAFs and answer SEC's request for a contact
+        dishonestly. netcheck then reports SEC/BLS DEGRADED, which names the
+        fix.
         """
         import os
         from tools import netcheck
         saved = os.environ.pop("TRADING_AGENT_CONTACT", None)
         try:
             ua = netcheck.user_agent()
-            self.assertIn("@", ua, "a UA with no contact is refused by SEC/BLS/DOL")
-            self.assertIn(netcheck.DEFAULT_CONTACT, ua)
+            self.assertNotIn("@", ua)
+            self.assertIn(netcheck.REPO_URL, ua)
         finally:
             if saved is not None:
                 os.environ["TRADING_AGENT_CONTACT"] = saved

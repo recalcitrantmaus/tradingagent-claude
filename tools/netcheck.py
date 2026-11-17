@@ -144,9 +144,12 @@ CHALLENGE_MARKERS = (
 )
 
 
-# Chosen by the account owner on 2026-09-17 for exactly this purpose. Public
-# by design — it is transmitted to every data source we contact.
-DEFAULT_CONTACT = "contact@set-via-env.invalid"
+# No default contact. The repository is public, so an address committed here
+# would be published as well as sent. Set TRADING_AGENT_CONTACT to the address
+# that should travel in the User-Agent; unset, the UA names this repository
+# and carries no address (see user_agent()).
+DEFAULT_CONTACT = None
+REPO_URL = "https://github.com/recalcitrantmaus/tradingagent-claude"
 
 
 def user_agent() -> str:
@@ -173,15 +176,18 @@ def user_agent() -> str:
     operator if this traffic causes a problem, and answering that with a dead
     letterbox would be functional and dishonest — a bad trade for no benefit.
 
-    The contact is committed rather than left to an environment variable.
-    It is not a secret: it goes to third parties in a header on every single
-    request, so the repository is not telling anyone anything the wire does
-    not. Committing it also means a freshly-fired scheduled session is
-    correctly identified without depending on an env var someone has to
-    remember to set. TRADING_AGENT_CONTACT still overrides it.
+    The contact comes only from TRADING_AGENT_CONTACT. It was committed here
+    while the repository was private; once the repository went public on
+    2026-11-17 a committed address would be published, not just sent, so the
+    default was removed. Unset, the UA names this repository and carries no
+    address: dol.gov still serves it, SEC and BLS refuse it, and netcheck
+    reports those sources DEGRADED, which says exactly what to set. That is
+    the behaviour docs/04-lessons.md already describes.
     """
     contact = os.environ.get("TRADING_AGENT_CONTACT", "").strip() or DEFAULT_CONTACT
-    return f"tradingagent-claude/1.0 ({contact})"
+    if contact:
+        return f"tradingagent-claude/1.0 ({contact})"
+    return f"tradingagent-claude/1.0 (+{REPO_URL})"
 
 
 def probe(host: str, path: str, timeout: int = 30) -> Tuple[bool, str]:

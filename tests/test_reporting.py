@@ -213,9 +213,10 @@ class FakeResponse:
 class NetcheckTests(unittest.TestCase):
 
     def test_the_user_agent_carries_a_contact_and_names_this_agent(self):
-        ua = netcheck.user_agent()
+        with mock.patch.dict("os.environ", {"TRADING_AGENT_CONTACT": "ops@example.com"}):
+            ua = netcheck.user_agent()
         self.assertIn("tradingagent-claude", ua)
-        self.assertIn("@", ua)
+        self.assertIn("ops@example.com", ua)
 
     def test_the_user_agent_does_not_leak_the_owners_private_address(self):
         """The UA goes to every third-party data source on every request. The
@@ -226,7 +227,9 @@ class NetcheckTests(unittest.TestCase):
             import os
             os.environ.pop("TRADING_AGENT_CONTACT", None)
             self.assertNotIn("owner@example.invalid", netcheck.user_agent())
-            self.assertEqual(netcheck.DEFAULT_CONTACT, "contact@set-via-env.invalid")
+            self.assertIsNone(netcheck.DEFAULT_CONTACT)
+            self.assertNotIn("@", netcheck.user_agent(),
+                             "unset must mean no address at all: the repo is public")
 
     def test_a_clean_200_is_reachable(self):
         with mock.patch.object(netcheck.urllib.request, "urlopen",
