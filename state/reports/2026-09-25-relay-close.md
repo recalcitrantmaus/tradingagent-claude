@@ -33,7 +33,7 @@ CLOSE 2026-09-25 — flat into the weekend, no trades; the full close ran with n
 - `trading_day open` prints no cash-drift line.
 
 7. Still to be completed, and by whom
-- recalcitrantmaus (attended): decide whether to arm Monday; decide the effort question (runners read medium); run the weekly review at Opus @ xhigh with her own authorization; rule on the three F-3 bugs; delete orphan branch claude/wizardly-carson-5qjgn5.
+- recalcitrantmaus (attended): decide whether to arm Monday; decide the effort question (runners read medium); run the weekly review at Opus @ xhigh with their own authorization; rule on the three F-3 bugs; delete orphan branch claude/wizardly-carson-5qjgn5.
 - Relay: verify f57c59e and the commit that adds this file on the branch, and delete WD-CLOSE trig_01G9Y7qKY6KZDARvyejSM3Qw.
 
 8. Provenance

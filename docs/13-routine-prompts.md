@@ -416,9 +416,9 @@ Read state/reports/2026-09-21*.md and tell recalcitrantmaus:
  - which Phase 2 firsts are now proven, and which are still unproven
  - whether the day's evidence agrees or disagrees with
    docs/15-point-in-time-study.md
- - anything needing her decision before Tuesday — D-24 (the no-target and
+ - anything needing the owner's decision before Tuesday — D-24 (the no-target and
    time-stop change) is the open one
 
-Say loudly if anything is unprotected overnight. Point her at the close
+Say loudly if anything is unprotected overnight. Point them at the close
 session for detail. Do not make code changes in this firing.
 <!-- ---8<--- END WRAP ---8<--- -->

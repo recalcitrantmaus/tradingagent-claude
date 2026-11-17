@@ -65,7 +65,7 @@ firings warn, continue and record the effort they read.
 ## Relay handler — fires into the arming session
 
 <!-- ---8<--- BEGIN RELAY ---8<--- -->
-RELAY — a Friday 2026-09-25 runner has finished a firing, and its report is appended below. recalcitrantmaus is not available during today's session. She reads this thread afterwards, and the runner's report is her summary, so keep your own reply short.
+RELAY — a Friday 2026-09-25 runner has finished a firing, and its report is appended below. recalcitrantmaus is not available during today's session. They read this thread afterwards, and the runner's report is their summary, so keep your own reply short.
 
 1. The report's first line names the firing: REHEARSAL, OPEN, MIDDAY, PRE-CLOSE or CLOSE.
 
@@ -327,7 +327,7 @@ Write state/reports/2026-09-25.md, plus state/reports/2026-09-25-summary.md in p
 
 WEEK TWO: report equity, the week's P&L and the honest gap to the +5% weekly hurdle. It is a hurdle rate, not a quota, and it is never closed with leverage. Report closed trades against the 30-trade exit criterion, and measured expectancy against +0.10R. If the account is flat because nothing traded, say that a flat account is an absence of evidence, not evidence that capital preservation works.
 
-DO NOT run the weekly review. It is a blocking task that needs an --authorization in recalcitrantmaus's own words, and she is not here. Do not write one, and do not copy one out of state/authorizations.jsonl: reuse is refused, and a fabricated one would be a signed, dated lie in the repository. Instead, append a dated "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md: the agenda a cleared, attended session should work through, pointing at state/reviews/2026-09-25-friday-queue.md.
+DO NOT run the weekly review. It is a blocking task that needs an --authorization in recalcitrantmaus's own words, and they are not here. Do not write one, and do not copy one out of state/authorizations.jsonl: reuse is refused, and a fabricated one would be a signed, dated lie in the repository. Instead, append a dated "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md: the agenda a cleared, attended session should work through, pointing at state/reviews/2026-09-25-friday-queue.md.
 
 Update HANDOFF.md's "Where we are" table and "The next thing to do" to the true state after today. Monday 2026-09-28 is UNARMED, and arming it is the first decision of the next attended session.
 
@@ -442,7 +442,7 @@ trade-journal: one entry per position closed today. If nothing closed, write not
 python3 -m tools.review
 python3 -m tools.trading_day week
 Write state/reports/2026-09-25.md, plus state/reports/2026-09-25-summary.md in plain language for someone who has not been watching, covering the day and week two (2026-09-21 to 09-25). Report equity, the week's P&L, the honest gap to the +5% hurdle (a hurdle rate, not a quota, never closed with leverage), closed trades against the 30-trade exit criterion, and expectancy against +0.10R. A flat account is an absence of evidence, not evidence that capital preservation works.
-DO NOT run the weekly review. It needs an --authorization in recalcitrantmaus's own words, and she is not here. Never write one. Instead, append a dated "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md: the agenda for a cleared, attended session, pointing at state/reviews/2026-09-25-friday-queue.md, 2026-09-25-permissions-rca.md and 2026-09-25-effort-design-notes.md.
+DO NOT run the weekly review. It needs an --authorization in recalcitrantmaus's own words, and they are not here. Never write one. Instead, append a dated "Friday 2026-09-25 close" section to state/reviews/2026-W39-review-brief.md: the agenda for a cleared, attended session, pointing at state/reviews/2026-09-25-friday-queue.md, 2026-09-25-permissions-rca.md and 2026-09-25-effort-design-notes.md.
 Update HANDOFF.md's "Where we are" and "The next thing to do" to the true state after today. Monday 2026-09-28 is UNARMED.
 Findings: append to state/reviews/2026-09-25-friday-queue.md, continuing the F-n sequence. For each command above, record whether it ran or was refused by the permission layer. That record is the test of the F-1 fix.
 

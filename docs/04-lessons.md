@@ -2495,7 +2495,7 @@ each) and 12 on the reporting suite (1–2 each).
 ## 2026-09-25 — T-10 activated: the floor is now re-read at the write
 
 Parked on 2026-09-22 at recalcitrantmaus's request, so it would be wired in deliberately
-rather than dropped into a live trading day. Activated at her instruction with
+rather than dropped into a live trading day. Activated at the owner's instruction with
 the `rule-promotion` gate cleared on `claude-opus-5` at xhigh, model read from
 the session record rather than the environment default.
 
@@ -2736,7 +2736,7 @@ output identical to the previous commit.
 
 Authorized by recalcitrantmaus, 2026-09-26 ("…design/build/test efforts … for the
 target treatment"). The authorization covered design, build and test.
-**Changing what the agent trades is left to her decision**, because the
+**Changing what the agent trades is left to the owner's decision**, because the
 evidence below does not point one way.
 
 ### What was built (`9490d1c`)
